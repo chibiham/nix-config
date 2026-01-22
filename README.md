@@ -135,3 +135,51 @@ WSLでは Windows側の1Password SSH Agentと連携するため、npiperelay が
 # WSL側: socat + npiperelay でソケット転送
 # 詳細: https://developer.1password.com/docs/ssh/integrations/wsl/
 ```
+
+## 手動設定が必要な項目
+
+以下はNix管理外のため、新しいマシンでは手動設定が必要。
+
+### シークレット環境変数（~/.secrets/.env）
+
+APIキー等のシークレットは `~/.secrets/.env` に平文で保存し、シェル起動時に読み込む。
+
+**セットアップ:**
+
+```bash
+# 1. テンプレートからコピー
+cp ~/.secrets/.env.template ~/.secrets/.env
+
+# 2. 1Password（MyMachine Vault）から値をコピーして設定
+vim ~/.secrets/.env
+```
+
+**テンプレート内容:**
+
+```bash
+export OPENAI_API_KEY=""
+export ANTHROPIC_API_KEY=""
+export AWS_ACCESS_KEY_ID=""
+export AWS_SECRET_ACCESS_KEY=""
+export CLOUDFLARE_API_TOKEN=""
+export GEMINI_API_KEY=""
+export CLAUDE_CODE_OAUTH_TOKEN=""
+```
+
+**注意:**
+- このファイルはNix管理外、`.gitignore` 済み
+- マシン移行時は1Passwordから値をコピーして再設定
+- シェル起動時に自動で `source` される
+
+### Clawdbot
+
+LaunchAgentで動作するため、シェル経由の環境変数読み込みが使えない。
+環境変数は `~/.clawdbot/.env` に別途記述する。
+
+```bash
+# ~/.clawdbot/.env
+OPENAI_API_KEY=sk-xxx
+ANTHROPIC_API_KEY=sk-ant-xxx
+```
+
+**注意:** `~/.secrets/.env` と同じ値を設定すること。

@@ -132,6 +132,9 @@
 
     # 追加の初期化スクリプト（.zshrc の末尾に追加される）
     initContent = ''
+      # シークレット環境変数の読み込み
+      [[ -f ~/.secrets/.env ]] && source ~/.secrets/.env
+
       # fzf キーバインド
       if command -v fzf &> /dev/null; then
         source <(fzf --zsh)
@@ -226,6 +229,25 @@
     EDITOR = "code --wait";
     LANG = "ja_JP.UTF-8";
   };
+
+  # ===================
+  # シークレット用ディレクトリ・テンプレート
+  # ===================
+  home.file.".secrets/.env.template".text = ''
+    # シークレット環境変数（手動設定）
+    # このファイルをコピーして .env を作成し、値を設定してください
+    # cp ~/.secrets/.env.template ~/.secrets/.env
+    #
+    # 値は1Passwordからコピー（MyMachine Vault）
+
+    export OPENAI_API_KEY=""
+    export ANTHROPIC_API_KEY=""
+    export AWS_ACCESS_KEY_ID=""
+    export AWS_SECRET_ACCESS_KEY=""
+    export CLOUDFLARE_API_TOKEN=""
+    export GEMINI_API_KEY=""
+    export CLAUDE_CODE_OAUTH_TOKEN=""
+  '';
 
   # ===================
   # 追加のPATH
