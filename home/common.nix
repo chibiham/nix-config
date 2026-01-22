@@ -15,6 +15,7 @@
     # 開発ツール
     git
     gh              # GitHub CLI
+    claude-code     # Claude Code CLI
     jq              # JSON処理
     ripgrep         # 高速grep
     fd              # 高速find
