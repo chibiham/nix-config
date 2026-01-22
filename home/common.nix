@@ -242,7 +242,6 @@
     # 値は1Passwordからコピー（MyMachine Vault）
 
     export OPENAI_API_KEY=""
-    export ANTHROPIC_API_KEY=""
     export AWS_ACCESS_KEY_ID=""
     export AWS_SECRET_ACCESS_KEY=""
     export CLOUDFLARE_API_TOKEN=""
