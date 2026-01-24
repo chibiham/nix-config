@@ -261,8 +261,12 @@
       git
       nodejs_22
     ];
+  };
 
-    extraLuaConfig = builtins.readFile ./nvim/init.lua;
+  # NeoVim設定ファイル（ディレクトリ全体をリンク）
+  xdg.configFile."nvim" = {
+    source = ./nvim;
+    recursive = true;
   };
 
   # ===================

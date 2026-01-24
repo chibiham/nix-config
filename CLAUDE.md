@@ -68,6 +68,7 @@ op run -- npm publish  # GITHUB_TOKEN が実際の値に置換されて実行
 
 - 開発ツール: git, gh, jq, ripgrep, fd, fzf, eza, bat, delta
 - Node.js: nodejs_22, pnpm
+- pnpm グローバルパッケージ: clawdbot（home-manager switch時に自動インストール）
 - シークレット管理: 1password-cli
 - その他: htop, tree, curl, wget
 
