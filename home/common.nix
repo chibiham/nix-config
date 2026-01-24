@@ -1,5 +1,5 @@
 # 共通設定（macOS / WSL 両方で使う）
-{ pkgs, ... }:
+{ pkgs, lib, ... }:
 
 {
   # Home Managerのバージョン（変更しないで）
@@ -36,6 +36,28 @@
     tree
     curl
     wget
+
+    # LSPサーバー
+    nodePackages.typescript-language-server  # TypeScript/JavaScript
+    nil                                       # Nix
+    lua-language-server                      # Lua
+    pyright                                   # Python
+    gopls                                     # Go
+    rust-analyzer                            # Rust
+    nodePackages.vscode-langservers-extracted # JSON/HTML/CSS/ESLint
+    yaml-language-server                     # YAML
+    marksman                                  # Markdown
+
+    # フォーマッター
+    stylua                  # Lua
+    nodePackages.prettier   # JS/TS/JSON/YAML
+    black                   # Python
+    gofumpt                 # Go
+    rustfmt                 # Rust
+
+    # 追加ツール
+    tree-sitter             # パーサー（Treesitter用）
+    gcc                     # Treesitterコンパイル用
   ];
 
   # ===================
@@ -224,11 +246,33 @@
   };
 
   # ===================
+  # NeoVim
+  # ===================
+  programs.neovim = {
+    enable = true;
+    defaultEditor = true;  # EDITORをnvimに設定
+    viAlias = true;        # vi -> nvim
+    vimAlias = true;       # vim -> nvim
+    vimdiffAlias = true;   # vimdiff -> nvim -d
+
+    package = pkgs.neovim-unwrapped;
+
+    extraPackages = with pkgs; [
+      git
+      nodejs_22
+    ];
+
+    extraLuaConfig = builtins.readFile ./nvim/init.lua;
+  };
+
+  # ===================
   # 環境変数
   # ===================
   home.sessionVariables = {
-    EDITOR = "code --wait";
+    # EDITOR = "code --wait";  # NeoVimのdefaultEditor = trueで自動設定される
     LANG = "ja_JP.UTF-8";
+    # pnpm グローバルストア設定
+    PNPM_HOME = "$HOME/.local/share/pnpm";
   };
 
   # ===================
@@ -255,5 +299,19 @@
   home.sessionPath = [
     "$HOME/bin"
     "$HOME/go/bin"
+    "$HOME/.local/share/pnpm"  # pnpm グローバルbin
   ];
+
+  # ===================
+  # アクティベーション（home-manager switch時に実行）
+  # ===================
+  home.activation.installGlobalPnpmPackages = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    export PNPM_HOME="$HOME/.local/share/pnpm"
+    export PATH="$PNPM_HOME:${pkgs.pnpm}/bin:${pkgs.nodejs_22}/bin:$PATH"
+    mkdir -p "$PNPM_HOME"
+    # clawdbot をグローバルインストール（未インストールの場合のみ）
+    if [ ! -f "$PNPM_HOME/clawdbot" ]; then
+      ${pkgs.pnpm}/bin/pnpm add -g clawdbot@latest 2>/dev/null || true
+    fi
+  '';
 }
