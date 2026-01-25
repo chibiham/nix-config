@@ -67,7 +67,10 @@ op run -- npm publish  # GITHUB_TOKEN が実際の値に置換されて実行
 ### パッケージ
 
 - 開発ツール: git, gh, jq, ripgrep, fd, fzf, eza, bat, delta
-- Node.js: nodejs_22, pnpm
+- バージョン管理: mise (Node.js, Python, Go, Rust等)
+- Node.js: mise管理（プロジェクトごとにバージョン切り替え）
+- Python: mise管理（同上）
+- LSPサーバー: Nix管理（typescript-language-server, pyright, gopls等 - 全8言語）
 - pnpm グローバルパッケージ: clawdbot（home-manager switch時に自動インストール）
 - シークレット管理: 1password-cli
 - その他: htop, tree, curl, wget
@@ -76,7 +79,7 @@ op run -- npm publish  # GITHUB_TOKEN が実際の値に置換されて実行
 
 - Zsh（autosuggestion, syntax-highlighting, completion）
 - Starship（プロンプト）
-- direnv + nix-direnv
+- direnv + nix-direnv + mise
 - fzf
 
 ### Git設定

@@ -136,6 +136,42 @@ WSLでは Windows側の1Password SSH Agentと連携するため、npiperelay が
 # 詳細: https://developer.1password.com/docs/ssh/integrations/wsl/
 ```
 
+## バージョン管理（mise）
+
+プログラミング言語のバージョン管理には **mise** を使用。プロジェクトごとに異なるバージョンを自動的に切り替え可能。
+
+### 特徴
+
+- **対応言語**: Node.js, Python, Go, Rust, Ruby等
+- **自動検出**: `.node-version`, `.python-version`等を自動検出
+- **自動切り替え**: direnv連携により、プロジェクトディレクトリに入ると自動的にバージョンが切り替わる
+- **Nix統合**: mise本体はNix管理、ランタイムはmise管理
+
+### 基本的な使い方
+
+```bash
+# プロジェクトでバージョン指定
+cd ~/projects/my-app
+mise use node@20  # .node-version ファイルが作成される
+
+# グローバルバージョン設定
+mise use --global node@22
+mise use --global python@3.12
+
+# バージョン確認
+mise ls
+mise ls-remote node
+```
+
+### Nix vs mise の役割分担
+
+| 管理ツール | 管理対象 | 理由 |
+|-----------|---------|------|
+| **Nix** | LSPサーバー、フォーマッター、システムツール、mise本体 | 安定性・一貫性重視 |
+| **mise** | Node.js, Python, Go, Rust等のランタイム | 柔軟なバージョン切り替え |
+
+詳細は [docs/mise-setup.md](docs/mise-setup.md) を参照。
+
 ## 手動設定が必要な項目
 
 以下はNix管理外のため、新しいマシンでは手動設定が必要。

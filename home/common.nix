@@ -24,9 +24,12 @@
     bat             # モダンなcat
     delta           # gitのdiff表示
 
-    # Node.js (Clawdbot用)
-    nodejs_22
-    pnpm
+    # バージョン管理
+    mise  # Polyglot runtime version manager
+
+    # Node.js (miseで管理、一時的にコメントアウト)
+    # nodejs_22  # miseで管理
+    # pnpm       # miseで管理
 
     # シークレット管理
     _1password-cli  # op コマンド
@@ -166,6 +169,11 @@
       # GPG TTY設定
       export GPG_TTY=$(tty)
 
+      # mise（runtime version manager）
+      if command -v mise &> /dev/null; then
+        eval "$(mise activate zsh)"
+      fi
+
       # カスタム関数: fzfでSSH接続
       function sshf () {
         local selected_host=$(grep "Host " ./ssh_config | grep -v '*' | cut -b 6- | fzf)
@@ -243,6 +251,13 @@
     enable = true;
     enableZshIntegration = true;
     nix-direnv.enable = true;  # nix-direnv統合（高速化）
+
+    # mise統合
+    stdlib = ''
+      if command -v mise &> /dev/null; then
+        eval "$(mise direnv activate)"
+      fi
+    '';
   };
 
   # ===================
@@ -259,7 +274,7 @@
 
     extraPackages = with pkgs; [
       git
-      nodejs_22
+      # nodejs_22 は mise で管理
     ];
   };
 
@@ -269,14 +284,36 @@
     recursive = true;
   };
 
+  # mise global configuration
+  xdg.configFile."mise/config.toml".text = ''
+    [settings]
+    auto_install = true
+    legacy_version_file = true  # .node-version等を自動検出
+    experimental = true
+
+    [tools]
+    # グローバルデフォルト（activation hookで自動インストール）
+    node = "22"
+    python = "3.12"
+    pnpm = "latest"
+  '';
+
   # ===================
   # 環境変数
   # ===================
   home.sessionVariables = {
     # EDITOR = "code --wait";  # NeoVimのdefaultEditor = trueで自動設定される
     LANG = "ja_JP.UTF-8";
+
     # pnpm グローバルストア設定
     PNPM_HOME = "$HOME/.local/share/pnpm";
+
+    # mise設定
+    MISE_DATA_DIR = "$HOME/.local/share/mise";
+    MISE_CONFIG_DIR = "$HOME/.config/mise";
+    MISE_CACHE_DIR = "$HOME/.cache/mise";
+    MISE_AUTO_INSTALL = "1";  # バージョンファイル検出時に自動インストール
+    MISE_TRUSTED_CONFIG_PATHS = "$HOME";  # ホームディレクトリ配下を信頼
   };
 
   # ===================
@@ -304,18 +341,35 @@
     "$HOME/bin"
     "$HOME/go/bin"
     "$HOME/.local/share/pnpm"  # pnpm グローバルbin
+    "$HOME/.local/share/mise/shims"  # mise shims
   ];
 
   # ===================
   # アクティベーション（home-manager switch時に実行）
   # ===================
-  home.activation.installGlobalPnpmPackages = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+
+  # mise共通ランタイムインストール
+  home.activation.installMiseRuntimes = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    export PATH="${pkgs.mise}/bin:$PATH"
+
+    # グローバルバージョンをインストール（未インストールの場合のみ）
+    ${pkgs.mise}/bin/mise use --global node@22 2>/dev/null || true
+    ${pkgs.mise}/bin/mise use --global python@3.12 2>/dev/null || true
+    ${pkgs.mise}/bin/mise use --global pnpm@latest 2>/dev/null || true
+  '';
+
+  # pnpmグローバルパッケージインストール（mise管理のpnpmを使用）
+  home.activation.installGlobalPnpmPackages = lib.hm.dag.entryAfter [ "installMiseRuntimes" ] ''
     export PNPM_HOME="$HOME/.local/share/pnpm"
-    export PATH="$PNPM_HOME:${pkgs.pnpm}/bin:${pkgs.nodejs_22}/bin:$PATH"
+    export PATH="$HOME/.local/share/mise/shims:$PNPM_HOME:$PATH"
     mkdir -p "$PNPM_HOME"
-    # clawdbot をグローバルインストール（未インストールの場合のみ）
-    if [ ! -f "$PNPM_HOME/clawdbot" ]; then
-      ${pkgs.pnpm}/bin/pnpm add -g clawdbot@latest 2>/dev/null || true
+
+    # mise経由でpnpmが利用可能になるまで待つ
+    if command -v pnpm &> /dev/null; then
+      # clawdbot をグローバルインストール（未インストールの場合のみ）
+      if [ ! -f "$PNPM_HOME/clawdbot" ]; then
+        pnpm add -g clawdbot@latest 2>/dev/null || true
+      fi
     fi
   '';
 }
