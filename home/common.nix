@@ -72,17 +72,15 @@
   programs.git = {
     enable = true;
 
-    # GPG署名
-    signing = {
-      key = "AF298761AC95B1C4827896A811135C38F21EA265";
-      signByDefault = true;
-    };
-
     # Git LFS
     lfs.enable = true;
 
-    # 新しい設定形式 (settings)
+    # 設定 (25.11ではsettingsを使用)
     settings = {
+      # GPG署名設定
+      user.signingkey = "AF298761AC95B1C4827896A811135C38F21EA265";
+      commit.gpgsign = true;
+      tag.gpgsign = true;
       user = {
         name = "chibiham";
         email = "ryuto.chiba@chibiham.com";
@@ -105,9 +103,6 @@
       # GPGプログラムはプラットフォーム固有ファイルで設定
       # darwin.nix: /opt/homebrew/bin/gpg
       # wsl.nix: Nixで管理されるgpg
-
-      # タグも署名
-      tag.gpgsign = true;
 
       # delta (diff表示) - 任意で有効化
       # core.pager = "delta";
@@ -160,7 +155,7 @@
     };
 
     # 追加の初期化スクリプト（.zshrc の末尾に追加される）
-    initContent = ''
+    initExtra = ''
       # シークレット環境変数の読み込み
       [[ -f ~/.secrets/.env ]] && source ~/.secrets/.env
 
@@ -315,6 +310,9 @@
 
     extraConfig = ''
       local config = wezterm.config_builder()
+
+      -- ========== シェル設定 ==========
+      config.default_prog = { '/bin/zsh', '-l' }  -- ログインシェルとして起動
 
       -- ========== 外観 ==========
       config.color_scheme = 'Catppuccin Mocha'

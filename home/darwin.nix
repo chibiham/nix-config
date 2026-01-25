@@ -1,5 +1,5 @@
 # macOS固有の設定
-{ pkgs, config, ... }:
+{ pkgs, config, lib, ... }:
 
 {
   # macOS専用パッケージ
@@ -23,7 +23,7 @@
   ];
 
   # macOS固有のZsh設定
-  programs.zsh.initContent = ''
+  programs.zsh.initExtra = ''
     # iTerm2 Shell Integration
     if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
       iterm2_print_user_vars() {
@@ -44,6 +44,8 @@
     fi
   '';
 
-  # Git: macOSのGPGパス
-  programs.git.settings.gpg.program = "/opt/homebrew/bin/gpg";
+  # Git: macOSのGPGパス（Homebrew版を強制）
+  programs.git.settings = {
+    gpg.program = lib.mkForce "/opt/homebrew/bin/gpg";
+  };
 }

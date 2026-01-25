@@ -136,6 +136,23 @@ WSLでは Windows側の1Password SSH Agentと連携するため、npiperelay が
 # 詳細: https://developer.1password.com/docs/ssh/integrations/wsl/
 ```
 
+## Spotlight統合（macOS）
+
+NixでインストールしたアプリケーションをSpotlightで検索可能にするため、**[mac-app-util](https://github.com/hraban/mac-app-util)** を使用。
+
+### 仕組み
+
+- トランポリンアプリを`~/Applications/Home Manager Trampolines/`に作成
+- `home-manager switch`時に自動実行
+- Spotlightが認識できる形式でアプリを配置
+
+### 対象アプリケーション
+
+- WezTerm
+- 今後Nixで追加するすべてのGUIアプリ
+
+詳細は flake.nix の `mac-app-util.homeManagerModules.default` を参照。
+
 ## バージョン管理（mise）
 
 プログラミング言語のバージョン管理には **mise** を使用。プロジェクトごとに異なるバージョンを自動的に切り替え可能。

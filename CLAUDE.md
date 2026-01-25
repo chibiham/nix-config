@@ -67,6 +67,7 @@ op run -- npm publish  # GITHUB_TOKEN が実際の値に置換されて実行
 ### パッケージ
 
 - 開発ツール: git, gh, jq, ripgrep, fd, fzf, eza, bat, delta
+- ターミナル: WezTerm (GPU高速化、クロスプラットフォーム)
 - バージョン管理: mise (Node.js, Python, Go, Rust等)
 - Node.js: mise管理（プロジェクトごとにバージョン切り替え）
 - Python: mise管理（同上）
@@ -74,6 +75,13 @@ op run -- npm publish  # GITHUB_TOKEN が実際の値に置換されて実行
 - pnpm グローバルパッケージ: clawdbot（home-manager switch時に自動インストール）
 - シークレット管理: 1password-cli
 - その他: htop, tree, curl, wget
+
+### macOS統合
+
+- **Spotlight統合**: mac-app-util（トランポリンアプリ作成）
+  - Nixアプリが CMD+Space で検索可能
+  - `home-manager switch`時に自動実行
+  - トランポリン配置先: `~/Applications/Home Manager Trampolines/`
 
 ### シェル設定
 
