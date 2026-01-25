@@ -61,6 +61,9 @@
     # 追加ツール
     tree-sitter             # パーサー（Treesitter用）
     gcc                     # Treesitterコンパイル用
+
+    # フォント（WezTerm用）
+    pkgs.nerd-fonts.jetbrains-mono
   ];
 
   # ===================
@@ -261,6 +264,11 @@
   };
 
   # ===================
+  # フォント設定
+  # ===================
+  fonts.fontconfig.enable = true;
+
+  # ===================
   # NeoVim
   # ===================
   programs.neovim = {
@@ -297,6 +305,78 @@
     python = "3.12"
     pnpm = "latest"
   '';
+
+  # ===================
+  # WezTerm
+  # ===================
+  programs.wezterm = {
+    enable = true;
+    enableZshIntegration = true;
+
+    extraConfig = ''
+      local config = wezterm.config_builder()
+
+      -- ========== 外観 ==========
+      config.color_scheme = 'Catppuccin Mocha'
+      config.font = wezterm.font('JetBrainsMono Nerd Font', { weight = 'Regular' })
+      config.font_size = 13
+
+      -- ウィンドウ
+      config.window_close_confirmation = 'NeverPrompt'
+      config.window_decorations = 'RESIZE'
+      config.window_background_opacity = 0.95
+      config.window_padding = { left = 8, right = 8, top = 8, bottom = 8 }
+
+      -- タブバー
+      config.use_fancy_tab_bar = false
+      config.hide_tab_bar_if_only_one_tab = true
+      config.tab_bar_at_bottom = true
+
+      -- カーソル
+      config.default_cursor_style = 'BlinkingBar'
+      config.cursor_blink_rate = 500
+
+      -- ========== プラットフォーム検出 ==========
+      local is_darwin = wezterm.target_triple:find("darwin") ~= nil
+      local is_linux = wezterm.target_triple:find("linux") ~= nil
+
+      if is_darwin then
+        -- macOS固有
+        config.macos_window_background_blur = 20
+        config.native_macos_fullscreen_mode = false
+      end
+
+      if is_linux then
+        -- WSL固有
+        config.default_domain = 'WSL:Ubuntu'
+        config.wsl_domains = {
+          {
+            name = 'WSL:Ubuntu',
+            distribution = 'Ubuntu',
+          },
+        }
+      end
+
+      -- ========== キーバインド ==========
+      local act = wezterm.action
+      config.keys = {
+        -- 分割
+        { key = 'd', mods = 'CMD|SHIFT', action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
+        { key = 'd', mods = 'CMD', action = act.SplitVertical { domain = 'CurrentPaneDomain' } },
+
+        -- ペイン移動
+        { key = 'LeftArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection('Left') },
+        { key = 'RightArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection('Right') },
+        { key = 'UpArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection('Up') },
+        { key = 'DownArrow', mods = 'CMD|SHIFT', action = act.ActivatePaneDirection('Down') },
+
+        -- ペイン閉じる
+        { key = 'w', mods = 'CMD', action = act.CloseCurrentPane { confirm = false } },
+      }
+
+      return config
+    '';
+  };
 
   # ===================
   # 環境変数
