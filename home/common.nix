@@ -97,7 +97,7 @@
     # 設定 (25.11ではsettingsを使用)
     settings = {
       # GPG署名設定
-      user.signingkey = "AF298761AC95B1C4827896A811135C38F21EA265";
+      user.signingkey = "973655571CACBD16FB1DD4E1455F463BA021E7D9";
       commit.gpgsign = true;
       tag.gpgsign = true;
       user = {
