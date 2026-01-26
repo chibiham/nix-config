@@ -174,7 +174,7 @@
     };
 
     # 追加の初期化スクリプト（.zshrc の末尾に追加される）
-    initExtra = ''
+    initContent = ''
       # シークレット環境変数の読み込み
       [[ -f ~/.secrets/.env ]] && source ~/.secrets/.env
 
@@ -466,7 +466,7 @@
   # pnpmグローバルパッケージインストール（mise管理のpnpmを使用）
   home.activation.installGlobalPnpmPackages = lib.hm.dag.entryAfter [ "installMiseRuntimes" ] ''
     export PNPM_HOME="$HOME/.local/share/pnpm"
-    export PATH="$HOME/.local/share/mise/shims:$PNPM_HOME:$PATH"
+    export PATH="${pkgs.git}/bin:$HOME/.local/share/mise/shims:$PNPM_HOME:$PATH"
     mkdir -p "$PNPM_HOME"
 
     # mise経由でpnpmが利用可能になるまで待つ

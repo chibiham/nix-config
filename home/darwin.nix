@@ -143,7 +143,7 @@
   ];
 
   # macOS固有のZsh設定
-  programs.zsh.initExtra = ''
+  programs.zsh.initContent = ''
     # iTerm2 Shell Integration
     if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
       iterm2_print_user_vars() {
