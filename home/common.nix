@@ -180,12 +180,14 @@
 
       # 1Password からシークレットを自動展開
       if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
-        export OPENAI_API_KEY=$(op read "op://Private/OpenAI API Key/credential" 2>/dev/null || echo "")
-        export AWS_ACCESS_KEY_ID=$(op read "op://Private/AWS Credentials/username" 2>/dev/null || echo "")
-        export AWS_SECRET_ACCESS_KEY=$(op read "op://Private/AWS Credentials/credential" 2>/dev/null || echo "")
-        export CLOUDFLARE_API_TOKEN=$(op read "op://Private/Cloudflare API Token/credential" 2>/dev/null || echo "")
-        export GEMINI_API_KEY=$(op read "op://Private/Gemini API Key/credential" 2>/dev/null || echo "")
-        export CLAUDE_CODE_OAUTH_TOKEN=$(op read "op://Private/Claude Code OAuth Token/credential" 2>/dev/null || echo "")
+        export OPENAI_API_KEY=$(op read "op://MyMachine/OPEN_AI_API_KEY/credential" 2>/dev/null || echo "")
+        export AWS_ACCESS_KEY_ID=$(op read "op://MyMachine/AWS_CREDENTIALS/username" 2>/dev/null || echo "")
+        export AWS_SECRET_ACCESS_KEY=$(op read "op://MyMachine/AWS_CREDENTIALS/password" 2>/dev/null || echo "")
+        export CLOUDFLARE_API_TOKEN=$(op read "op://MyMachine/CLOUDFLARE_API_TOKEN/credential" 2>/dev/null || echo "")
+        export GEMINI_API_KEY=$(op read "op://MyMachine/GEMINI_API_KEY/credential" 2>/dev/null || echo "")
+        export CLAUDE_CODE_OAUTH_TOKEN=$(op read "op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential" 2>/dev/null || echo "")
+        export ANTHROPIC_API_KEY=$(op read "op://MyMachine/ANTHROPIC_API_KEY/credential" 2>/dev/null || echo "")
+        export BRAVE_API_KEY=$(op read "op://MyMachine/BRAVE_API_KEY/credential" 2>/dev/null || echo "")
       fi
 
       # fzf キーバインド
@@ -447,14 +449,16 @@
     export OP_SERVICE_ACCOUNT_TOKEN=""
 
     # 以下のシークレットは自動的に1Passwordから取得されます:
-    # - OPENAI_API_KEY (op://Private/OpenAI API Key/credential)
-    # - AWS_ACCESS_KEY_ID (op://Private/AWS Credentials/username)
-    # - AWS_SECRET_ACCESS_KEY (op://Private/AWS Credentials/credential)
-    # - CLOUDFLARE_API_TOKEN (op://Private/Cloudflare API Token/credential)
-    # - GEMINI_API_KEY (op://Private/Gemini API Key/credential)
-    # - CLAUDE_CODE_OAUTH_TOKEN (op://Private/Claude Code OAuth Token/credential)
+    # - OPENAI_API_KEY (op://MyMachine/OPEN_AI_API_KEY/credential)
+    # - AWS_ACCESS_KEY_ID (op://MyMachine/AWS_CREDENTIALS/username)
+    # - AWS_SECRET_ACCESS_KEY (op://MyMachine/AWS_CREDENTIALS/password)
+    # - CLOUDFLARE_API_TOKEN (op://MyMachine/CLOUDFLARE_API_TOKEN/credential)
+    # - GEMINI_API_KEY (op://MyMachine/GEMINI_API_KEY/credential)
+    # - CLAUDE_CODE_OAUTH_TOKEN (op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential)
+    # - ANTHROPIC_API_KEY (op://MyMachine/ANTHROPIC_API_KEY/credential)
+    # - BRAVE_API_KEY (op://MyMachine/BRAVE_API_KEY/credential)
     #
-    # 注意: 1Passwordの "Private" Vault に上記のアイテムが存在する必要があります
+    # 注意: 1Passwordの "MyMachine" Vault に上記のアイテムが存在する必要があります
   '';
 
   # ===================
@@ -470,6 +474,20 @@
   # ===================
   # アクティベーション（home-manager switch時に実行）
   # ===================
+
+  # GPG鍵の自動インポート（1Passwordから）
+  home.activation.setupGPG = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    # 1PasswordからGPG鍵をインポート（まだインポートされていない場合）
+    if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
+      if ! ${pkgs.gnupg}/bin/gpg --list-secret-keys 973655571CACBD16FB1DD4E1455F463BA021E7D9 &>/dev/null; then
+        echo "Importing GPG key from 1Password..."
+        op read "op://MyMachine/gpg-key-chibiham/private key" 2>/dev/null | ${pkgs.gnupg}/bin/gpg --import 2>/dev/null || true
+
+        # Trust the key
+        echo "973655571CACBD16FB1DD4E1455F463BA021E7D9:6:" | ${pkgs.gnupg}/bin/gpg --import-ownertrust 2>/dev/null || true
+      fi
+    fi
+  '';
 
   # mise共通ランタイムインストール
   home.activation.installMiseRuntimes = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
