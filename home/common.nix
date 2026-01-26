@@ -175,8 +175,18 @@
 
     # 追加の初期化スクリプト（.zshrc の末尾に追加される）
     initContent = ''
-      # シークレット環境変数の読み込み
+      # シークレット環境変数の読み込み（OP_SERVICE_ACCOUNT_TOKEN用）
       [[ -f ~/.secrets/.env ]] && source ~/.secrets/.env
+
+      # 1Password からシークレットを自動展開
+      if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
+        export OPENAI_API_KEY=$(op read "op://Private/OpenAI API Key/credential" 2>/dev/null || echo "")
+        export AWS_ACCESS_KEY_ID=$(op read "op://Private/AWS Credentials/username" 2>/dev/null || echo "")
+        export AWS_SECRET_ACCESS_KEY=$(op read "op://Private/AWS Credentials/credential" 2>/dev/null || echo "")
+        export CLOUDFLARE_API_TOKEN=$(op read "op://Private/Cloudflare API Token/credential" 2>/dev/null || echo "")
+        export GEMINI_API_KEY=$(op read "op://Private/Gemini API Key/credential" 2>/dev/null || echo "")
+        export CLAUDE_CODE_OAUTH_TOKEN=$(op read "op://Private/Claude Code OAuth Token/credential" 2>/dev/null || echo "")
+      fi
 
       # fzf キーバインド
       if command -v fzf &> /dev/null; then
@@ -425,18 +435,26 @@
   # シークレット用ディレクトリ・テンプレート
   # ===================
   home.file.".secrets/.env.template".text = ''
-    # シークレット環境変数（手動設定）
-    # このファイルをコピーして .env を作成し、値を設定してください
+    # シークレット環境変数設定
+    # このファイルをコピーして .env を作成してください
     # cp ~/.secrets/.env.template ~/.secrets/.env
     #
-    # 値は1Passwordからコピー（MyMachine Vault）
+    # 1Password Service Account Token を設定すると、
+    # 他のシークレットは自動的に1Passwordから取得されます
 
-    export OPENAI_API_KEY=""
-    export AWS_ACCESS_KEY_ID=""
-    export AWS_SECRET_ACCESS_KEY=""
-    export CLOUDFLARE_API_TOKEN=""
-    export GEMINI_API_KEY=""
-    export CLAUDE_CODE_OAUTH_TOKEN=""
+    # 必須: 1Password Service Account Token
+    # https://my.1password.com/developer/serviceaccounts から取得
+    export OP_SERVICE_ACCOUNT_TOKEN=""
+
+    # 以下のシークレットは自動的に1Passwordから取得されます:
+    # - OPENAI_API_KEY (op://Private/OpenAI API Key/credential)
+    # - AWS_ACCESS_KEY_ID (op://Private/AWS Credentials/username)
+    # - AWS_SECRET_ACCESS_KEY (op://Private/AWS Credentials/credential)
+    # - CLOUDFLARE_API_TOKEN (op://Private/Cloudflare API Token/credential)
+    # - GEMINI_API_KEY (op://Private/Gemini API Key/credential)
+    # - CLAUDE_CODE_OAUTH_TOKEN (op://Private/Claude Code OAuth Token/credential)
+    #
+    # 注意: 1Passwordの "Private" Vault に上記のアイテムが存在する必要があります
   '';
 
   # ===================
