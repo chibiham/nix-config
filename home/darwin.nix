@@ -2,6 +2,127 @@
 { pkgs, config, lib, ... }:
 
 {
+  # Karabiner-Elements設定
+  # Note: Karabiner GUIで変更しても home-manager switch で上書きされる
+  xdg.configFile."karabiner/karabiner.json" = {
+    force = true;  # 既存ファイルを上書き
+    text = builtins.toJSON {
+    profiles = [
+      {
+        name = "Default profile";
+        selected = true;
+        complex_modifications = {
+          rules = [
+            {
+              description = "Change right_command+hjkl to arrow keys";
+              manipulators = [
+                {
+                  type = "basic";
+                  from = {
+                    key_code = "j";
+                    modifiers = {
+                      mandatory = [ "right_command" ];
+                      optional = [ "any" ];
+                    };
+                  };
+                  to = [{ key_code = "down_arrow"; }];
+                }
+                {
+                  type = "basic";
+                  from = {
+                    key_code = "h";
+                    modifiers = {
+                      mandatory = [ "right_command" ];
+                      optional = [ "any" ];
+                    };
+                  };
+                  to = [{ key_code = "left_arrow"; }];
+                }
+                {
+                  type = "basic";
+                  from = {
+                    key_code = "k";
+                    modifiers = {
+                      mandatory = [ "right_command" ];
+                      optional = [ "any" ];
+                    };
+                  };
+                  to = [{ key_code = "up_arrow"; }];
+                }
+                {
+                  type = "basic";
+                  from = {
+                    key_code = "l";
+                    modifiers = {
+                      mandatory = [ "right_command" ];
+                      optional = [ "any" ];
+                    };
+                  };
+                  to = [{ key_code = "right_arrow"; }];
+                }
+              ];
+            }
+          ];
+        };
+        devices = [
+          {
+            identifiers = {
+              is_keyboard = true;
+              product_id = 638;
+              vendor_id = 1452;
+            };
+            simple_modifications = [
+              {
+                from = { key_code = "caps_lock"; };
+                to = [{ key_code = "left_control"; }];
+              }
+              {
+                from = { key_code = "left_control"; };
+                to = [{ key_code = "escape"; }];
+              }
+            ];
+          }
+          {
+            identifiers = {
+              is_keyboard = true;
+              product_id = 37904;
+              vendor_id = 1423;
+            };
+            simple_modifications = [
+              {
+                from = { key_code = "caps_lock"; };
+                to = [{ key_code = "escape"; }];
+              }
+            ];
+          }
+        ];
+        simple_modifications = [
+          {
+            from = { key_code = "caps_lock"; };
+            to = [{ key_code = "escape"; }];
+          }
+          {
+            from = { key_code = "international1"; };
+            to = [{ key_code = "right_shift"; }];
+          }
+          {
+            from = { key_code = "international3"; };
+            to = [{ key_code = "grave_accent_and_tilde"; }];
+          }
+          {
+            from = { key_code = "japanese_kana"; };
+            to = [{ apple_vendor_top_case_key_code = "keyboard_fn"; }];
+          }
+        ];
+        virtual_hid_keyboard = {
+          country_code = 0;
+          keyboard_type_v2 = "ansi";
+        };
+      }
+    ];
+  };
+  };
+
   # macOS専用パッケージ
   home.packages = with pkgs; [
     coreutils  # GNU版コマンド（gls, gcat等）
