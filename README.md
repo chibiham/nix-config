@@ -13,20 +13,62 @@ Nix + Home Manager による環境構築。
     └── wsl.nix         # WSL固有
 ```
 
+## 前提条件
+
+### Nix
+
+Nixパッケージマネージャが必要です：
+
+```bash
+# macOS / Linux
+curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+```
+
+### Homebrew（macOS のみ）
+
+GUIアプリケーション管理のため、Homebrewが必要です：
+
+```bash
+# 1. Homebrewインストール
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# 2. .zprofile を設定（Nix競合回避のため手動設定）
+cat > ~/.zprofile << 'EOF'
+#
+# Homebrew環境設定
+#
+# Note: その他の環境変数・エイリアスはNix (common.nix) で管理
+#
+
+eval "$(/opt/homebrew/bin/brew shellenv)"
+EOF
+```
+
+**重要:** Homebrewインストール時に `.zprofile` への自動追記を提案されますが、上記の最小構成を手動で設定することでNixとの競合を回避します。
+
 ## 使い方
 
 ### 初回セットアップ
 
 ```bash
+# 1. Nix管理のパッケージ・設定を適用
 cd ~/.config/nix-config
 nix run home-manager -- switch --flake .#chibimaru@darwin
+
+# 2. Homebrew GUIアプリケーションをインストール
+brew bundle  # HOMEBREW_BREWFILE環境変数により自動的にBrewfileを使用
 ```
+
+**Note:** `brew bundle` はmacOS専用。Brewfileは `~/.config/nix-config/Brewfile` で管理。
 
 ### 設定変更後の適用
 
 ```bash
 cd ~/.config/nix-config
 home-manager switch --flake .#chibimaru@darwin
+
+# Brewfileを変更した場合は別途実行
+brew bundle
 ```
 
 ### WSLの場合
@@ -152,6 +194,47 @@ NixでインストールしたアプリケーションをSpotlightで検索可�
 - 今後Nixで追加するすべてのGUIアプリ
 
 詳細は flake.nix の `mac-app-util.homeManagerModules.default` を参照。
+
+## Homebrew管理（macOS）
+
+macOSでは **Homebrew** と **Nix** を併用。役割分担は以下の通り：
+
+### 棲み分け
+
+| 管理ツール | 管理対象 | 理由 |
+|-----------|---------|------|
+| **Nix** | CLIツール、LSPサーバー、シェル環境 | 宣言的・再現可能・クロスプラットフォーム |
+| **Homebrew** | GUIアプリケーション、フォント | macOS統合・CaskのCLIツール（code, dockerコマンド等） |
+
+### Brewfile管理
+
+- **場所**: `~/.config/nix-config/Brewfile`（Git管理）
+- **環境変数**: `HOMEBREW_BREWFILE` で自動的にBrewfileを参照
+- **更新**: `brew bundle dump --force --describe` で現在の状態を保存
+
+### GUIアプリのCLIツール
+
+Homebrewでインストールしたアプリが提供するCLIツールは `/opt/homebrew/bin/` に自動配置される：
+
+- Visual Studio Code → `code` コマンド
+- Docker Desktop → `docker`, `docker-compose` コマンド
+- GitHub Desktop → `github` コマンド
+- ngrok → `ngrok` コマンド
+
+このため、GUIアプリのみの場合でも `.zprofile` で `brew shellenv` の実行が必要。
+
+### PATH優先順位
+
+PATH の優先順位は以下の通り（先頭ほど優先）：
+
+1. **Nix管理のパッケージ** - Home Managerが `~/.nix-profile/bin` を先頭に配置
+2. **Homebrewのパッケージ** - `.zprofile` の `brew shellenv` で `/opt/homebrew/bin` を追加
+3. **システムコマンド** - `/usr/bin`, `/bin` 等
+
+**設計意図:**
+- 同名のコマンドがある場合、Nix版を優先（再現性重視）
+- HomebrewはGUIアプリ付属のCLIツール用（`code`, `docker`等）
+- `.zprofile` で `brew shellenv` のみを実行し、NixとHomebrew のPATH設定を明確に分離
 
 ## バージョン管理（mise）
 

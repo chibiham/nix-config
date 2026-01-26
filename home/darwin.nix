@@ -16,9 +16,8 @@
   };
 
   # macOS固有のPATH
+  # Note: Homebrewのパスは .zprofile の brew shellenv で設定
   home.sessionPath = [
-    "/opt/homebrew/bin"
-    "/opt/homebrew/sbin"
     "$HOME/Library/pnpm"
   ];
 
@@ -44,8 +43,8 @@
     fi
   '';
 
-  # Git: macOSのGPGパス（Homebrew版を強制）
+  # Git: GPGパス（Nix版を使用）
   programs.git.settings = {
-    gpg.program = lib.mkForce "/opt/homebrew/bin/gpg";
+    gpg.program = "${pkgs.gnupg}/bin/gpg";
   };
 }

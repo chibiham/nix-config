@@ -1,0 +1,402 @@
+# ============================================================
+# Homebrew Brewfile（説明付き）
+# ============================================================
+#
+# 各アプリの用途説明を記載。不要なものは削除してください。
+#
+# ============================================================
+
+# ------------------------------------------------------------
+# tap（外部リポジトリ）
+# ------------------------------------------------------------
+
+tap "felixkratz/formulae"      # SketchyBar提供元
+tap "koekeishiya/formulae", "https://github.com/koekeishiya/homebrew-formulae.git"  # skhd提供元
+tap "argon/mas"                # App Store CLI
+tap "homebrew/bundle"          # Brewfile管理
+tap "homebrew/services"        # サービス管理
+tap "steipete/tap"             # iMessage等のmacOSツール提供元
+
+# ------------------------------------------------------------
+# brew（CLIツール）
+# ------------------------------------------------------------
+
+# mas - App Storeアプリをコマンドラインでインストール・管理
+brew "mas"
+
+# SketchyBar - macOSのカスタムステータスバー（メニューバー置き換え）
+# 用途: CPU/メモリ使用率、音楽再生状態等を表示
+brew "felixkratz/formulae/sketchybar"
+
+# skhd - macOS用ホットキーデーモン
+# 用途: キーボードショートカットでアプリ起動・ウィンドウ操作
+brew "koekeishiya/formulae/skhd"
+
+# imsg - ターミナルからiMessage/SMSを送受信
+# 用途: スクリプトから通知を送る、メッセージ自動化
+brew "steipete/tap/imsg"
+
+# remindctl - Apple Remindersを高速操作するCLI
+# 用途: ターミナルからリマインダー追加・確認
+brew "steipete/tap/remindctl"
+
+# ------------------------------------------------------------
+# cask（GUIアプリケーション）
+# ------------------------------------------------------------
+
+# ===== ブラウザ・通信 =====
+
+# Google Chrome - Webブラウザ
+cask "google-chrome"
+
+# Microsoft Teams - ビデオ会議・チャット（仕事用）
+cask "microsoft-teams"
+
+# Slack - チームコミュニケーション（主にIT業界）
+cask "slack"
+
+# Discord - ゲーマー/コミュニティ向けチャット・通話
+cask "discord"
+
+# Chatwork - 日本企業向けビジネスチャット
+# 用途: 主に日本の中小企業で利用
+# 判断: 使ってる？
+cask "chatwork"
+
+# Zoom - ビデオ会議
+cask "zoom"
+
+# ===== 開発ツール =====
+
+# Visual Studio Code - コードエディタ（codeコマンド提供）
+cask "visual-studio-code"
+
+# Docker Desktop - Dockerのデスクトップ版（docker, docker-composeコマンド提供）
+cask "docker-desktop"
+
+# iTerm2 - ターミナルエミュレータ（高機能）
+# 用途: 標準Terminalより高機能（分割、検索、テーマ等）
+# 判断: WezTerm使ってるなら不要かも
+cask "iterm2"
+
+# Android Studio - Android開発IDE
+# 判断: Android開発してる？
+cask "android-studio"
+
+# GitKraken - Git GUIクライアント（ビジュアルにコミット履歴確認）
+cask "gitkraken"
+
+# GitHub Desktop - GitHubの公式GUIクライアント（githubコマンド提供）
+cask "github"
+
+# Postman - API開発・テストツール（REST/GraphQL）
+cask "postman"
+
+# Proxyman - HTTPデバッグプロキシ（通信内容を傍受・確認）
+# 用途: Charles Proxyの代替、API通信のデバッグ
+cask "proxyman"
+
+# TablePlus - データベースGUIクライアント（MySQL, PostgreSQL, Redis等）
+cask "tableplus"
+
+# MongoDB Compass - MongoDBの公式GUIクライアント
+# 判断: MongoDB使ってる？
+cask "mongodb-compass"
+
+# MySQL Workbench - MySQLの公式管理ツール
+# 判断: TablePlusと重複、どちらか削除可能
+cask "mysqlworkbench"
+
+# Altair GraphQL Client - GraphQL開発・テストツール
+# 判断: GraphQL使ってる？Postmanでも代用可能
+cask "altair-graphql-client"
+
+# ChromeDriver - Seleniumで Chrome を自動操作するドライバ
+# 用途: E2Eテスト自動化、スクレイピング
+# 判断: 使ってる？
+cask "chromedriver"
+
+# Flutter - Google製モバイルアプリ開発フレームワーク（iOS/Android）
+# 判断: Flutter開発してる？
+cask "flutter"
+
+# ===== AI・生産性 =====
+
+# Claude - Anthropic公式のClaude AIデスクトップアプリ
+cask "claude"
+
+# Notion - オールインワンワークスペース（ドキュメント・タスク管理）
+cask "notion"
+
+# Obsidian - Markdownベースのナレッジベース（ローカル保存）
+# 用途: 個人用メモ・知識管理、Notionよりプライバシー重視
+cask "obsidian"
+
+# ===== デザイン・コラボレーション =====
+
+# Figma - UIデザイン・プロトタイピングツール
+# 判断: デザイナーと協業してる？
+cask "figma"
+
+# ===== メディア =====
+
+# Spotify - 音楽ストリーミング
+cask "spotify"
+
+# Adobe Acrobat Reader - PDF閲覧・注釈
+# 判断: macOS標準のプレビューで十分な場合は不要
+cask "adobe-acrobat-reader"
+
+# ===== ユーティリティ =====
+
+# 1Password - パスワード管理
+cask "1password"
+
+# Alt-Tab - Windows風のアプリ切り替え（サムネイル表示）
+# 用途: Cmd+Tabをよりわかりやすく
+cask "alt-tab"
+
+# Karabiner-Elements - キーボードカスタマイズ（キー配置変更）
+# 用途: Caps LockをControlにする等
+cask "karabiner-elements"
+
+# Clipy - クリップボード履歴管理
+# 用途: 過去のコピー内容を呼び出せる
+cask "clipy"
+
+# OpenInTerminal-Lite - Finderツールバーからターミナル起動
+# 用途: Finderの現在位置でターミナルを開く
+cask "openinterminal-lite"
+
+# OpenInEditor-Lite - Finderツールバーからエディタ起動
+# 用途: ファイルをVSCode等で開く
+cask "openineditor-lite"
+
+# balenaEtcher - SD/USBにOSイメージを書き込むツール
+# 用途: Raspberry Pi, Linuxインストール用
+# 判断: 頻繁に使う？
+cask "balenaetcher"
+
+# UTM - macOS向け仮想マシン（QEMUベース）
+# 用途: Windows/Linux仮想マシン実行
+# 判断: 使ってる？
+cask "utm"
+
+# Flotato - Webページをデスクトップアプリ化
+# 用途: Gmail、Twitter等をスタンドアロンアプリにする
+# 判断: 使ってる？
+cask "flotato"
+
+# Google Drive - Googleドライブのデスクトップ同期
+# 判断: ブラウザ版で十分？
+cask "google-drive"
+
+# Iconset - アイコンセットの整理・管理
+# 用途: デザイン素材管理
+# 判断: デザイナー向け、使ってる？
+cask "iconset"
+
+# ===== セキュリティ・VPN =====
+
+# NordVPN - VPNサービス
+# 判断: 契約してる？
+cask "nordvpn"
+
+# Authy - 2要素認証アプリ（TOTP）
+# 用途: Google Authenticatorの代替、クラウド同期可能
+cask "authy"
+
+# SSH Tunnel Manager - SSHトンネル管理GUI
+# 用途: SSHポートフォワーディングをGUIで管理
+# 判断: 手動でssh -L してる場合は不要
+cask "ssh-tunnel-manager"
+
+# ===== Mac固有ツール =====
+
+# SF Symbols - Apple公式のシンボルアイコンライブラリ
+# 用途: macOS/iOS開発時のアイコン参照
+# 判断: 開発してる？
+cask "sf-symbols"
+
+# Logi Tune - Logicool Webカメラ・ヘッドセット設定
+# 判断: Logicool製品使ってる？
+cask "logitune"
+
+# Skitch - スクリーンショット＋注釈ツール（Evernote製）
+# 用途: 画像に矢印・テキスト追加
+# 判断: macOS標準のスクショ機能で十分？
+cask "skitch"
+
+# ===== Microsoft Office =====
+
+# Microsoft Auto Update - Office製品の自動更新
+cask "microsoft-auto-update"
+
+# Microsoft Excel - 表計算
+cask "microsoft-excel"
+
+# Microsoft PowerPoint - プレゼンテーション
+cask "microsoft-powerpoint"
+
+# ===== メール =====
+
+# Thunderbird - Mozilla製メールクライアント
+# 判断: Gmailブラウザ版で十分？Sparkと重複？
+cask "thunderbird"
+
+# ------------------------------------------------------------
+# フォント
+# ------------------------------------------------------------
+
+# Fira Code - プログラミング用フォント（合字対応）
+cask "font-fira-code"
+
+# Fira Code Nerd Font - Fira Code + アイコンフォント
+cask "font-fira-code-nerd-font"
+
+# Hack Nerd Font - プログラミング用 + アイコン
+cask "font-hack-nerd-font"
+
+# JetBrains Mono Nerd Font - JetBrains製 + アイコン
+# Note: Nixでも管理しているが、Homebrew版と共存可能
+cask "font-jetbrains-mono-nerd-font"
+
+# Noto Mono for Powerline - Google Noto + Powerline記号
+cask "font-noto-mono-for-powerline"
+
+# Ricty Diminished - 日本語向けプログラミングフォント
+cask "font-ricty-diminished"
+
+# ------------------------------------------------------------
+# App Store アプリ
+# ------------------------------------------------------------
+
+# Amphetamine - Mac をスリープさせない（カフェイン）
+# 用途: プレゼン中、ダウンロード中等
+mas "Amphetamine", id: 937984704
+
+# CopyLess 2 - クリップボード履歴
+# Note: Clipyと機能重複
+mas "CopyLess 2", id: 993841014
+
+# GarageBand - 音楽制作（Apple標準）
+mas "GarageBand", id: 682658836
+
+# Goodnotes - 手書きノート・PDF注釈（iPad連携）
+mas "Goodnotes", id: 1444383602
+
+# GoPro Quik - GoPro動画編集
+# 判断: GoPro持ってる？
+mas "GoPro Quik", id: 561350520
+
+# iMovie - 動画編集（Apple標準）
+mas "iMovie", id: 408981434
+
+# Keynote - プレゼン（Apple版PowerPoint）
+mas "Keynote", id: 409183694
+
+# Kindle - 電子書籍
+mas "Kindle", id: 302584613
+
+# LINE - メッセンジャー
+mas "LINE", id: 539883307
+
+# Magnet - ウィンドウ配置（分割表示）
+# 用途: ショートカットで画面半分に配置
+mas "Magnet", id: 441258766
+
+# Microsoft Remote Desktop - Windows リモートデスクトップ接続
+# 判断: Windows PC に接続する？
+mas "Microsoft Remote Desktop", id: 1295203466
+
+# Numbers - 表計算（Apple版Excel）
+mas "Numbers", id: 409203825
+
+# Pages - ワープロ（Apple版Word）
+mas "Pages", id: 409201541
+
+# Paste Plain Text - プレーンテキストとして貼り付け
+# 用途: 書式なしで貼り付けるショートカット提供
+mas "Paste Plain Text", id: 1407015686
+
+# PicGIF Lite - GIFアニメーション作成
+# 判断: 使ってる？
+mas "PicGIF Lite", id: 844918735
+
+# Presentify - プレゼン補助（画面注釈・ポインタ強調）
+# 用途: デモ・プレゼン時に画面に描画
+mas "Presentify", id: 1507246666
+
+# RunCat - メニューバーで猫がCPU使用率を表現
+# 用途: 可愛い＋負荷確認
+mas "RunCat", id: 1429033973
+
+# Spark - メールクライアント
+# Note: Thunderbirdと機能重複
+mas "Spark", id: 1176895641
+
+# Xcode - iOS/Mac開発環境
+# 判断: iOS/Mac開発してる？（巨大なので不要なら削除）
+mas "Xcode", id: 497799835
+
+# ------------------------------------------------------------
+# VS Code 拡張機能
+# ------------------------------------------------------------
+
+# Claude Code - Anthropic公式のAIアシスタント
+vscode "anthropic.claude-code"
+
+# GitHub Copilot - AIコード補完
+vscode "github.copilot"
+vscode "github.copilot-chat"
+
+# Tailwind CSS - ユーティリティファーストCSS
+vscode "bradlc.vscode-tailwindcss"
+
+# Prettier - コードフォーマッター
+vscode "esbenp.prettier-vscode"
+
+# ESLint - JavaScript Linter
+vscode "dbaeumer.vscode-eslint"
+
+# React Snippets - React開発スニペット
+vscode "dsznajder.es7-react-js-snippets"
+
+# Auto Rename Tag - HTMLタグ自動リネーム
+vscode "formulahendry.auto-rename-tag"
+
+# EditorConfig - エディタ設定統一
+vscode "editorconfig.editorconfig"
+
+# Prisma - ORMサポート
+vscode "prisma.prisma"
+
+# Git Graph - Git履歴をグラフ表示
+vscode "mhutchie.git-graph"
+
+# GitHub PR - Pull Request管理
+vscode "github.vscode-pull-request-github"
+
+# Remote Containers - Docker内で開発
+vscode "ms-vscode-remote.remote-containers"
+
+# Remote SSH - SSH接続先で開発
+vscode "ms-vscode-remote.remote-ssh"
+
+# Dracula Theme - 人気のダークテーマ
+vscode "dracula-theme.theme-dracula"
+
+# ============================================================
+# 削除推奨の判断基準
+# ============================================================
+#
+# 【確実に削除できるもの】
+# - 使ったことがない
+# - 他のアプリで代替可能
+# - プロジェクトが終了している
+#
+# 【検討が必要】
+# - 年1回しか使わないが必要（再インストール面倒）
+# - 将来使うかも（ストレージに余裕あれば残す）
+#
+# ============================================================

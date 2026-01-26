@@ -34,6 +34,25 @@
     # シークレット管理
     _1password-cli  # op コマンド
 
+    # インフラ・クラウドツール
+    awscli          # AWS CLI
+    terraform       # Infrastructure as Code
+    flyctl          # Fly.io CLI
+    cloudflared     # Cloudflare Tunnel
+
+    # ビルドツール
+    cmake           # クロスプラットフォームビルドシステム
+
+    # AI CLI
+    gemini-cli      # Google Gemini CLI
+
+    # アーカイブ
+    unrar           # RAR解凍
+
+    # セキュリティ
+    gnupg           # GPG（暗号化・署名）
+    pinentry_mac    # GPG PIN入力（macOS）
+
     # その他
     htop
     tree
@@ -382,6 +401,14 @@
   home.sessionVariables = {
     # EDITOR = "code --wait";  # NeoVimのdefaultEditor = trueで自動設定される
     LANG = "ja_JP.UTF-8";
+
+    # 基本設定（.zprofileから移行）
+    BROWSER = "open";  # macOS
+    PAGER = "less";
+    LESS = "-g -i -M -R -S -w -X -z-4";
+
+    # Homebrew設定
+    HOMEBREW_BREWFILE = "$HOME/.config/nix-config/Brewfile";
 
     # pnpm グローバルストア設定
     PNPM_HOME = "$HOME/.local/share/pnpm";
