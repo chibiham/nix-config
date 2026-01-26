@@ -54,6 +54,20 @@
           ];
         };
 
+        # macOS (Apple Silicon) - 別ユーザー
+        "chibiham@darwin" = home-manager.lib.homeManagerConfiguration {
+          pkgs = pkgsFor "aarch64-darwin";
+          modules = [
+            ./home/common.nix
+            ./home/darwin.nix
+            mac-app-util.homeManagerModules.default  # Spotlight統合
+            {
+              home.username = "chibiham";
+              home.homeDirectory = "/Users/chibiham";
+            }
+          ];
+        };
+
         # WSL (将来用)
         "chibimaru@wsl" = home-manager.lib.homeManagerConfiguration {
           pkgs = pkgsFor "x86_64-linux";
