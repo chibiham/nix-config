@@ -91,41 +91,49 @@ Nixは再現性を重視し、ライセンス的に自由でないパッケー�
 
 ## 1Password連携
 
-シークレット管理に1Password CLIを使用。
+シークレット管理に1Password CLIを使用。シェル起動時に自動的に1Passwordからシークレットを取得します。
 
 ### 方針
 
 - **1Password CLIのみNix管理**（GUIはHomebrew等で別途インストール）
-- シークレット参照は `op://vault/item/field` 形式で環境変数に設定
-- `home-manager switch` 自体は1Password認証不要
-- シークレットが必要なコマンドは `op run` で実行
+- **Service Account Token**を使用してシークレットを自動取得
+- シェル起動時に環境変数が自動設定され、通常のコマンドがそのまま使える
+- GPG鍵も1Passwordから自動インポート
 
 ### 初期構築フロー
 
 ```bash
-# 1. Home Manager適用（認証不要）
-nix run home-manager -- switch --flake .#chibimaru@darwin
+# 1. 1Password Service Account Token を取得
+# https://my.1password.com/developer/serviceaccounts からトークンを作成
+# MyMachine Vault への read 権限を付与
 
-# 2. 1Password認証（初回のみ）
-op signin
+# 2. ~/.secrets/.env にトークンを保存
+cp ~/.secrets/.env.template ~/.secrets/.env
+# エディタで OP_SERVICE_ACCOUNT_TOKEN を設定
 
-# 3. シークレットを使うコマンドは op run 経由
-op run -- some-command
+# 3. Home Manager適用
+nix run home-manager -- switch --flake .#chibiham@darwin
+
+# 4. 新しいシェルを開く → 自動的にシークレットが読み込まれる！
 ```
 
-### シークレット参照の例
+### 自動取得されるシークレット
 
-```nix
-# home/common.nix
-home.sessionVariables = {
-  GITHUB_TOKEN = "op://Development/GitHub/credential";
-};
-```
+MyMachine Vault から以下のシークレットが自動的に環境変数に設定されます：
 
-```bash
-# 実行時にシークレットが解決される
-op run -- gh pr create
-```
+- `OPENAI_API_KEY` - OpenAI APIキー
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` - AWS認証情報
+- `CLOUDFLARE_API_TOKEN` - Cloudflare APIトークン
+- `GEMINI_API_KEY` - Google Gemini APIキー
+- `CLAUDE_CODE_OAUTH_TOKEN` - Claude Code OAuth トークン
+- `ANTHROPIC_API_KEY` - Anthropic APIキー
+- `BRAVE_API_KEY` - Brave Search APIキー
+
+### GPG鍵の自動インポート
+
+`home-manager switch` 時に、1PasswordのMyMachine Vault内の `gpg-key-chibiham` アイテムからGPG秘密鍵を自動的にインポートします。
+
+詳細は [docs/1password-cli.md](docs/1password-cli.md) を参照。
 
 ### SSH Agent連携
 
@@ -276,9 +284,9 @@ mise ls-remote node
 
 以下はNix管理外のため、新しいマシンでは手動設定が必要。
 
-### シークレット環境変数（~/.secrets/.env）
+### 1Password Service Account Token（~/.secrets/.env）
 
-APIキー等のシークレットは `~/.secrets/.env` に平文で保存し、シェル起動時に読み込む。
+1Password CLIの認証に**Service Account Token**を使用します。
 
 **セットアップ:**
 
@@ -286,24 +294,23 @@ APIキー等のシークレットは `~/.secrets/.env` に平文で保存し、�
 # 1. テンプレートからコピー
 cp ~/.secrets/.env.template ~/.secrets/.env
 
-# 2. 1Password（MyMachine Vault）から値をコピーして設定
+# 2. 1Password Service Account Token を設定
+# https://my.1password.com/developer/serviceaccounts から取得
 vim ~/.secrets/.env
 ```
 
-**テンプレート内容:**
+**設定内容:**
 
 ```bash
-export OPENAI_API_KEY=""
-export AWS_ACCESS_KEY_ID=""
-export AWS_SECRET_ACCESS_KEY=""
-export CLOUDFLARE_API_TOKEN=""
-export GEMINI_API_KEY=""
-export CLAUDE_CODE_OAUTH_TOKEN=""
+# 必須: 1Password Service Account Token
+export OP_SERVICE_ACCOUNT_TOKEN="ops_your_token_here"
 ```
+
+このトークンがあれば、他のシークレット（OpenAI, AWS等）は自動的に1Passwordから取得されます。
 
 **注意:**
 - このファイルはNix管理外、`.gitignore` 済み
-- マシン移行時は1Passwordから値をコピーして再設定
+- マシン移行時は新しいトークンを発行して設定
 - シェル起動時に自動で `source` される
 
 ### Clawdbot
