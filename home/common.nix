@@ -15,7 +15,6 @@
     # 開発ツール
     git
     gh              # GitHub CLI
-    claude-code     # Claude Code CLI
     jq              # JSON処理
     ripgrep         # 高速grep
     fd              # 高速find
@@ -178,21 +177,9 @@
       # シークレット環境変数の読み込み（OP_SERVICE_ACCOUNT_TOKEN用）
       [[ -f ~/.secrets/.env ]] && source ~/.secrets/.env
 
-      # 1Password からシークレットを自動展開
-      if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
-        export OPENAI_API_KEY=$(op read "op://MyMachine/OPEN_AI_API_KEY/credential" 2>/dev/null || echo "")
-        export AWS_ACCESS_KEY_ID=$(op read "op://MyMachine/AWS_CREDENTIALS/username" 2>/dev/null || echo "")
-        export AWS_SECRET_ACCESS_KEY=$(op read "op://MyMachine/AWS_CREDENTIALS/password" 2>/dev/null || echo "")
-        export CLOUDFLARE_API_TOKEN=$(op read "op://MyMachine/CLOUDFLARE_API_TOKEN/credential" 2>/dev/null || echo "")
-        export GEMINI_API_KEY=$(op read "op://MyMachine/GEMINI_API_KEY/credential" 2>/dev/null || echo "")
-        export CLAUDE_CODE_OAUTH_TOKEN=$(op read "op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential" 2>/dev/null || echo "")
-        export ANTHROPIC_API_KEY=$(op read "op://MyMachine/ANTHROPIC_API_KEY/credential" 2>/dev/null || echo "")
-        export BRAVE_API_KEY=$(op read "op://MyMachine/BRAVE_API_KEY/credential" 2>/dev/null || echo "")
-      fi
-
-      # fzf キーバインド
-      if command -v fzf &> /dev/null; then
-        source <(fzf --zsh)
+      # 1Password からシークレットを一括展開（op inject で1回の呼び出し）
+      if command -v op &> /dev/null && [[ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]] && [[ -f ~/.secrets/env.tpl ]]; then
+        eval "$(op inject -i ~/.secrets/env.tpl 2>/dev/null)"
       fi
 
       # GPG TTY設定
