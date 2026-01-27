@@ -168,4 +168,34 @@
   programs.git.settings = {
     gpg.program = "${pkgs.gnupg}/bin/gpg";
   };
+
+  # macOS システム設定の自動化
+  home.activation.macosSettings = lib.hm.dag.entryAfter ["writeBoundary"] ''
+    echo "macOS設定を適用中..."
+
+    # キーボード設定
+    /usr/bin/defaults write NSGlobalDomain KeyRepeat -int 1                          # リピート速度最速
+    /usr/bin/defaults write NSGlobalDomain InitialKeyRepeat -int 10                  # 遅延最短
+    /usr/bin/defaults write com.apple.keyboard.fnState -bool true                    # FnキーをF1-F12として使用
+    /usr/bin/defaults write NSGlobalDomain ApplePressAndHoldEnabled -bool false      # 長押しアクセント無効
+
+    # テキスト入力設定
+    /usr/bin/defaults write NSGlobalDomain NSAutomaticQuoteSubstitutionEnabled -bool false  # スマート引用符無効
+    /usr/bin/defaults write NSGlobalDomain NSAutomaticDashSubstitutionEnabled -bool false   # スマートダッシュ無効
+    /usr/bin/defaults write NSGlobalDomain NSAutomaticSpellingCorrectionEnabled -bool true  # タイプミス修正有効
+
+    # 日本語IM設定（可能な範囲で）
+    /usr/bin/defaults write com.apple.inputmethod.Kotoeri JIMPrefLiveConversionKey -bool false    # ライブ変換無効
+    /usr/bin/defaults write com.apple.inputmethod.Kotoeri JIMPrefWindowsModeKey -bool false       # Windows風キー操作無効
+
+    # マジックマウス設定（右側で右クリック）
+    /usr/bin/defaults write com.apple.AppleMultitouchMouse MouseButtonMode TwoButton              # セカンダリクリック有効
+    /usr/bin/defaults write com.apple.driver.AppleBluetoothMultitouch.mouse MouseButtonMode TwoButton  # Bluetooth経由の場合
+
+    # Dock設定
+    /usr/bin/defaults write com.apple.dock autohide -bool true                                     # 自動的に隠す
+    /usr/bin/killall Dock 2>/dev/null || true                                                      # Dock再起動（設定反映）
+
+    echo "✓ macOS設定完了（一部設定は再ログインまたは再起動後に反映）"
+  '';
 }
