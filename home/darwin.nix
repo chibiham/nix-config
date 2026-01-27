@@ -196,6 +196,13 @@
     /usr/bin/defaults write com.apple.dock autohide -bool true                                     # 自動的に隠す
     /usr/bin/killall Dock 2>/dev/null || true                                                      # Dock再起動（設定反映）
 
+    # 起動音を無効化（sudo必要）
+    if /usr/bin/sudo -n /usr/sbin/nvram StartupMute=%01 2>/dev/null; then
+      echo "✓ 起動音を無効化しました"
+    else
+      echo "⚠ 起動音の無効化をスキップ（sudoが必要）。手動で実行: sudo nvram StartupMute=%01"
+    fi
+
     echo "✓ macOS設定完了（一部設定は再ログインまたは再起動後に反映）"
   '';
 }

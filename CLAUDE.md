@@ -18,11 +18,13 @@ Nix + Home Managerによる環境構築プロジェクト。macOSとWSLの両方
 
 ```bash
 # macOS (Apple Silicon)
-nix run home-manager -- switch --flake .#chibimaru@darwin
+nix run home-manager -- switch --flake .#$USER@darwin
 
 # WSL
-nix run home-manager -- switch --flake .#chibimaru@wsl
+nix run home-manager -- switch --flake .#$USER@wsl
 ```
+
+**注意**: `$USER` は環境変数から自動取得される。flake.nixに該当ユーザーの設定が必要。
 
 ## 1Password連携
 
@@ -37,7 +39,7 @@ nix run home-manager -- switch --flake .#chibimaru@wsl
 
 ```bash
 # 1. Home Manager適用（認証不要）
-nix run home-manager -- switch --flake .#chibimaru@darwin
+nix run home-manager -- switch --flake .#$USER@darwin
 
 # 2. 1Password認証（1回だけ）
 op signin
