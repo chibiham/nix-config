@@ -45,6 +45,7 @@ cask "tableplus"
 
 # ===== AI・生産性 =====
 cask "claude"
+cask "claude-code"
 cask "notion"
 cask "obsidian"
 
