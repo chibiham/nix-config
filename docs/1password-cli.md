@@ -102,7 +102,7 @@ MyMachine Vault に以下のアイテムを登録します：
 | `CLAUDE_CODE_AUTH_TOKEN` | API Credential | `credential` | Claude Code |
 | `ANTHROPIC_API_KEY` | API Credential | `credential` | Anthropic API |
 | `BRAVE_API_KEY` | API Credential | `credential` | Brave Search |
-| `gpg-key-chibiham` | Secure Note | `private key` (file) | GPG署名用 |
+| `gpg-key-chibiham` | Secure Note | `private_key` (file) | GPG署名用 |
 
 ### 4. 動作確認
 
@@ -151,7 +151,7 @@ home.activation.setupGPG = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
   if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
     if ! gpg --list-secret-keys 973655571CACBD16FB1DD4E1455F463BA021E7D9 &>/dev/null; then
       echo "Importing GPG key from 1Password..."
-      op read "op://MyMachine/gpg-key-chibiham/private key" | gpg --import
+      op read "op://MyMachine/gpg-key-chibiham/private_key" | gpg --import
       echo "973655571CACBD16FB1DD4E1455F463BA021E7D9:6:" | gpg --import-ownertrust
     fi
   fi
@@ -182,7 +182,7 @@ op read "op://MyMachine/OPEN_AI_API_KEY/credential"
 
 ```bash
 # 1Passwordから手動でインポートしてみる
-op read "op://MyMachine/gpg-key-chibiham/private key" | gpg --import
+op read "op://MyMachine/gpg-key-chibiham/private_key" | gpg --import
 
 # エラーが出る場合、ファイル名を確認
 op item get "gpg-key-chibiham" --vault MyMachine --format json

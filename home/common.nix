@@ -96,7 +96,7 @@
     # 設定 (25.11ではsettingsを使用)
     settings = {
       # GPG署名設定
-      user.signingkey = "973655571CACBD16FB1DD4E1455F463BA021E7D9";
+      user.signingkey = "8A5EBFD96EB7478A";
       commit.gpgsign = true;
       tag.gpgsign = true;
       user = {
@@ -392,12 +392,12 @@
   home.activation.setupGPG = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     # 1PasswordからGPG鍵をインポート（まだインポートされていない場合）
     if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
-      if ! ${pkgs.gnupg}/bin/gpg --list-secret-keys 973655571CACBD16FB1DD4E1455F463BA021E7D9 &>/dev/null; then
+      if ! ${pkgs.gnupg}/bin/gpg --list-secret-keys 8A5EBFD96EB7478A &>/dev/null; then
         echo "Importing GPG key from 1Password..."
-        op read "op://MyMachine/gpg-key-chibiham/private key" 2>/dev/null | ${pkgs.gnupg}/bin/gpg --import 2>/dev/null || true
+        op read "op://MyMachine/gpg-key-chibiham/private_key" 2>/dev/null | ${pkgs.gnupg}/bin/gpg --import 2>/dev/null || true
 
         # Trust the key
-        echo "973655571CACBD16FB1DD4E1455F463BA021E7D9:6:" | ${pkgs.gnupg}/bin/gpg --import-ownertrust 2>/dev/null || true
+        echo "8A5EBFD96EB7478A:6:" | ${pkgs.gnupg}/bin/gpg --import-ownertrust 2>/dev/null || true
       fi
     fi
   '';

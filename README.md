@@ -53,7 +53,8 @@ EOF
 ```bash
 # 1. Nix管理のパッケージ・設定を適用
 cd ~/.config/nix-config
-nix run home-manager -- switch --flake .#chibimaru@darwin
+# nix run home-manager -- switch --flake .#chibimaru@darwin 旧端末
+nix run home-manager -- switch --flake .#chibiham@darwin
 
 # 2. Homebrew GUIアプリケーションをインストール
 brew bundle  # HOMEBREW_BREWFILE環境変数により自動的にBrewfileを使用
