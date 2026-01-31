@@ -134,6 +134,16 @@
   };
 
   # ===================
+  # GPG設定
+  # ===================
+  programs.gpg = {
+    enable = true;
+    settings = {
+      default-key = "8A5EBFD96EB7478A";
+    };
+  };
+
+  # ===================
   # Zsh設定
   # ===================
   programs.zsh = {
@@ -396,8 +406,8 @@
         echo "Importing GPG key from 1Password..."
         op read "op://MyMachine/gpg-key-chibiham/private_key" 2>/dev/null | ${pkgs.gnupg}/bin/gpg --import 2>/dev/null || true
 
-        # Trust the key
-        echo "8A5EBFD96EB7478A:6:" | ${pkgs.gnupg}/bin/gpg --import-ownertrust 2>/dev/null || true
+        # Trust the key (full fingerprint required)
+        echo "A0447F00AE56DEC97196B41F8A5EBFD96EB7478A:6:" | ${pkgs.gnupg}/bin/gpg --import-ownertrust 2>/dev/null || true
       fi
     fi
   '';
