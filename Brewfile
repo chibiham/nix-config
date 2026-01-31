@@ -1,6 +1,4 @@
 tap "argon/mas"
-tap "homebrew/bundle"
-tap "homebrew/services"
 brew "gnupg"
 brew "mas"
 brew "pinentry-mac"
@@ -37,7 +35,6 @@ cask "spotify"
 cask "tableplus"
 cask "visual-studio-code"
 cask "zoom"
-mas "Amphetamine", id: 937984704
 mas "CopyLess 2", id: 993841014
 mas "GarageBand", id: 682658836
 mas "Goodnotes", id: 1444383602

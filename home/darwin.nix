@@ -203,6 +203,14 @@
       echo "⚠ 起動音の無効化をスキップ（sudoが必要）。手動で実行: sudo nvram StartupMute=%01"
     fi
 
+    # スリープ設定（sudo必要）
+    # AC電源接続時: スリープ無効、ディスプレイは30分でオフ
+    if /usr/bin/sudo -n /usr/bin/pmset -c sleep 0 displaysleep 30 2>/dev/null; then
+      echo "✓ スリープ設定を適用しました（スリープ無効、ディスプレイ30分）"
+    else
+      echo "⚠ スリープ設定をスキップ（sudoが必要）。手動で実行: sudo pmset -c sleep 0 displaysleep 30"
+    fi
+
     echo "✓ macOS設定完了（一部設定は再ログインまたは再起動後に反映）"
   '';
 }
