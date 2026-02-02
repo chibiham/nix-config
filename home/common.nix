@@ -25,6 +25,7 @@
 
     # バージョン管理
     mise  # Polyglot runtime version manager
+    uv    # Fast Python package installer and resolver
 
     # Node.js (miseで管理、一時的にコメントアウト)
     # nodejs_22  # miseで管理
@@ -380,6 +381,8 @@
     # - CLAUDE_CODE_OAUTH_TOKEN (op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential)
     # - ANTHROPIC_API_KEY (op://MyMachine/ANTHROPIC_API_KEY/credential)
     # - BRAVE_API_KEY (op://MyMachine/BRAVE_API_KEY/credential)
+    # - SWITCHBOT_TOKEN (op://MyMachine/SWITCHBOT_TOKEN/credential)
+    # - SWITCHBOT_SECRET (op://MyMachine/SWITCHBOT_SECRET/credential)
     #
     # 注意: 1Passwordの "MyMachine" Vault に上記のアイテムが存在する必要があります
   '';

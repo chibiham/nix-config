@@ -176,8 +176,11 @@
     # キーボード設定
     /usr/bin/defaults write NSGlobalDomain KeyRepeat -int 1                          # リピート速度最速
     /usr/bin/defaults write NSGlobalDomain InitialKeyRepeat -int 10                  # 遅延最短
-    /usr/bin/defaults write com.apple.keyboard.fnState -bool true                    # FnキーをF1-F12として使用
+    /usr/bin/defaults write NSGlobalDomain com.apple.keyboard.fnState -bool true     # FnキーをF1-F12として使用
     /usr/bin/defaults write NSGlobalDomain ApplePressAndHoldEnabled -bool false      # 長押しアクセント無効
+
+    # 音声入力
+    /usr/bin/defaults write com.apple.HIToolbox AppleDictationAutoEnable -bool true   # 音声入力を有効化
 
     # テキスト入力設定
     /usr/bin/defaults write NSGlobalDomain NSAutomaticQuoteSubstitutionEnabled -bool false  # スマート引用符無効
@@ -195,6 +198,12 @@
     # Dock設定
     /usr/bin/defaults write com.apple.dock autohide -bool true                                     # 自動的に隠す
     /usr/bin/killall Dock 2>/dev/null || true                                                      # Dock再起動（設定反映）
+
+    # Finder設定
+    /usr/bin/defaults write com.apple.finder FXPreferredViewStyle -string "clmv"                   # デフォルトをカラム表示
+    /usr/bin/defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool true          # ネットワークドライブで.DS_Store無効
+    /usr/bin/defaults write com.apple.desktopservices DSDontWriteUSBStores -bool true              # USBドライブで.DS_Store無効
+    /usr/bin/killall Finder 2>/dev/null || true                                                    # Finder再起動（設定反映）
 
     # 起動音を無効化（sudo必要）
     if /usr/bin/sudo -n /usr/sbin/nvram StartupMute=%01 2>/dev/null; then
