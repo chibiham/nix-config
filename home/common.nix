@@ -185,13 +185,9 @@
 
     # 追加の初期化スクリプト（.zshrc の末尾に追加される）
     initContent = ''
-      # シークレット環境変数の読み込み（OP_SERVICE_ACCOUNT_TOKEN用）
+      # シークレット環境変数の読み込み（home-manager switch時に生成済み）
       [[ -f ~/.secrets/.env ]] && source ~/.secrets/.env
-
-      # 1Password からシークレットを一括展開（op inject で1回の呼び出し）
-      if command -v op &> /dev/null && [[ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]] && [[ -f ~/.secrets/env.tpl ]]; then
-        eval "$(op inject -i ~/.secrets/env.tpl 2>/dev/null)"
-      fi
+      [[ -f ~/.secrets/.env.secrets ]] && source ~/.secrets/.env.secrets
 
       # GPG TTY設定
       export GPG_TTY=$(tty)
@@ -358,6 +354,29 @@
   };
 
   # ===================
+  # Claude Code ステータスライン
+  # ===================
+  home.file.".claude/statusline.sh" = {
+    executable = true;
+    text = ''
+#!/bin/bash
+input=$(cat)
+MODEL=$(echo "$input" | jq -r '.model.display_name // "?"')
+USED=$(echo "$input" | jq -r '.context_window.used_percentage // 0' | cut -d. -f1)
+IN=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
+OUT=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0')
+COST=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
+
+if [ "$USED" -gt 80 ]; then COLOR="\033[91m"
+elif [ "$USED" -gt 50 ]; then COLOR="\033[93m"
+else COLOR="\033[92m"; fi
+RESET="\033[0m"
+
+echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COST}''${RESET}"
+    '';
+  };
+
+  # ===================
   # シークレット用ディレクトリ・テンプレート
   # ===================
   home.file.".secrets/.env.template".text = ''
@@ -388,10 +407,21 @@
   '';
 
   # ===================
+  # SSH authorized_keys（1Password管理の共通鍵）
+  # ===================
+  home.file.".ssh/authorized_keys" = {
+    text = ''
+      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB0sBTSjm9KmyYVGjT5FPImrH3izZtM/FegoEPE+bxw/
+    '';
+  };
+
+  # ===================
   # 追加のPATH
   # ===================
   home.sessionPath = [
+    "$HOME/.local/bin"  # claude-code等
     "$HOME/bin"
+    "$HOME/bin/gamadv-xtd3"  # Google Workspace管理ツール
     "$HOME/go/bin"
     "$HOME/.local/share/pnpm"  # pnpm グローバルbin
     "$HOME/.local/share/mise/shims"  # mise shims
@@ -415,6 +445,20 @@
     fi
   '';
 
+  # 1Passwordからシークレットを展開してファイルに書き出し
+  home.activation.generateSecrets = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    if [ -f "$HOME/.secrets/.env" ]; then
+      source "$HOME/.secrets/.env"
+    fi
+    if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ] && [ -f "$HOME/.secrets/env.tpl" ]; then
+      echo "Generating secrets from 1Password..."
+      ${pkgs._1password-cli}/bin/op inject -i "$HOME/.secrets/env.tpl" > "$HOME/.secrets/.env.secrets" 2>/dev/null \
+        && chmod 600 "$HOME/.secrets/.env.secrets" \
+        && echo "✓ Secrets written to ~/.secrets/.env.secrets" \
+        || echo "⚠ Failed to generate secrets (1Password may not be authenticated)"
+    fi
+  '';
+
   # mise共通ランタイムインストール
   home.activation.installMiseRuntimes = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     export PATH="${pkgs.mise}/bin:$PATH"
@@ -423,6 +467,52 @@
     ${pkgs.mise}/bin/mise use --global node@22 2>/dev/null || true
     ${pkgs.mise}/bin/mise use --global python@3.12 2>/dev/null || true
     ${pkgs.mise}/bin/mise use --global pnpm@latest 2>/dev/null || true
+  '';
+
+  # プライベートリポジトリのクローン（1Passwordから GITHUB_TOKEN を取得）
+  home.activation.clonePrivateRepos = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    export PATH="${pkgs.git}/bin:${pkgs._1password-cli}/bin:$PATH"
+
+    clone_repo() {
+      local repo="$1"
+      local dest="$2"
+      if [ ! -d "$dest" ]; then
+        echo "Cloning $repo to $dest..."
+        GITHUB_TOKEN="op://MyMachine/GITHUB_PAT/credential" \
+          ${pkgs._1password-cli}/bin/op run -- \
+          ${pkgs.git}/bin/git clone "https://github.com/$repo.git" "$dest" 2>/dev/null || true
+      fi
+    }
+
+    clone_repo "chibiham/chibiham-memos" "$HOME/memo"
+    clone_repo "chibiham/clawd" "$HOME/clawd"
+    clone_repo "chibiham/affairs" "$HOME/affairs"
+    clone_repo "chibiham/skills" "$HOME/.agents/skills"
+  '';
+
+  # ~/.agents/skills の各スキルを ~/.claude/skills にシンボリンク
+  home.activation.linkAgentSkills = lib.hm.dag.entryAfter [ "clonePrivateRepos" ] ''
+    if [ -d "$HOME/.agents/skills" ]; then
+      mkdir -p "$HOME/.claude/skills"
+      for skill in "$HOME/.agents/skills"/*/; do
+        name=$(basename "$skill")
+        ln -sfn "$skill" "$HOME/.claude/skills/$name"
+      done
+      echo "✓ Agent skills linked to ~/.claude/skills"
+    fi
+  '';
+
+  # Claude Code settings.json に statusLine 設定をマージ
+  home.activation.setupClaudeStatusLine = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    SETTINGS_FILE="$HOME/.claude/settings.json"
+    if [ -f "$SETTINGS_FILE" ]; then
+      # 既存の settings.json に statusLine をマージ
+      ${pkgs.jq}/bin/jq '. + {"statusLine": {"type": "command", "command": "~/.claude/statusline.sh"}}' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" \
+        && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+    else
+      mkdir -p "$HOME/.claude"
+      echo '{"statusLine": {"type": "command", "command": "~/.claude/statusline.sh"}}' | ${pkgs.jq}/bin/jq . > "$SETTINGS_FILE"
+    fi
   '';
 
   # pnpmグローバルパッケージインストール（mise管理のpnpmを使用）

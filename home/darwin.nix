@@ -212,6 +212,13 @@
       echo "⚠ 起動音の無効化をスキップ（sudoが必要）。手動で実行: sudo nvram StartupMute=%01"
     fi
 
+    # リモートログイン（SSH）を有効化（sudo必要）
+    if /usr/bin/sudo -n /usr/sbin/systemsetup -setremotelogin on 2>/dev/null; then
+      echo "✓ リモートログイン（SSH）を有効化しました"
+    else
+      echo "⚠ リモートログインの有効化をスキップ（sudoが必要）。手動で実行: sudo systemsetup -setremotelogin on"
+    fi
+
     # スリープ設定（sudo必要）
     # AC電源接続時: スリープ無効、ディスプレイは30分でオフ
     if /usr/bin/sudo -n /usr/bin/pmset -c sleep 0 displaysleep 30 2>/dev/null; then
