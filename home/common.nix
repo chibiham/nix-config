@@ -96,10 +96,12 @@
 
     # 設定 (25.11ではsettingsを使用)
     settings = {
-      # GPG署名設定
-      user.signingkey = "8A5EBFD96EB7478A";
+      # SSH署名設定（1Password SSH Agent経由）
+      user.signingkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB0sBTSjm9KmyYVGjT5FPImrH3izZtM/FegoEPE+bxw/";
       commit.gpgsign = true;
       tag.gpgsign = true;
+      gpg.format = "ssh";
+      "gpg \"ssh\"".program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
       user = {
         name = "chibiham";
         email = "ryuto.chiba@chibiham.com";
@@ -119,9 +121,8 @@
       merge.tool = "vscode";
       mergetool.vscode.cmd = "code --wait $MERGED";
 
-      # GPGプログラムはプラットフォーム固有ファイルで設定
-      # darwin.nix: /opt/homebrew/bin/gpg
-      # wsl.nix: Nixで管理されるgpg
+      # SSH署名プログラムはcommon.nixで設定（1Password経由）
+      # WSLの場合は wsl.nix でパスを上書きする
 
       # delta (diff表示) - 任意で有効化
       # core.pager = "delta";
@@ -408,12 +409,14 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
 
   # ===================
   # SSH authorized_keys（1Password管理の共通鍵）
+  # シンボリンクだとsshdのStrictModesで拒否されるため実ファイルとして配置
   # ===================
-  home.file.".ssh/authorized_keys" = {
-    text = ''
-      ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB0sBTSjm9KmyYVGjT5FPImrH3izZtM/FegoEPE+bxw/
-    '';
-  };
+  home.activation.setupAuthorizedKeys = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+    echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB0sBTSjm9KmyYVGjT5FPImrH3izZtM/FegoEPE+bxw/" > "$HOME/.ssh/authorized_keys"
+    chmod 600 "$HOME/.ssh/authorized_keys"
+  '';
 
   # ===================
   # 追加のPATH

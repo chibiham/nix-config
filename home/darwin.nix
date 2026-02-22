@@ -164,10 +164,6 @@
     fi
   '';
 
-  # Git: GPGパス（Nix版を使用）
-  programs.git.settings = {
-    gpg.program = "${pkgs.gnupg}/bin/gpg";
-  };
 
   # macOS システム設定の自動化
   home.activation.macosSettings = lib.hm.dag.entryAfter ["writeBoundary"] ''
