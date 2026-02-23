@@ -215,6 +215,19 @@
       echo "⚠ リモートログインの有効化をスキップ（sudoが必要）。手動で実行: sudo systemsetup -setremotelogin on"
     fi
 
+    # SSHパスワード認証を無効化（鍵認証のみ許可）
+    SSHD_CONFIG="/etc/ssh/sshd_config"
+    if /usr/bin/sudo -n /usr/bin/grep -q "^PasswordAuthentication" "$SSHD_CONFIG" 2>/dev/null; then
+      /usr/bin/sudo -n /usr/bin/sed -i.bak 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' "$SSHD_CONFIG" 2>/dev/null
+      /usr/bin/sudo -n /usr/bin/sed -i.bak 's/^#*KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/' "$SSHD_CONFIG" 2>/dev/null
+      /usr/bin/sudo -n /bin/rm -f "$SSHD_CONFIG.bak" 2>/dev/null
+      /usr/bin/sudo -n launchctl stop com.openssh.sshd 2>/dev/null || true
+      echo "✓ SSHパスワード認証を無効化しました（鍵認証のみ）"
+    else
+      echo "⚠ SSHパスワード認証の無効化をスキップ（sudoが必要）。手動で実行:"
+      echo "  sudo sed -i.bak 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config"
+    fi
+
     # スリープ設定（sudo必要）
     # AC電源接続時: スリープ無効、ディスプレイは30分でオフ
     if /usr/bin/sudo -n /usr/bin/pmset -c sleep 0 displaysleep 30 2>/dev/null; then
