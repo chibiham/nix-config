@@ -236,6 +236,16 @@
       echo "⚠ スリープ設定をスキップ（sudoが必要）。手動で実行: sudo pmset -c sleep 0 displaysleep 30"
     fi
 
+    # Ghostty terminfo配置（SSH接続元がGhosttyの場合に正常表示するため）
+    GHOSTTY_TERMINFO="/Applications/Ghostty.app/Contents/Resources/terminfo/78/xterm-ghostty"
+    if [[ -f "$GHOSTTY_TERMINFO" ]]; then
+      /bin/mkdir -p "$HOME/.terminfo/78"
+      /bin/cp "$GHOSTTY_TERMINFO" "$HOME/.terminfo/78/xterm-ghostty"
+      echo "✓ Ghostty terminfoを配置しました"
+    else
+      echo "⚠ Ghostty.appが見つかりません。terminfoの配置をスキップ"
+    fi
+
     echo "✓ macOS設定完了（一部設定は再ログインまたは再起動後に反映）"
   '';
 }

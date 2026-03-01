@@ -193,6 +193,11 @@
       # GPG TTY設定
       export GPG_TTY=$(tty)
 
+      # SSH先でterminfoが見つからない場合のフォールバック
+      if [[ -n "$SSH_CONNECTION" ]] && ! infocmp "$TERM" &>/dev/null 2>&1; then
+        export TERM=xterm-256color
+      fi
+
       # mise（runtime version manager）
       if command -v mise &> /dev/null; then
         eval "$(mise activate zsh)"
