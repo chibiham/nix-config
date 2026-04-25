@@ -128,6 +128,21 @@
     coreutils  # GNU版コマンド（gls, gcat等）
   ];
 
+  # macOS固有のSSH設定
+  programs.ssh = {
+    # OrbStack: LinuxマシンのSSH設定（全Hostブロックより前に読み込む必要がある）
+    extraConfig = ''
+      Include ~/.orbstack/ssh/config
+    '';
+
+    matchBlocks = {
+      # 全ホストに1Password SSHエージェントを適用（github.com等はこれを継承）
+      "*" = lib.hm.dag.entryAfter [ "github.com" ] {
+        identityAgent = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
+      };
+    };
+  };
+
   # macOS固有の環境変数
   home.sessionVariables = {
     # Homebrew（自動更新を無効化）
@@ -164,6 +179,29 @@
     fi
   '';
 
+
+  # SSH秘密鍵を1Passwordから取得（新マシンセットアップ用）
+  # 前提: 1Password GUIで "SSH Key" タイプのアイテムを作成
+  #   - Vault: MyMachine
+  #   - Item名: ssh-key-ed25519
+  #   - 秘密鍵: id_ed25519 の内容をペースト
+  home.activation.setupSSHKeyFromOp = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+
+    if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
+      if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
+        echo "Fetching SSH private key from 1Password..."
+        ${pkgs._1password-cli}/bin/op read "op://MyMachine/ssh-key-ed25519/private key" \
+          > "$HOME/.ssh/id_ed25519" 2>/dev/null \
+          && chmod 600 "$HOME/.ssh/id_ed25519" \
+          && echo "✓ SSH秘密鍵を1Passwordから取得しました (~/.ssh/id_ed25519)" \
+          || echo "⚠ SSH鍵の取得に失敗。1PasswordにVault:MyMachine / Item:ssh-key-ed25519 が存在するか確認してください"
+      fi
+    else
+      echo "⚠ 1Passwordが未認証のためSSH鍵の取得をスキップ（OP_SERVICE_ACCOUNT_TOKEN が未設定）"
+    fi
+  '';
 
   # macOS システム設定の自動化
   home.activation.macosSettings = lib.hm.dag.entryAfter ["writeBoundary"] ''

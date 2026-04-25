@@ -174,6 +174,11 @@
       la = "eza -la";
       cat = "bat";
 
+      # tmux
+      ta = "tmux attach -t";    # セッションにアタッチ
+      tl = "tmux list-sessions"; # セッション一覧
+      tn = "tmux new -s";       # 新規セッション作成
+
       # Git
       g = "git";
       gs = "git status";
@@ -295,6 +300,70 @@
   fonts.fontconfig.enable = true;
 
   # ===================
+  # tmux
+  # ===================
+  programs.tmux = {
+    enable = true;
+    terminal = "tmux-256color";  # 256色対応
+    mouse = true;                # マウス操作（スクロール、ペイン選択、リサイズ）
+    baseIndex = 1;               # ウィンドウ番号を1から開始（0は押しにくい）
+    escapeTime = 0;              # Escキーの遅延をなくす（Vim用）
+    historyLimit = 10000;        # スクロールバック行数
+
+    # プレフィックスキーを Ctrl+a に変更（Ctrl+bより押しやすい）
+    prefix = "C-a";
+
+    extraConfig = ''
+      # --- ペイン分割（直感的なキー） ---
+      # | で縦分割、- で横分割（現在のディレクトリを引き継ぐ）
+      bind | split-window -h -c "#{pane_current_path}"
+      bind - split-window -v -c "#{pane_current_path}"
+
+      # --- ペイン移動（Vim風: hjkl） ---
+      bind h select-pane -L
+      bind j select-pane -D
+      bind k select-pane -U
+      bind l select-pane -R
+
+      # --- ペインリサイズ（Shift + 矢印キー） ---
+      bind -r S-Left  resize-pane -L 5
+      bind -r S-Right resize-pane -R 5
+      bind -r S-Down  resize-pane -D 5
+      bind -r S-Up    resize-pane -U 5
+
+      # --- 新しいウィンドウは現在のディレクトリで開く ---
+      bind c new-window -c "#{pane_current_path}"
+
+      # --- 設定リロード ---
+      bind r source-file ~/.tmux.conf \; display "Config reloaded!"
+
+      # --- ステータスバー ---
+      set -g status-position top
+      set -g status-style "bg=default,fg=white"
+      set -g status-left "#[fg=cyan,bold] #S "
+      set -g status-right "#[fg=white]%m/%d %H:%M "
+      set -g status-left-length 20
+      set -g window-status-current-format "#[fg=cyan,bold] #I:#W "
+      set -g window-status-format " #I:#W "
+
+      # --- ペインの境界線 ---
+      set -g pane-border-style "fg=brightblack"
+      set -g pane-active-border-style "fg=cyan"
+
+      # --- コピーモード（Vim風） ---
+      setw -g mode-keys vi
+      bind -T copy-mode-vi v send -X begin-selection
+      bind -T copy-mode-vi y send -X copy-selection-and-cancel
+
+      # --- ウィンドウ番号の自動振り直し ---
+      set -g renumber-windows on
+
+      # --- フォーカスイベント（Vim/NeoVim連携用） ---
+      set -g focus-events on
+    '';
+  };
+
+  # ===================
   # NeoVim
   # ===================
   programs.neovim = {
@@ -408,9 +477,42 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
     # - BRAVE_API_KEY (op://MyMachine/BRAVE_API_KEY/credential)
     # - SWITCHBOT_TOKEN (op://MyMachine/SWITCHBOT_TOKEN/credential)
     # - SWITCHBOT_SECRET (op://MyMachine/SWITCHBOT_SECRET/credential)
+    # - XAI_API_KEY (op://MyMachine/XAI_API_KEY/credential)
+    # - GITHUB_TOKEN (op://MyMachine/GITHUB_TOKEN/credential)
     #
     # 注意: 1Passwordの "MyMachine" Vault に上記のアイテムが存在する必要があります
   '';
+
+  # op inject用テンプレート（home-manager switch時にシークレット展開）
+  home.file.".secrets/env.tpl".text = ''
+    export OPENAI_API_KEY="op://MyMachine/OPEN_AI_API_KEY/credential"
+    export AWS_ACCESS_KEY_ID="op://MyMachine/AWS_CREDENTIALS/access_key_id"
+    export AWS_SECRET_ACCESS_KEY="op://MyMachine/AWS_CREDENTIALS/secret_access_key"
+    export CLOUDFLARE_API_TOKEN="op://MyMachine/CLOUDFLARE_API_TOKEN/credential"
+    export GEMINI_API_KEY="op://MyMachine/GEMINI_API_KEY/credential"
+    export CLAUDE_CODE_OAUTH_TOKEN="op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential"
+    export ANTHROPIC_API_KEY="op://MyMachine/ANTHROPIC_API_KEY/credential"
+    export BRAVE_API_KEY="op://MyMachine/BRAVE_API_KEY/credential"
+    export SWITCHBOT_TOKEN="op://MyMachine/SWITCHBOT_TOKEN/credential"
+    export SWITCHBOT_SECRET="op://MyMachine/SWITCHBOT_SECRET/credential"
+    export XAI_API_KEY="op://MyMachine/XAI_API_KEY/credential"
+    export GITHUB_TOKEN="op://MyMachine/GITHUB_TOKEN/credential"
+  '';
+
+  # ===================
+  # SSH設定
+  # ===================
+  programs.ssh = {
+    enable = true;
+    matchBlocks = {
+      "github.com" = {
+        hostname = "github.com";
+        user = "git";
+        # 1Password SSHエージェント経由で認証（Host * の IdentityAgent が適用される）
+        # IdentityFile / IdentityAgent none は設定しない
+      };
+    };
+  };
 
   # ===================
   # SSH authorized_keys（1Password管理の共通鍵）
@@ -486,7 +588,7 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
       local dest="$2"
       if [ ! -d "$dest" ]; then
         echo "Cloning $repo to $dest..."
-        GITHUB_TOKEN="op://MyMachine/GITHUB_PAT/credential" \
+        GITHUB_TOKEN="op://MyMachine/GITHUB_TOKEN/credential" \
           ${pkgs._1password-cli}/bin/op run -- \
           ${pkgs.git}/bin/git clone "https://github.com/$repo.git" "$dest" 2>/dev/null || true
       fi
