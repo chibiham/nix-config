@@ -195,10 +195,16 @@
     mkdir -p "$HOME/.ssh"
     chmod 700 "$HOME/.ssh"
 
-    if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
-      if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
+    # activation スクリプトでは .env が自動で読み込まれないため明示的に読み込み
+    if [ -z "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.secrets/.env" ]; then
+      OP_SERVICE_ACCOUNT_TOKEN=$(${pkgs.gnugrep}/bin/grep '^export OP_SERVICE_ACCOUNT_TOKEN=' "$HOME/.secrets/.env" | sed 's/^export OP_SERVICE_ACCOUNT_TOKEN=//' | tr -d '"')
+      export OP_SERVICE_ACCOUNT_TOKEN
+    fi
+
+    if command -v op &> /dev/null && [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+      if [ ! -s "$HOME/.ssh/id_ed25519" ]; then
         echo "Fetching SSH private key from 1Password..."
-        ${pkgs._1password-cli}/bin/op read "op://MyMachine/ssh-key-ed25519/private key" \
+        ${pkgs._1password-cli}/bin/op read "op://MyMachine/chibiham_machine_key/private_key" \
           > "$HOME/.ssh/id_ed25519" 2>/dev/null \
           && chmod 600 "$HOME/.ssh/id_ed25519" \
           && echo "✓ SSH秘密鍵を1Passwordから取得しました (~/.ssh/id_ed25519)" \

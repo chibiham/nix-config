@@ -101,7 +101,6 @@
       commit.gpgsign = true;
       tag.gpgsign = true;
       gpg.format = "ssh";
-      "gpg \"ssh\"".program = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign";
       user = {
         name = "chibiham";
         email = "ryuto.chiba@chibiham.com";
@@ -464,7 +463,7 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
 
     # 必須: 1Password Service Account Token
     # https://my.1password.com/developer/serviceaccounts から取得
-    export OP_SERVICE_ACCOUNT_TOKEN=""
+    # ~/.secrets/.env 等のgit管理外ファイルで設定すること
 
     # 以下のシークレットは自動的に1Passwordから取得されます:
     # - OPENAI_API_KEY (op://MyMachine/OPEN_AI_API_KEY/credential)
@@ -504,6 +503,10 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
   # ===================
   programs.ssh = {
     enable = true;
+    addKeysToAgent = "yes";
+    extraOptionOverrides = {
+      UseKeychain = "yes";
+    };
     matchBlocks = {
       "github.com" = {
         hostname = "github.com";
@@ -518,9 +521,17 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
   # SSH authorized_keys（1Password管理の共通鍵）
   # シンボリンクだとsshdのStrictModesで拒否されるため実ファイルとして配置
   # ===================
+  # SSH鍵をmacOS Keychainに登録（未登録の場合のみ）
+  home.activation.addSshKeyToAgent = lib.hm.dag.entryAfter [ "setupSSHKeyFromOp" ] ''
+    if [ -s "$HOME/.ssh/id_ed25519" ] && ! ssh-add -l 2>/dev/null | grep -q "id_ed25519"; then
+      ssh-add --apple-use-keychain "$HOME/.ssh/id_ed25519" 2>/dev/null || true
+    fi
+  '';
+
   home.activation.setupAuthorizedKeys = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     mkdir -p "$HOME/.ssh"
     chmod 700 "$HOME/.ssh"
+    chmod 600 "$HOME/.ssh/id_ed25519" 2>/dev/null || true
     echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB0sBTSjm9KmyYVGjT5FPImrH3izZtM/FegoEPE+bxw/" > "$HOME/.ssh/authorized_keys"
     chmod 600 "$HOME/.ssh/authorized_keys"
   '';
@@ -543,8 +554,13 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
 
   # GPG鍵の自動インポート（1Passwordから）
   home.activation.setupGPG = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    # activation スクリプトでは .env が自動で読み込まれないため明示的に読み込み
+    if [ -z "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.secrets/.env" ]; then
+      OP_SERVICE_ACCOUNT_TOKEN=$(grep '^export OP_SERVICE_ACCOUNT_TOKEN=' "$HOME/.secrets/.env" | sed 's/^export OP_SERVICE_ACCOUNT_TOKEN=//' | tr -d '"')
+      export OP_SERVICE_ACCOUNT_TOKEN
+    fi
     # 1PasswordからGPG鍵をインポート（まだインポートされていない場合）
-    if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ]; then
+    if command -v op &> /dev/null && [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
       if ! ${pkgs.gnupg}/bin/gpg --list-secret-keys 8A5EBFD96EB7478A &>/dev/null; then
         echo "Importing GPG key from 1Password..."
         op read "op://MyMachine/gpg-key-chibiham/private_key" 2>/dev/null | ${pkgs.gnupg}/bin/gpg --import 2>/dev/null || true
@@ -556,13 +572,14 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
   '';
 
   # 1Passwordからシークレットを展開してファイルに書き出し
-  home.activation.generateSecrets = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    if [ -f "$HOME/.secrets/.env" ]; then
-      source "$HOME/.secrets/.env"
+  home.activation.generateSecrets = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+    if [ -z "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.secrets/.env" ]; then
+      OP_SERVICE_ACCOUNT_TOKEN=$(grep '^export OP_SERVICE_ACCOUNT_TOKEN=' "$HOME/.secrets/.env" | sed 's/^export OP_SERVICE_ACCOUNT_TOKEN=//' | tr -d '"')
+      export OP_SERVICE_ACCOUNT_TOKEN
     fi
-    if command -v op &> /dev/null && [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ] && [ -f "$HOME/.secrets/env.tpl" ]; then
+    if command -v op &> /dev/null && [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.secrets/.env.template" ]; then
       echo "Generating secrets from 1Password..."
-      ${pkgs._1password-cli}/bin/op inject -i "$HOME/.secrets/env.tpl" > "$HOME/.secrets/.env.secrets" 2>/dev/null \
+      ${pkgs._1password-cli}/bin/op inject -i "$HOME/.secrets/.env.template" > "$HOME/.secrets/.env.secrets" 2>/dev/null \
         && chmod 600 "$HOME/.secrets/.env.secrets" \
         && echo "✓ Secrets written to ~/.secrets/.env.secrets" \
         || echo "⚠ Failed to generate secrets (1Password may not be authenticated)"
@@ -580,7 +597,7 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
   '';
 
   # プライベートリポジトリのクローン（1Passwordから GITHUB_TOKEN を取得）
-  home.activation.clonePrivateRepos = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+  home.activation.clonePrivateRepos = lib.hm.dag.entryAfter [ "addSshKeyToAgent" ] ''
     export PATH="${pkgs.git}/bin:${pkgs._1password-cli}/bin:$PATH"
 
     clone_repo() {
