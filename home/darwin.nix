@@ -136,7 +136,13 @@
     '';
 
     matchBlocks = {
-      # 全ホストに1Password SSHエージェントを適用（github.com等はこれを継承）
+      # GitHub: 秘密鍵はactivationで1Passwordから取得済みのファイルを使用
+      "github.com" = {
+        identityFile = "~/.ssh/id_ed25519";
+        identityAgent = "none";  # 1Password agentをバイパス（鍵ファイルを直接使用）
+      };
+
+      # 全ホストに1Password SSHエージェントを適用（github.com はidentityAgent noneで除外）
       "*" = lib.hm.dag.entryAfter [ "github.com" ] {
         identityAgent = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
       };
