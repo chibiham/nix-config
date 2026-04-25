@@ -144,7 +144,7 @@
 
       # 全ホストに1Password SSHエージェントを適用（github.com はidentityAgent noneで除外）
       "*" = lib.hm.dag.entryAfter [ "github.com" ] {
-        identityAgent = "~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
+        identityAgent = "\"~/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock\"";
       };
     };
   };
@@ -153,8 +153,8 @@
   home.sessionVariables = {
     # Homebrew（自動更新を無効化）
     HOMEBREW_NO_AUTO_UPDATE = "1";
-    # 1Password SSH Agent
-    SSH_AUTH_SOCK = "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
+    # 1Password SSH Agentは Host * の IdentityAgent で設定済み
+    # SSH_AUTH_SOCKはシステムのssh-agentを使用（git署名やssh-addのため）
   };
 
   # macOS固有のPATH
@@ -201,11 +201,11 @@
       export OP_SERVICE_ACCOUNT_TOKEN
     fi
 
-    if command -v op &> /dev/null && [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+    if [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
       if [ ! -s "$HOME/.ssh/id_ed25519" ]; then
         echo "Fetching SSH private key from 1Password..."
         ${pkgs._1password-cli}/bin/op read "op://MyMachine/chibiham_machine_key/private_key" \
-          > "$HOME/.ssh/id_ed25519" 2>/dev/null \
+          > "$HOME/.ssh/id_ed25519" \
           && chmod 600 "$HOME/.ssh/id_ed25519" \
           && echo "✓ SSH秘密鍵を1Passwordから取得しました (~/.ssh/id_ed25519)" \
           || echo "⚠ SSH鍵の取得に失敗。1PasswordにVault:MyMachine / Item:ssh-key-ed25519 が存在するか確認してください"

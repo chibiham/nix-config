@@ -560,7 +560,7 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
       export OP_SERVICE_ACCOUNT_TOKEN
     fi
     # 1PasswordからGPG鍵をインポート（まだインポートされていない場合）
-    if command -v op &> /dev/null && [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+    if [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
       if ! ${pkgs.gnupg}/bin/gpg --list-secret-keys 8A5EBFD96EB7478A &>/dev/null; then
         echo "Importing GPG key from 1Password..."
         op read "op://MyMachine/gpg-key-chibiham/private_key" 2>/dev/null | ${pkgs.gnupg}/bin/gpg --import 2>/dev/null || true
@@ -577,9 +577,9 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
       OP_SERVICE_ACCOUNT_TOKEN=$(grep '^export OP_SERVICE_ACCOUNT_TOKEN=' "$HOME/.secrets/.env" | sed 's/^export OP_SERVICE_ACCOUNT_TOKEN=//' | tr -d '"')
       export OP_SERVICE_ACCOUNT_TOKEN
     fi
-    if command -v op &> /dev/null && [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.secrets/.env.template" ]; then
+    if [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.secrets/env.tpl" ]; then
       echo "Generating secrets from 1Password..."
-      ${pkgs._1password-cli}/bin/op inject -i "$HOME/.secrets/.env.template" > "$HOME/.secrets/.env.secrets" 2>/dev/null \
+      ${pkgs._1password-cli}/bin/op inject -i "$HOME/.secrets/env.tpl" > "$HOME/.secrets/.env.secrets" \
         && chmod 600 "$HOME/.secrets/.env.secrets" \
         && echo "✓ Secrets written to ~/.secrets/.env.secrets" \
         || echo "⚠ Failed to generate secrets (1Password may not be authenticated)"
@@ -596,18 +596,16 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
     ${pkgs.mise}/bin/mise use --global pnpm@latest 2>/dev/null || true
   '';
 
-  # プライベートリポジトリのクローン（1Passwordから GITHUB_TOKEN を取得）
+  # プライベートリポジトリのクローン（SSH鍵認証）
   home.activation.clonePrivateRepos = lib.hm.dag.entryAfter [ "addSshKeyToAgent" ] ''
-    export PATH="${pkgs.git}/bin:${pkgs._1password-cli}/bin:$PATH"
+    export PATH="${pkgs.git}/bin:/usr/bin:$PATH"
 
     clone_repo() {
       local repo="$1"
       local dest="$2"
       if [ ! -d "$dest" ]; then
         echo "Cloning $repo to $dest..."
-        GITHUB_TOKEN="op://MyMachine/GITHUB_TOKEN/credential" \
-          ${pkgs._1password-cli}/bin/op run -- \
-          ${pkgs.git}/bin/git clone "https://github.com/$repo.git" "$dest" 2>/dev/null || true
+        ${pkgs.git}/bin/git clone "git@github.com:$repo.git" "$dest" || true
       fi
     }
 
