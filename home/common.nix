@@ -97,7 +97,8 @@
     # 設定 (25.11ではsettingsを使用)
     settings = {
       # SSH署名設定（1Password SSH Agent経由）
-      user.signingkey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB0sBTSjm9KmyYVGjT5FPImrH3izZtM/FegoEPE+bxw/";
+      # 鍵ファイルパスを指定（インラインの公開鍵だとGPGにフォールバックしてcommitがブロックされる）
+      user.signingkey = "~/.ssh/id_ed25519";
       commit.gpgsign = true;
       tag.gpgsign = true;
       gpg.format = "ssh";
@@ -193,6 +194,9 @@
       # シークレット環境変数の読み込み（home-manager switch時に生成済み）
       [[ -f ~/.secrets/.env ]] && source ~/.secrets/.env
       [[ -f ~/.secrets/.env.secrets ]] && source ~/.secrets/.env.secrets
+
+      # BRAVE_API_KEY → BRAVE_SEARCH_API_KEY エイリアス（移行期暫定）
+      [[ -n "$BRAVE_API_KEY" ]] && export BRAVE_SEARCH_API_KEY="$BRAVE_API_KEY"
 
       # GPG TTY設定
       export GPG_TTY=$(tty)
@@ -473,7 +477,7 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
     # - GEMINI_API_KEY (op://MyMachine/GEMINI_API_KEY/credential)
     # - CLAUDE_CODE_OAUTH_TOKEN (op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential)
     # - ANTHROPIC_API_KEY (op://MyMachine/ANTHROPIC_API_KEY/credential)
-    # - BRAVE_API_KEY (op://MyMachine/BRAVE_API_KEY/credential)
+    # - BRAVE_SEARCH_API_KEY (op://MyMachine/BRAVE_API_KEY/credential)
     # - SWITCHBOT_TOKEN (op://MyMachine/SWITCHBOT_TOKEN/credential)
     # - SWITCHBOT_SECRET (op://MyMachine/SWITCHBOT_SECRET/credential)
     # - XAI_API_KEY (op://MyMachine/XAI_API_KEY/credential)
@@ -483,7 +487,9 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
   '';
 
   # op inject用テンプレート（home-manager switch時にシークレット展開）
-  home.file.".secrets/env.tpl".text = ''
+  home.file.".secrets/env.tpl" = {
+    force = true;
+    text = ''
     export OPENAI_API_KEY="op://MyMachine/OPEN_AI_API_KEY/credential"
     export AWS_ACCESS_KEY_ID="op://MyMachine/AWS_CREDENTIALS/access_key_id"
     export AWS_SECRET_ACCESS_KEY="op://MyMachine/AWS_CREDENTIALS/secret_access_key"
@@ -491,16 +497,20 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
     export GEMINI_API_KEY="op://MyMachine/GEMINI_API_KEY/credential"
     export CLAUDE_CODE_OAUTH_TOKEN="op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential"
     export ANTHROPIC_API_KEY="op://MyMachine/ANTHROPIC_API_KEY/credential"
-    export BRAVE_API_KEY="op://MyMachine/BRAVE_API_KEY/credential"
+    export BRAVE_SEARCH_API_KEY="op://MyMachine/BRAVE_API_KEY/credential"
     export SWITCHBOT_TOKEN="op://MyMachine/SWITCHBOT_TOKEN/credential"
     export SWITCHBOT_SECRET="op://MyMachine/SWITCHBOT_SECRET/credential"
     export XAI_API_KEY="op://MyMachine/XAI_API_KEY/credential"
     export GITHUB_TOKEN="op://MyMachine/GITHUB_TOKEN/credential"
   '';
+  };
 
   # ===================
   # SSH設定
   # ===================
+  # 既存の ~/.ssh/config を強制上書き（checkLinkTargets対策）
+  home.file.".ssh/config".force = true;
+
   programs.ssh = {
     enable = true;
     addKeysToAgent = "yes";
@@ -597,8 +607,11 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
   '';
 
   # プライベートリポジトリのクローン（SSH鍵認証）
+  # 注意: /usr/bin を $PATH の末尾に置くこと。先頭に置くと BSD readlink が
+  # Nix coreutils の GNU readlink より優先され、後続の linkGeneration が
+  # `readlink -e` で失敗する（macOS の BSD readlink は -e を非サポート）
   home.activation.clonePrivateRepos = lib.hm.dag.entryAfter [ "addSshKeyToAgent" ] ''
-    export PATH="${pkgs.git}/bin:/usr/bin:$PATH"
+    export PATH="${pkgs.git}/bin:$PATH:/usr/bin"
 
     clone_repo() {
       local repo="$1"
