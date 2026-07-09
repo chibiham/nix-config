@@ -1,338 +1,207 @@
 # ちびはむ's Nix Config
 
-Nix + Home Manager による環境構築。
+Nix + Home Manager によるmacOS環境構築。
+複数のMacで同じ開発環境を再現する。
 
-## 構成
+**設計方針**: `home-manager switch` は認証・ネットワーク不要で常に冪等。
+1Passwordやネットワークに依存する命令的な処理はすべて `scripts/bootstrap.sh` に分離。
 
 ```
-├── flake.nix           # エントリーポイント
-├── flake.lock          # 依存関係ロック（自動生成）
-└── home/
-    ├── common.nix      # 共通設定
-    ├── darwin.nix      # macOS固有
-    └── wsl.nix         # WSL固有
+├── flake.nix              # エントリーポイント（ユーザー定義もここ）
+├── flake.lock             # 依存関係ロック（自動生成）
+├── Brewfile               # Homebrew管理のGUIアプリ
+├── home/
+│   ├── common.nix         # 共通設定（パッケージ、Git、Zsh、シークレット等）
+│   └── darwin.nix         # macOS固有（Karabiner、1Password SSH Agent等）
+└── scripts/
+    ├── bootstrap.sh       # 新マシン初期セットアップ（冪等、何度でも実行可）
+    └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
 
-## 前提条件
+---
 
-### Nix
+## いつ、何をすればいいか
 
-Nixパッケージマネージャが必要です：
+| やりたいこと | やること |
+|---|---|
+| 新しいMacをセットアップ | [→ 初回セットアップ](#初回セットアップ新しいmac) |
+| `.nix` ファイルを変更した | `hms`（下記の適用コマンド） |
+| GUIアプリを追加したい | `Brewfile` に追記 → `brew bundle` |
+| CLIツールを追加したい | `home/common.nix` の `home.packages` に追記 → 適用 |
+| シークレットを追加/ローテーションした | `env.tpl` 編集（追加時のみ）→ 適用 → `update-secrets` |
+| Node/Python等のバージョンを変えたい | `mise use node@XX`（Nixは関与しない） |
+| macOSのdefaults設定を変えたい | `scripts/macos-defaults.sh` を編集して実行 |
+| パッケージを最新にしたい | `nix flake update` → 適用 |
+| switchしたら環境が壊れた | [→ ロールバック](#切り分けロールバック) |
+
+### 設定の適用コマンド
 
 ```bash
-# macOS / Linux
+nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@darwin
+```
+
+**注意**: `nix run home-manager -- ...`（`.#` なし）は使わないこと。
+registry経由でmaster版CLIを引いてしまい、端末間で挙動が変わる原因になる。
+`.#home-manager` は flake.lock でピン留めされている。
+
+長いのでエイリアス推奨（zshrcはNix管理なので、シェルで一時定義するか common.nix に追加）:
+
+```bash
+alias hms='nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@darwin'
+```
+
+---
+
+## 初回セットアップ（新しいMac）
+
+### 1. 前提ツール
+
+```bash
+# Nix
 curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
-```
 
-### Homebrew（macOS のみ）
-
-GUIアプリケーション管理のため、Homebrewが必要です：
-
-```bash
-# 1. Homebrewインストール
+# Homebrew（GUIアプリ管理用）
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# 2. .zprofile を設定（Nix競合回避のため手動設定）
+# .zprofile は brew shellenv のみの最小構成にする（Nixとの競合回避）
+# ※ Homebrewインストーラの自動追記提案には乗らないこと
 cat > ~/.zprofile << 'EOF'
-#
-# Homebrew環境設定
-#
-# Note: その他の環境変数・エイリアスはNix (common.nix) で管理
-#
-
 eval "$(/opt/homebrew/bin/brew shellenv)"
 EOF
 ```
 
-**重要:** Homebrewインストール時に `.zprofile` への自動追記を提案されますが、上記の最小構成を手動で設定することでNixとの競合を回避します。
-
-## 使い方
-
-### 初回セットアップ
+### 2. ブートストラップ
 
 ```bash
-# 1. Nix管理のパッケージ・設定を適用
+# 初回はHTTPSでclone（SSH鍵はまだ無いため）
+git clone https://github.com/chibiham/nix-config.git ~/.config/nix-config
+
+# ユーザーがflake.nixに未定義なら、mkDarwinHomeのエントリを先に追加すること
+
+~/.config/nix-config/scripts/bootstrap.sh
+```
+
+途中で **1Password Service Account Token** の入力を求められる。
+[my.1password.com/developer/serviceaccounts](https://my.1password.com/developer/serviceaccounts) で
+**MyMachine Vaultへのread権限** を付けて発行しておく。
+
+bootstrap.sh がやること（全ステップ冪等。途中で失敗したら原因を直して再実行すればいい）:
+
+1. `home-manager switch -b backup`（既存dotfileは `*.backup` に退避される）
+2. トークンを `~/.secrets/.env` に保存
+3. SSH鍵（マシン共通鍵）を1Passwordから `~/.ssh/id_ed25519` に取得
+4. `update-secrets` でAPIキー類を `~/.secrets/.env.secrets` に展開
+5. プライベートリポジトリのclone（memo, clawd, affairs, skills）
+6. mise ランタイム（node/python/pnpm）と clawdbot の導入
+7. macOSシステム設定（y/n確認あり、sudo必要）
+
+### 3. GUIアプリ
+
+```bash
+brew bundle   # HOMEBREW_BREWFILE が設定済みなのでどこから実行してもOK
+```
+
+### 4. 残りの手動作業
+
+Nixで自動化できないもの:
+
+- **Ghosttyにフルディスクアクセス付与**: システム設定 > プライバシーとセキュリティ > フルディスクアクセス
+- **1Password GUI**: サインインし、設定 > Developer > **SSH Agent を有効化**（github.com以外のSSH接続で使用）
+- **Clawdbot用の環境変数**: LaunchAgent動作でシェルの環境変数を読めないため、`~/.clawdbot/.env` に別途記述（`~/.secrets/.env.secrets` と同じ値を設定）
+
+### 5. 動作確認
+
+```bash
+ssh -T git@github.com                    # → "Hi chibiham!" が出ればSSH認証OK
+git commit --allow-empty -m test && git log --show-signature -1   # → "Good git signature"
+echo $OPENAI_API_KEY                     # → 新しいシェルでシークレットが読めていればOK
+```
+
+---
+
+## シークレット管理
+
+### ファイル配置（cron等が依存しているので変更しないこと）
+
+| ファイル | 内容 | 作成者 |
+|---|---|---|
+| `~/.secrets/.env` | `OP_SERVICE_ACCOUNT_TOKEN` のみ | bootstrap.sh（手動でも可） |
+| `~/.secrets/env.tpl` | opシークレット参照のテンプレート | Nix（common.nixで管理） |
+| `~/.secrets/.env.secrets` | 展開済みの実シークレット | `update-secrets` コマンド |
+
+zsh起動時に `.env` → `.env.secrets` の順で自動sourceされる。
+
+### シークレットを追加するとき
+
+1. 1Passwordの **MyMachine** Vaultにアイテムを作成
+2. `home/common.nix` の `env.tpl` に `export FOO="op://MyMachine/FOO/credential"` を追記
+3. switch で適用 → `update-secrets` を実行 → 新しいシェルで反映
+
+### ローテーションしたとき
+
+1Password側で値を変えたら `update-secrets` を叩くだけ。
+**switchでは再展開されない**（意図的。switchを認証・ネットワーク非依存に保つため）。
+
+---
+
+## Git / SSH の仕組み
+
+認証・署名・authorized_keys はすべて **1Password管理のマシン共通鍵 `~/.ssh/id_ed25519`** に一本化。
+
+- **github.com**: 鍵ファイルを直接使用（`IdentityAgent none`）。1Passwordのロック状態に依存しない
+- **コミット署名**: 同じ鍵でSSH署名（commit/tag常時）。検証用の `~/.config/git/allowed_signers` もNixが配置
+- **その他のホスト**: 1Password SSH Agent（`Host *`）。使う鍵は1Password GUI側の
+  `~/.config/1Password/ssh/agent.toml` で登録する（Agent有効化だけでは鍵は提供されない）
+- 他マシンからのSSHログイン用に、同じ鍵の公開鍵が `authorized_keys` に自動追記される（既存行は消さない）
+
+---
+
+## パッケージ管理の棲み分け
+
+| ツール | 管理対象 | 追加方法 |
+|---|---|---|
+| **Nix** | CLIツール、LSP、フォーマッター、シェル環境 | `common.nix` の `home.packages` |
+| **Homebrew** | GUIアプリ、Cask付属のCLI（code, docker等） | `Brewfile` → `brew bundle` |
+| **mise** | Node.js, Python, Go, Rust等のランタイム | `mise use node@XX`（プロジェクト） / `common.nix` の `mise/config.toml`（グローバル） |
+
+PATHの優先順位は Nix (`~/.nix-profile/bin`) → Homebrew (`/opt/homebrew/bin`) → システム。
+同名コマンドはNix版が勝つ（再現性重視）。
+
+unfreeパッケージ（1password-cli等）は `flake.nix` の `allowUnfree = true` で許可済み。
+
+---
+
+## 依存の更新
+
+```bash
 cd ~/.config/nix-config
-# nix run home-manager -- switch --flake .#chibimaru@darwin 旧端末
-nix run home-manager -- switch --flake .#chibiham@darwin
-
-# 2. Homebrew GUIアプリケーションをインストール
-brew bundle  # HOMEBREW_BREWFILE環境変数により自動的にBrewfileを使用
+nix flake update        # nixpkgs / home-manager / mac-app-util を更新
+# 適用前に評価チェック
+nix eval --raw '.#homeConfigurations."chibiham@darwin".activationPackage.drvPath'
+# 問題なければ switch → 動作確認してから flake.lock をコミット
 ```
 
-**Note:** `brew bundle` はmacOS専用。Brewfileは `~/.config/nix-config/Brewfile` で管理。
+## 切り分け・ロールバック
 
-### 設定変更後の適用
+switchで環境が壊れたら、直前の世代に戻せる:
 
 ```bash
-cd ~/.config/nix-config
-home-manager switch --flake .#chibimaru@darwin
-
-# Brewfileを変更した場合は別途実行
-brew bundle
+home-manager generations            # 世代一覧
+/nix/store/…-home-manager-generation/activate   # 戻りたい世代のactivateを実行
 ```
 
-### WSLの場合
+switch自体が失敗するときの典型原因:
 
-```bash
-home-manager switch --flake .#chibimaru@wsl
-```
+- **既存ファイルとの衝突**（`Existing file ... would be clobbered`）→ `switch -b backup` で退避しながら適用
+- **flake.nixにユーザー未定義** → `mkDarwinHome` エントリを追加
+- switchは設計上ネットワーク・1Password認証に依存しないので、
+  「1Passwordが認証できないからswitchが失敗する」はない。あればバグなので設計違反を疑う
 
-## Unfreeパッケージについて
+---
 
-Nixpkgsではライセンスによりパッケージが分類されています。
+## 詳細ドキュメント
 
-| 分類 | 説明 | 例 |
-|------|------|-----|
-| **Free** | OSS / 自由に再配布可能 | git, nodejs, zsh |
-| **Unfree** | プロプライエタリ / 制限あり | 1password-cli, vscode |
-
-Nixは再現性を重視し、ライセンス的に自由でないパッケージはデフォルトでブロックされます。
-このリポジトリでは `flake.nix` で `allowUnfree = true` を設定し、unfreeパッケージも使用可能にしています。
-
-## 1Password連携
-
-シークレット管理に1Password CLIを使用。シェル起動時に自動的に1Passwordからシークレットを取得します。
-
-### 方針
-
-- **1Password CLIのみNix管理**（GUIはHomebrew等で別途インストール）
-- **Service Account Token**を使用してシークレットを自動取得
-- シェル起動時に環境変数が自動設定され、通常のコマンドがそのまま使える
-- GPG鍵も1Passwordから自動インポート
-
-### 初期構築フロー
-
-```bash
-# 1. 1Password Service Account Token を取得
-# https://my.1password.com/developer/serviceaccounts からトークンを作成
-# MyMachine Vault への read 権限を付与
-
-# 2. ~/.secrets/.env にトークンを保存
-cp ~/.secrets/.env.template ~/.secrets/.env
-# エディタで OP_SERVICE_ACCOUNT_TOKEN を設定
-
-# 3. Home Manager適用
-nix run home-manager -- switch --flake .#chibiham@darwin
-
-# 4. 新しいシェルを開く → 自動的にシークレットが読み込まれる！
-```
-
-### 自動取得されるシークレット
-
-MyMachine Vault から以下のシークレットが自動的に環境変数に設定されます：
-
-- `OPENAI_API_KEY` - OpenAI APIキー
-- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` - AWS認証情報
-- `CLOUDFLARE_API_TOKEN` - Cloudflare APIトークン
-- `GEMINI_API_KEY` - Google Gemini APIキー
-- `CLAUDE_CODE_OAUTH_TOKEN` - Claude Code OAuth トークン
-- `ANTHROPIC_API_KEY` - Anthropic APIキー
-- `BRAVE_API_KEY` - Brave Search APIキー
-
-### GPG鍵の自動インポート
-
-`home-manager switch` 時に、1PasswordのMyMachine Vault内の `gpg-key-chibiham` アイテムからGPG秘密鍵を自動的にインポートします。
-
-詳細は [docs/1password-cli.md](docs/1password-cli.md) を参照。
-
-### SSH Agent連携
-
-1Password SSH Agentを使用してSSHキーを管理。git clone/pushなどがパスワードなしで可能に。
-
-#### メリット
-
-- SSHキーを1Passwordで一元管理
-- 複数マシンで同じSSHキーを使用可能
-- 1Passwordのロック解除だけで認証完了
-- キーのローテーションが容易
-
-#### セットアップ
-
-**1. 1Password側の設定**
-
-1. 1Password デスクトップアプリを開く
-2. 設定 → Developer → SSH Agent を有効化
-3. SSHキーを1Passwordに保存（既存キーのインポートまたは新規作成）
-4. SSHキーのアイテムを開き、「Configure SSH Agent in config file...」から `~/.config/1Password/ssh/agent.toml` にキーを登録する
-
-```toml
-# ~/.config/1Password/ssh/agent.toml
-[[ssh-keys]]
-item = "CHIBIHAM_SSH_KEY"
-vault = "MyMachine"
-```
-
-**注意:** SSH Agentを有効化しただけでは鍵は提供されない。agent.toml にキーを明示的に登録する必要がある。
-
-**2. Nix設定（自動適用済み）**
-
-```nix
-# darwin.nix
-home.sessionVariables = {
-  SSH_AUTH_SOCK = "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock";
-};
-
-# wsl.nix（別途 npiperelay + socat 設定が必要）
-home.sessionVariables = {
-  SSH_AUTH_SOCK = "$HOME/.1password/agent.sock";
-};
-```
-
-**3. 動作確認**
-
-```bash
-# 新しいシェルを開いて確認
-ssh-add -l              # 1Passwordのキーが表示される
-ssh -T git@github.com   # GitHub接続テスト
-```
-
-#### WSLでの追加設定
-
-WSLでは Windows側の1Password SSH Agentと連携するため、npiperelay が必要:
-
-```bash
-# Windows側: 1Password設定でSSH Agentを有効化
-# WSL側: socat + npiperelay でソケット転送
-# 詳細: https://developer.1password.com/docs/ssh/integrations/wsl/
-```
-
-## Spotlight統合（macOS）
-
-NixでインストールしたアプリケーションをSpotlightで検索可能にするため、**[mac-app-util](https://github.com/hraban/mac-app-util)** を使用。
-
-### 仕組み
-
-- トランポリンアプリを`~/Applications/Home Manager Trampolines/`に作成
-- `home-manager switch`時に自動実行
-- Spotlightが認識できる形式でアプリを配置
-
-### 対象アプリケーション
-
-- WezTerm
-- 今後Nixで追加するすべてのGUIアプリ
-
-詳細は flake.nix の `mac-app-util.homeManagerModules.default` を参照。
-
-## Homebrew管理（macOS）
-
-macOSでは **Homebrew** と **Nix** を併用。役割分担は以下の通り：
-
-### 棲み分け
-
-| 管理ツール | 管理対象 | 理由 |
-|-----------|---------|------|
-| **Nix** | CLIツール、LSPサーバー、シェル環境 | 宣言的・再現可能・クロスプラットフォーム |
-| **Homebrew** | GUIアプリケーション、フォント | macOS統合・CaskのCLIツール（code, dockerコマンド等） |
-
-### Brewfile管理
-
-- **場所**: `~/.config/nix-config/Brewfile`（Git管理）
-- **環境変数**: `HOMEBREW_BREWFILE` で自動的にBrewfileを参照
-- **更新**: `brew bundle dump --force --describe` で現在の状態を保存
-
-### GUIアプリのCLIツール
-
-Homebrewでインストールしたアプリが提供するCLIツールは `/opt/homebrew/bin/` に自動配置される：
-
-- Visual Studio Code → `code` コマンド
-- Docker Desktop → `docker`, `docker-compose` コマンド
-- GitHub Desktop → `github` コマンド
-- ngrok → `ngrok` コマンド
-
-このため、GUIアプリのみの場合でも `.zprofile` で `brew shellenv` の実行が必要。
-
-### PATH優先順位
-
-PATH の優先順位は以下の通り（先頭ほど優先）：
-
-1. **Nix管理のパッケージ** - Home Managerが `~/.nix-profile/bin` を先頭に配置
-2. **Homebrewのパッケージ** - `.zprofile` の `brew shellenv` で `/opt/homebrew/bin` を追加
-3. **システムコマンド** - `/usr/bin`, `/bin` 等
-
-**設計意図:**
-- 同名のコマンドがある場合、Nix版を優先（再現性重視）
-- HomebrewはGUIアプリ付属のCLIツール用（`code`, `docker`等）
-- `.zprofile` で `brew shellenv` のみを実行し、NixとHomebrew のPATH設定を明確に分離
-
-## バージョン管理（mise）
-
-プログラミング言語のバージョン管理には **mise** を使用。プロジェクトごとに異なるバージョンを自動的に切り替え可能。
-
-### 特徴
-
-- **対応言語**: Node.js, Python, Go, Rust, Ruby等
-- **自動検出**: `.node-version`, `.python-version`等を自動検出
-- **自動切り替え**: direnv連携により、プロジェクトディレクトリに入ると自動的にバージョンが切り替わる
-- **Nix統合**: mise本体はNix管理、ランタイムはmise管理
-
-### 基本的な使い方
-
-```bash
-# プロジェクトでバージョン指定
-cd ~/projects/my-app
-mise use node@20  # .node-version ファイルが作成される
-
-# グローバルバージョン設定
-mise use --global node@22
-mise use --global python@3.12
-
-# バージョン確認
-mise ls
-mise ls-remote node
-```
-
-### Nix vs mise の役割分担
-
-| 管理ツール | 管理対象 | 理由 |
-|-----------|---------|------|
-| **Nix** | LSPサーバー、フォーマッター、システムツール、mise本体 | 安定性・一貫性重視 |
-| **mise** | Node.js, Python, Go, Rust等のランタイム | 柔軟なバージョン切り替え |
-
-詳細は [docs/mise-setup.md](docs/mise-setup.md) を参照。
-
-## 手動設定が必要な項目
-
-以下はNix管理外のため、新しいマシンでは手動設定が必要。
-
-### 1Password Service Account Token（~/.secrets/.env）
-
-1Password CLIの認証に**Service Account Token**を使用します。
-
-**セットアップ:**
-
-```bash
-# 1. テンプレートからコピー
-cp ~/.secrets/.env.template ~/.secrets/.env
-
-# 2. 1Password Service Account Token を設定
-# https://my.1password.com/developer/serviceaccounts から取得
-vim ~/.secrets/.env
-```
-
-**設定内容:**
-
-```bash
-# 必須: 1Password Service Account Token
-export OP_SERVICE_ACCOUNT_TOKEN="ops_your_token_here"
-```
-
-このトークンがあれば、他のシークレット（OpenAI, AWS等）は自動的に1Passwordから取得されます。
-
-**注意:**
-- このファイルはNix管理外、`.gitignore` 済み
-- マシン移行時は新しいトークンを発行して設定
-- シェル起動時に自動で `source` される
-
-### Clawdbot
-
-LaunchAgentで動作するため、シェル経由の環境変数読み込みが使えない。
-環境変数は `~/.clawdbot/.env` に別途記述する。
-
-```bash
-# ~/.clawdbot/.env
-OPENAI_API_KEY=sk-xxx
-ANTHROPIC_API_KEY=sk-ant-xxx
-```
-
-**注意:** `~/.secrets/.env` と同じ値を設定すること。
+- [docs/1password-cli.md](docs/1password-cli.md) — 1Password CLI連携の詳細
+- [docs/mise-setup.md](docs/mise-setup.md) — miseの使い方
+- [docs/neovim-setup.md](docs/neovim-setup.md) — NeoVim設定
+- [CLAUDE.md](CLAUDE.md) — 設計方針（AI向け・人間も可）

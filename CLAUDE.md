@@ -1,107 +1,118 @@
 # Nix Configuration
 
-Nix + Home Managerによる環境構築プロジェクト。macOSとWSLの両方で同じ開発環境を再現可能にする。
+Nix + Home Managerによる環境構築プロジェクト（macOS用）。
+複数のMacで同じ開発環境を再現可能にする。
+
+## 設計方針
+
+- **`home-manager switch` は認証・ネットワーク不要で常に冪等**
+  （宣言的なファイル配置・パッケージ導入のみ。ローカル完結しない処理はactivationに書かない）
+- **命令的な初期構築は `scripts/bootstrap.sh` に集約**
+  （1PasswordからのSSH鍵取得、プライベートリポジトリclone、mise/pnpmの初期導入、macOS設定）
+- **Home Manager CLIはflake.lockでピン留め**
+  （`nix run home-manager` はregistry経由でmaster追従になるため使わない。必ず `nix run .#home-manager` を使う）
+- **Git認証・署名・authorized_keysは1Password管理の共通マシン鍵 `~/.ssh/id_ed25519` に一本化**
 
 ## ディレクトリ構成
 
 ```
 .
-├── flake.nix          # エントリーポイント
+├── flake.nix          # エントリーポイント（mkDarwinHomeでユーザー定義）
 ├── flake.lock
-└── home/
-    ├── common.nix     # 共通設定（両OS）
-    ├── darwin.nix     # macOS固有設定
-    └── wsl.nix        # WSL固有設定
+├── home/
+│   ├── common.nix     # 共通設定
+│   └── darwin.nix     # macOS固有設定
+└── scripts/
+    ├── bootstrap.sh       # 新マシン初期セットアップ（冪等、再実行可）
+    └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
 
 ## 使い方
 
-```bash
-# macOS (Apple Silicon)
-nix run home-manager -- switch --flake .#$USER@darwin
+### 新しいMacの初期構築
 
-# WSL
-nix run home-manager -- switch --flake .#$USER@wsl
+```bash
+# 1. Nixインストール（未導入なら）
+curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
+
+# 2. このリポジトリをclone（初回はHTTPSで）
+git clone https://github.com/chibiham/nix-config.git ~/.config/nix-config
+
+# 3. ブートストラップ実行（対話的にOP_SERVICE_ACCOUNT_TOKENを聞かれる）
+~/.config/nix-config/scripts/bootstrap.sh
 ```
 
-**注意**: `$USER` は環境変数から自動取得される。flake.nixに該当ユーザーの設定が必要。
+bootstrap.shがやること（すべて冪等、途中失敗しても再実行すればよい）:
+1. `home-manager switch -b backup`（既存dotfileは `*.backup` に退避）
+2. 1Password Service Account Token を `~/.secrets/.env` に保存
+3. SSH鍵を1Passwordから取得（`op://MyMachine/chibiham_machine_key`）
+4. `update-secrets` でシークレット展開
+5. プライベートリポジトリのclone（memo, clawd, affairs, skills）
+6. mise ランタイム（node/python/pnpm）と pnpm グローバルパッケージ導入
+7. macOSシステム設定（任意、sudo必要）
+
+### 日常の設定反映
+
+```bash
+nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@darwin
+```
+
+**注意**: `$USER` のflake.nix該当エントリが必要（`mkDarwinHome` で追加）。
+
+### 変更時の検証
+
+```bash
+# 全構成が評価できるか確認（switchする前に）
+nix eval --raw '.#homeConfigurations."chibiham@darwin".activationPackage.drvPath'
+```
 
 ## 1Password連携
 
-### 方針
-
 - **1Password CLIのみNix管理**（GUIはHomebrew/手動）
-- シークレット参照は `op://vault/item/field` 形式で設定
-- `home-manager switch` 自体は1Password認証不要
-- シークレットが必要なコマンドは `op run` で実行
-
-### 初期構築フロー
-
-```bash
-# 1. Home Manager適用（認証不要）
-nix run home-manager -- switch --flake .#$USER@darwin
-
-# 2. 1Password認証（1回だけ）
-op signin
-
-# 3. 以降、シークレットを使うコマンドは op run 経由
-op run -- some-command
-```
-
-### シークレット参照の例
-
-```nix
-home.sessionVariables = {
-  # 文字列として設定（この時点では値は解決されない）
-  GITHUB_TOKEN = "op://Development/GitHub/credential";
-  AWS_ACCESS_KEY_ID = "op://AWS/Production/access_key_id";
-};
-```
-
-実行時に `op run` でシークレットが解決される：
+- 認証は **Service Account Token**（`~/.secrets/.env` の `OP_SERVICE_ACCOUNT_TOKEN`、git管理外）
+- `home-manager switch` は1Password認証不要
+- シークレットの実体は `update-secrets` コマンド（Nixが配布）で
+  `~/.secrets/env.tpl` から `~/.secrets/.env.secrets` に展開され、zshrcが読み込む
+- シークレットを追加するときは `common.nix` の `env.tpl` にop参照を追記 → switch → `update-secrets`
 
 ```bash
-op run -- npm publish  # GITHUB_TOKEN が実際の値に置換されて実行
+# シークレットを更新したいとき
+update-secrets
 ```
+
+## Git / SSH の構成
+
+- **認証**: github.com は `~/.ssh/id_ed25519`（鍵ファイル直接、`IdentityAgent none`）
+- **署名**: 同じ鍵でSSH署名（`gpg.format = ssh`、commit/tag常時署名）。
+  検証用に `~/.config/git/allowed_signers` もNixが配置
+- **その他ホスト**: 1Password SSH Agent（darwin.nixの `Host *`）
+- github.com は `StrictHostKeyChecking accept-new` で初回接続も非対話で通る
 
 ## 手動設定（Nix管理外）
 
-以下はmacOSのセキュリティ制約により自動化できないため、手動で設定が必要。
+macOSのセキュリティ制約により自動化できないもの:
 
-### Ghosttyにフルディスクアクセスを付与
-
-システム設定 > プライバシーとセキュリティ > フルディスクアクセス > Ghosttyを追加して有効化
+- **Ghosttyにフルディスクアクセスを付与**: システム設定 > プライバシーとセキュリティ > フルディスクアクセス > Ghosttyを追加して有効化
 
 ## 管理対象
 
 ### パッケージ
 
 - 開発ツール: git, gh, jq, ripgrep, fd, fzf, eza, bat, delta
-- ターミナル: WezTerm (GPU高速化、クロスプラットフォーム)
-- バージョン管理: mise (Node.js, Python, Go, Rust等)
-- Node.js: mise管理（プロジェクトごとにバージョン切り替え）
-- Python: mise管理（同上）
+- バージョン管理: mise (Node.js, Python, pnpm等はmise管理)
 - LSPサーバー: Nix管理（typescript-language-server, pyright, gopls等 - 全8言語）
-- pnpm グローバルパッケージ: clawdbot（home-manager switch時に自動インストール）
-- シークレット管理: 1password-cli
-- その他: htop, tree, curl, wget
+- pnpm グローバルパッケージ: clawdbot（bootstrap.shで導入）
+- シークレット管理: 1password-cli + update-secretsコマンド
+- その他: htop, tree, curl, wget, awscli, terraform, flyctl, cloudflared
 
 ### macOS統合
 
-- **Spotlight統合**: mac-app-util（トランポリンアプリ作成）
-  - Nixアプリが CMD+Space で検索可能
-  - `home-manager switch`時に自動実行
-  - トランポリン配置先: `~/Applications/Home Manager Trampolines/`
+- **Spotlight統合**: mac-app-util（トランポリンアプリ作成、switch時に自動実行）
+- **Karabiner-Elements**: karabiner.jsonをNix管理（GUI変更はswitchで上書きされる）
 
 ### シェル設定
 
 - Zsh（autosuggestion, syntax-highlighting, completion）
 - Starship（プロンプト）
 - direnv + nix-direnv + mise
-- fzf
-
-### Git設定
-
-- ユーザー情報、エイリアス
-- GPG署名（macOS: Homebrew gpg, WSL: Nix gpg）
-- VS Code連携（editor, diff, merge）
+- fzf, tmux, NeoVim

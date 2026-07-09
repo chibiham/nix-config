@@ -24,10 +24,8 @@
       systems = [
         "aarch64-darwin"  # macOS (Apple Silicon)
         "x86_64-darwin"   # macOS (Intel)
-        "x86_64-linux"    # Linux/WSL
       ];
 
-      # 各システム用のpkgsを生成
       forAllSystems = nixpkgs.lib.genAttrs systems;
       pkgsFor = system: import nixpkgs {
         inherit system;
@@ -36,50 +34,37 @@
           allowUnfree = true;
         };
       };
+
+      # macOSユーザー用のHome Manager設定を生成
+      mkDarwinHome = { username, system ? "aarch64-darwin" }:
+        home-manager.lib.homeManagerConfiguration {
+          pkgs = pkgsFor system;
+          modules = [
+            ./home/common.nix
+            ./home/darwin.nix
+            mac-app-util.homeManagerModules.default  # Spotlight統合
+            {
+              home.username = username;
+              home.homeDirectory = "/Users/${username}";
+            }
+          ];
+        };
     in
     {
       # Home Manager設定
       homeConfigurations = {
-        # macOS (Apple Silicon) - MacBook Air
-        "chibimaru@darwin" = home-manager.lib.homeManagerConfiguration {
-          pkgs = pkgsFor "aarch64-darwin";
-          modules = [
-            ./home/common.nix
-            ./home/darwin.nix
-            mac-app-util.homeManagerModules.default  # Spotlight統合
-            {
-              home.username = "chibimaru";
-              home.homeDirectory = "/Users/chibimaru";
-            }
-          ];
-        };
-
-        # macOS (Apple Silicon) - 別ユーザー
-        "chibiham@darwin" = home-manager.lib.homeManagerConfiguration {
-          pkgs = pkgsFor "aarch64-darwin";
-          modules = [
-            ./home/common.nix
-            ./home/darwin.nix
-            mac-app-util.homeManagerModules.default  # Spotlight統合
-            {
-              home.username = "chibiham";
-              home.homeDirectory = "/Users/chibiham";
-            }
-          ];
-        };
-
-        # WSL (将来用)
-        "chibimaru@wsl" = home-manager.lib.homeManagerConfiguration {
-          pkgs = pkgsFor "x86_64-linux";
-          modules = [
-            ./home/common.nix
-            ./home/wsl.nix
-            {
-              home.username = "chibimaru";
-              home.homeDirectory = "/home/chibimaru";
-            }
-          ];
-        };
+        "chibimaru@darwin" = mkDarwinHome { username = "chibimaru"; };
+        "chibiham@darwin" = mkDarwinHome { username = "chibiham"; };
       };
+
+      # flake.lockでピン留めされたhome-manager CLI
+      # `nix run home-manager` (registry経由=master追従) ではなくこちらを使う:
+      #   nix run .#home-manager -- switch --flake .#$USER@darwin
+      apps = forAllSystems (system: {
+        home-manager = {
+          type = "app";
+          program = "${home-manager.packages.${system}.home-manager}/bin/home-manager";
+        };
+      });
     };
 }

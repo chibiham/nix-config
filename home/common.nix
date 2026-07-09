@@ -1,6 +1,34 @@
-# 共通設定（macOS / WSL 両方で使う）
+# 共通設定
+#
+# 方針:
+# - このファイル（と darwin.nix）の適用 = `home-manager switch` は
+#   ネットワーク・1Password認証・sudo に依存せず、常に冪等であること
+# - 命令的な初期構築（SSH鍵取得、リポジトリclone、macOS設定等）は
+#   scripts/bootstrap.sh に分離
 { pkgs, lib, ... }:
 
+let
+  # 1Password管理の共通マシン鍵（公開鍵）
+  # 認証・Git署名・authorized_keys すべてこの鍵に一本化
+  machinePubKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB0sBTSjm9KmyYVGjT5FPImrH3izZtM/FegoEPE+bxw/";
+  gitEmail = "ryuto.chiba@chibiham.com";
+
+  # シークレット再生成コマンド（activationではなく明示実行）
+  update-secrets = pkgs.writeShellScriptBin "update-secrets" ''
+    set -euo pipefail
+    if [ -z "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.secrets/.env" ]; then
+      source "$HOME/.secrets/.env"
+    fi
+    if [ -z "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+      echo "⚠ OP_SERVICE_ACCOUNT_TOKEN が未設定です（~/.secrets/.env に設定してください）" >&2
+      exit 1
+    fi
+    ${pkgs._1password-cli}/bin/op inject -i "$HOME/.secrets/env.tpl" > "$HOME/.secrets/.env.secrets.tmp"
+    mv "$HOME/.secrets/.env.secrets.tmp" "$HOME/.secrets/.env.secrets"
+    chmod 600 "$HOME/.secrets/.env.secrets"
+    echo "✓ ~/.secrets/.env.secrets を更新しました（新しいシェルで反映）"
+  '';
+in
 {
   # Home Managerのバージョン（変更しないで）
   home.stateVersion = "24.05";
@@ -27,12 +55,9 @@
     mise  # Polyglot runtime version manager
     uv    # Fast Python package installer and resolver
 
-    # Node.js (miseで管理、一時的にコメントアウト)
-    # nodejs_22  # miseで管理
-    # pnpm       # miseで管理
-
     # シークレット管理
     _1password-cli  # op コマンド
+    update-secrets  # ~/.secrets/.env.secrets を1Passwordから再生成
 
     # インフラ・クラウドツール
     awscli          # AWS CLI
@@ -50,8 +75,7 @@
     unrar           # RAR解凍
 
     # セキュリティ
-    gnupg           # GPG（暗号化・署名）
-    pinentry_mac    # GPG PIN入力（macOS）
+    gnupg           # GPG（暗号化用途。Git署名はSSH形式に移行済み）
 
     # その他
     htop
@@ -81,12 +105,14 @@
     tree-sitter             # パーサー（Treesitter用）
     gcc                     # Treesitterコンパイル用
 
-    # フォント（WezTerm用）
+    # フォント（ターミナル用）
     pkgs.nerd-fonts.jetbrains-mono
   ];
 
   # ===================
   # Git設定
+  # 認証: SSH（~/.ssh/id_ed25519、1Passwordからbootstrapで取得）
+  # 署名: 同じ鍵でSSH署名（commit/tagとも常時署名）
   # ===================
   programs.git = {
     enable = true;
@@ -96,16 +122,17 @@
 
     # 設定 (25.11ではsettingsを使用)
     settings = {
-      # SSH署名設定（1Password SSH Agent経由）
-      # 鍵ファイルパスを指定（インラインの公開鍵だとGPGにフォールバックしてcommitがブロックされる）
-      user.signingkey = "~/.ssh/id_ed25519";
+      user = {
+        name = "chibiham";
+        email = gitEmail;
+        # 鍵ファイルパスを指定（インラインの公開鍵だとGPGにフォールバックしてcommitがブロックされる）
+        signingkey = "~/.ssh/id_ed25519";
+      };
       commit.gpgsign = true;
       tag.gpgsign = true;
       gpg.format = "ssh";
-      user = {
-        name = "chibiham";
-        email = "ryuto.chiba@chibiham.com";
-      };
+      # 自分のコミットの署名検証用（git log --show-signature）
+      gpg.ssh.allowedSignersFile = "~/.config/git/allowed_signers";
 
       alias = {
         co = "checkout";
@@ -120,28 +147,40 @@
       difftool.vscode.cmd = "code --wait --diff $LOCAL $REMOTE";
       merge.tool = "vscode";
       mergetool.vscode.cmd = "code --wait $MERGED";
-
-      # SSH署名プログラムはcommon.nixで設定（1Password経由）
-      # WSLの場合は wsl.nix でパスを上書きする
-
-      # delta (diff表示) - 任意で有効化
-      # core.pager = "delta";
-      # interactive.diffFilter = "delta --color-only";
-      # delta = {
-      #   navigate = true;
-      #   light = false;
-      #   line-numbers = true;
-      # };
     };
   };
 
+  # SSH署名の検証用 allowed_signers
+  home.file.".config/git/allowed_signers".text = ''
+    ${gitEmail} ${machinePubKey}
+  '';
+
   # ===================
-  # GPG設定
+  # SSH設定
+  # github.com: 1Passwordから取得した鍵ファイルで認証（agentはバイパス）
+  #   → Git認証と署名が常に同じ鍵・同じ経路になり、端末間で挙動が揃う
+  # その他ホスト: darwin.nix の Host * で1Password SSH agentを適用
   # ===================
-  programs.gpg = {
+  # 既存の ~/.ssh/config を強制上書き（checkLinkTargets対策）
+  home.file.".ssh/config".force = true;
+
+  programs.ssh = {
     enable = true;
-    settings = {
-      default-key = "8A5EBFD96EB7478A";
+    # デフォルト値は matchBlocks."*"（darwin.nix）で明示管理
+    enableDefaultConfig = false;
+    matchBlocks = {
+      "github.com" = {
+        hostname = "github.com";
+        user = "git";
+        identityFile = "~/.ssh/id_ed25519";
+        identitiesOnly = true;
+        # 1Password agentをバイパスして鍵ファイルを直接使用
+        identityAgent = "none";
+        extraOptions = {
+          # 初回接続（bootstrapのclone等）でホスト鍵確認に止められない
+          StrictHostKeyChecking = "accept-new";
+        };
+      };
     };
   };
 
@@ -191,7 +230,7 @@
 
     # 追加の初期化スクリプト（.zshrc の末尾に追加される）
     initContent = ''
-      # シークレット環境変数の読み込み（home-manager switch時に生成済み）
+      # シークレット環境変数の読み込み（update-secretsで生成）
       [[ -f ~/.secrets/.env ]] && source ~/.secrets/.env
       [[ -f ~/.secrets/.env.secrets ]] && source ~/.secrets/.env.secrets
 
@@ -391,6 +430,7 @@
   };
 
   # mise global configuration
+  # auto_install = true なので、bootstrap後は各ツールが必要時に自動インストールされる
   xdg.configFile."mise/config.toml".text = ''
     [settings]
     auto_install = true
@@ -398,12 +438,11 @@
     experimental = true
 
     [tools]
-    # グローバルデフォルト（activation hookで自動インストール）
+    # グローバルデフォルト（bootstrap.sh の mise install で導入）
     node = "22"
     python = "3.12"
     pnpm = "latest"
   '';
-
 
   # ===================
   # 環境変数
@@ -413,12 +452,8 @@
     LANG = "ja_JP.UTF-8";
 
     # 基本設定（.zprofileから移行）
-    BROWSER = "open";  # macOS
     PAGER = "less";
     LESS = "-g -i -M -R -S -w -X -z-4";
-
-    # Homebrew設定
-    HOMEBREW_BREWFILE = "$HOME/.config/nix-config/Brewfile";
 
     # pnpm グローバルストア設定
     PNPM_HOME = "$HOME/.local/share/pnpm";
@@ -461,32 +496,18 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
     # シークレット環境変数設定
     # このファイルをコピーして .env を作成してください
     # cp ~/.secrets/.env.template ~/.secrets/.env
-    #
-    # 1Password Service Account Token を設定すると、
-    # 他のシークレットは自動的に1Passwordから取得されます
+    # （scripts/bootstrap.sh を使えば対話的に作成されます）
 
     # 必須: 1Password Service Account Token
     # https://my.1password.com/developer/serviceaccounts から取得
-    # ~/.secrets/.env 等のgit管理外ファイルで設定すること
+    # export OP_SERVICE_ACCOUNT_TOKEN="..."
 
-    # 以下のシークレットは自動的に1Passwordから取得されます:
-    # - OPENAI_API_KEY (op://MyMachine/OPEN_AI_API_KEY/credential)
-    # - AWS_ACCESS_KEY_ID (op://MyMachine/AWS_CREDENTIALS/username)
-    # - AWS_SECRET_ACCESS_KEY (op://MyMachine/AWS_CREDENTIALS/password)
-    # - CLOUDFLARE_API_TOKEN (op://MyMachine/CLOUDFLARE_API_TOKEN/credential)
-    # - GEMINI_API_KEY (op://MyMachine/GEMINI_API_KEY/credential)
-    # - CLAUDE_CODE_OAUTH_TOKEN (op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential)
-    # - ANTHROPIC_API_KEY (op://MyMachine/ANTHROPIC_API_KEY/credential)
-    # - BRAVE_SEARCH_API_KEY (op://MyMachine/BRAVE_API_KEY/credential)
-    # - SWITCHBOT_TOKEN (op://MyMachine/SWITCHBOT_TOKEN/credential)
-    # - SWITCHBOT_SECRET (op://MyMachine/SWITCHBOT_SECRET/credential)
-    # - XAI_API_KEY (op://MyMachine/XAI_API_KEY/credential)
-    # - GITHUB_TOKEN (op://MyMachine/GITHUB_TOKEN/credential)
-    #
-    # 注意: 1Passwordの "MyMachine" Vault に上記のアイテムが存在する必要があります
+    # 他のシークレットは `update-secrets` コマンドで
+    # ~/.secrets/.env.secrets に展開されます（env.tpl参照）
+    # 注意: 1Passwordの "MyMachine" Vault に該当アイテムが存在する必要があります
   '';
 
-  # op inject用テンプレート（home-manager switch時にシークレット展開）
+  # op inject用テンプレート（update-secretsコマンドで展開）
   home.file.".secrets/env.tpl" = {
     force = true;
     text = ''
@@ -496,7 +517,6 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
     export CLOUDFLARE_API_TOKEN="op://MyMachine/CLOUDFLARE_API_TOKEN/credential"
     export GEMINI_API_KEY="op://MyMachine/GEMINI_API_KEY/credential"
     export CLAUDE_CODE_OAUTH_TOKEN="op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential"
-    export ANTHROPIC_API_KEY="op://MyMachine/ANTHROPIC_API_KEY/credential"
     export BRAVE_SEARCH_API_KEY="op://MyMachine/BRAVE_API_KEY/credential"
     export SWITCHBOT_TOKEN="op://MyMachine/SWITCHBOT_TOKEN/credential"
     export SWITCHBOT_SECRET="op://MyMachine/SWITCHBOT_SECRET/credential"
@@ -504,47 +524,6 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
     export GITHUB_TOKEN="op://MyMachine/GITHUB_TOKEN/credential"
   '';
   };
-
-  # ===================
-  # SSH設定
-  # ===================
-  # 既存の ~/.ssh/config を強制上書き（checkLinkTargets対策）
-  home.file.".ssh/config".force = true;
-
-  programs.ssh = {
-    enable = true;
-    addKeysToAgent = "yes";
-    extraOptionOverrides = {
-      UseKeychain = "yes";
-    };
-    matchBlocks = {
-      "github.com" = {
-        hostname = "github.com";
-        user = "git";
-        # 1Password SSHエージェント経由で認証（Host * の IdentityAgent が適用される）
-        # IdentityFile / IdentityAgent none は設定しない
-      };
-    };
-  };
-
-  # ===================
-  # SSH authorized_keys（1Password管理の共通鍵）
-  # シンボリンクだとsshdのStrictModesで拒否されるため実ファイルとして配置
-  # ===================
-  # SSH鍵をmacOS Keychainに登録（未登録の場合のみ）
-  home.activation.addSshKeyToAgent = lib.hm.dag.entryAfter [ "setupSSHKeyFromOp" ] ''
-    if [ -s "$HOME/.ssh/id_ed25519" ] && ! ssh-add -l 2>/dev/null | grep -q "id_ed25519"; then
-      ssh-add --apple-use-keychain "$HOME/.ssh/id_ed25519" 2>/dev/null || true
-    fi
-  '';
-
-  home.activation.setupAuthorizedKeys = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    mkdir -p "$HOME/.ssh"
-    chmod 700 "$HOME/.ssh"
-    chmod 600 "$HOME/.ssh/id_ed25519" 2>/dev/null || true
-    echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB0sBTSjm9KmyYVGjT5FPImrH3izZtM/FegoEPE+bxw/" > "$HOME/.ssh/authorized_keys"
-    chmod 600 "$HOME/.ssh/authorized_keys"
-  '';
 
   # ===================
   # 追加のPATH
@@ -560,83 +539,34 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
 
   # ===================
   # アクティベーション（home-manager switch時に実行）
+  # ここに置くのは「ローカル完結・冪等・認証不要」なものだけ。
+  # ネットワークや1Password認証が必要な処理は scripts/bootstrap.sh へ。
   # ===================
 
-  # GPG鍵の自動インポート（1Passwordから）
-  home.activation.setupGPG = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    # activation スクリプトでは .env が自動で読み込まれないため明示的に読み込み
-    if [ -z "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.secrets/.env" ]; then
-      OP_SERVICE_ACCOUNT_TOKEN=$(grep '^export OP_SERVICE_ACCOUNT_TOKEN=' "$HOME/.secrets/.env" | sed 's/^export OP_SERVICE_ACCOUNT_TOKEN=//' | tr -d '"')
-      export OP_SERVICE_ACCOUNT_TOKEN
+  # SSH authorized_keys（1Password管理の共通鍵）
+  # シンボリックリンクだとsshdのStrictModesで拒否されるため実ファイルに追記管理
+  home.activation.setupAuthorizedKeys = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    mkdir -p "$HOME/.ssh"
+    chmod 700 "$HOME/.ssh"
+    touch "$HOME/.ssh/authorized_keys"
+    if ! grep -qxF "${machinePubKey}" "$HOME/.ssh/authorized_keys"; then
+      echo "${machinePubKey}" >> "$HOME/.ssh/authorized_keys"
     fi
-    # 1PasswordからGPG鍵をインポート（まだインポートされていない場合）
-    if [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
-      if ! ${pkgs.gnupg}/bin/gpg --list-secret-keys 8A5EBFD96EB7478A &>/dev/null; then
-        echo "Importing GPG key from 1Password..."
-        op read "op://MyMachine/gpg-key-chibiham/private_key" 2>/dev/null | ${pkgs.gnupg}/bin/gpg --import 2>/dev/null || true
-
-        # Trust the key (full fingerprint required)
-        echo "A0447F00AE56DEC97196B41F8A5EBFD96EB7478A:6:" | ${pkgs.gnupg}/bin/gpg --import-ownertrust 2>/dev/null || true
-      fi
+    chmod 600 "$HOME/.ssh/authorized_keys"
+    if [ -f "$HOME/.ssh/id_ed25519" ]; then
+      chmod 600 "$HOME/.ssh/id_ed25519"
     fi
   '';
 
-  # 1Passwordからシークレットを展開してファイルに書き出し
-  home.activation.generateSecrets = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
-    if [ -z "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.secrets/.env" ]; then
-      OP_SERVICE_ACCOUNT_TOKEN=$(grep '^export OP_SERVICE_ACCOUNT_TOKEN=' "$HOME/.secrets/.env" | sed 's/^export OP_SERVICE_ACCOUNT_TOKEN=//' | tr -d '"')
-      export OP_SERVICE_ACCOUNT_TOKEN
-    fi
-    if [ -n "''${OP_SERVICE_ACCOUNT_TOKEN:-}" ] && [ -f "$HOME/.secrets/env.tpl" ]; then
-      echo "Generating secrets from 1Password..."
-      ${pkgs._1password-cli}/bin/op inject -i "$HOME/.secrets/env.tpl" > "$HOME/.secrets/.env.secrets" \
-        && chmod 600 "$HOME/.secrets/.env.secrets" \
-        && echo "✓ Secrets written to ~/.secrets/.env.secrets" \
-        || echo "⚠ Failed to generate secrets (1Password may not be authenticated)"
-    fi
-  '';
-
-  # mise共通ランタイムインストール
-  home.activation.installMiseRuntimes = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    export PATH="${pkgs.mise}/bin:$PATH"
-
-    # グローバルバージョンをインストール（未インストールの場合のみ）
-    ${pkgs.mise}/bin/mise use --global node@22 2>/dev/null || true
-    ${pkgs.mise}/bin/mise use --global python@3.12 2>/dev/null || true
-    ${pkgs.mise}/bin/mise use --global pnpm@latest 2>/dev/null || true
-  '';
-
-  # プライベートリポジトリのクローン（SSH鍵認証）
-  # 注意: /usr/bin を $PATH の末尾に置くこと。先頭に置くと BSD readlink が
-  # Nix coreutils の GNU readlink より優先され、後続の linkGeneration が
-  # `readlink -e` で失敗する（macOS の BSD readlink は -e を非サポート）
-  home.activation.clonePrivateRepos = lib.hm.dag.entryAfter [ "addSshKeyToAgent" ] ''
-    export PATH="${pkgs.git}/bin:$PATH:/usr/bin"
-
-    clone_repo() {
-      local repo="$1"
-      local dest="$2"
-      if [ ! -d "$dest" ]; then
-        echo "Cloning $repo to $dest..."
-        ${pkgs.git}/bin/git clone "git@github.com:$repo.git" "$dest" || true
-      fi
-    }
-
-    clone_repo "chibiham/chibiham-memos" "$HOME/memo"
-    clone_repo "chibiham/clawd" "$HOME/clawd"
-    clone_repo "chibiham/affairs" "$HOME/affairs"
-    clone_repo "chibiham/skills" "$HOME/.agents/skills"
-  '';
-
-  # ~/.agents/skills の各スキルを ~/.claude/skills にシンボリンク
-  home.activation.linkAgentSkills = lib.hm.dag.entryAfter [ "clonePrivateRepos" ] ''
+  # ~/.agents/skills の各スキルを ~/.claude/skills にシンボリックリンク
+  # （~/.agents/skills 自体のcloneは bootstrap.sh が行う）
+  home.activation.linkAgentSkills = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     if [ -d "$HOME/.agents/skills" ]; then
       mkdir -p "$HOME/.claude/skills"
       for skill in "$HOME/.agents/skills"/*/; do
         name=$(basename "$skill")
         ln -sfn "$skill" "$HOME/.claude/skills/$name"
       done
-      echo "✓ Agent skills linked to ~/.claude/skills"
     fi
   '';
 
@@ -650,21 +580,6 @@ echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COS
     else
       mkdir -p "$HOME/.claude"
       echo '{"statusLine": {"type": "command", "command": "~/.claude/statusline.sh"}}' | ${pkgs.jq}/bin/jq . > "$SETTINGS_FILE"
-    fi
-  '';
-
-  # pnpmグローバルパッケージインストール（mise管理のpnpmを使用）
-  home.activation.installGlobalPnpmPackages = lib.hm.dag.entryAfter [ "installMiseRuntimes" ] ''
-    export PNPM_HOME="$HOME/.local/share/pnpm"
-    export PATH="${pkgs.git}/bin:$HOME/.local/share/mise/shims:$PNPM_HOME:$PATH"
-    mkdir -p "$PNPM_HOME"
-
-    # mise経由でpnpmが利用可能になるまで待つ
-    if command -v pnpm &> /dev/null; then
-      # clawdbot をグローバルインストール（未インストールの場合のみ）
-      if [ ! -f "$PNPM_HOME/clawdbot" ]; then
-        pnpm add -g clawdbot@latest 2>/dev/null || true
-      fi
     fi
   '';
 }
