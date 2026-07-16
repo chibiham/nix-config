@@ -445,12 +445,13 @@ in
   xdg.configFile."mise/config.toml".text = ''
     [settings]
     auto_install = true
-    legacy_version_file = true  # .node-version等を自動検出
+    # .node-version等の言語固有バージョンファイルを検出（旧legacy_version_file）
+    idiomatic_version_file_enable_tools = ["node"]
     experimental = true
 
     [tools]
     # グローバルデフォルト（bootstrap.sh の mise install で導入）
-    node = "22"
+    node = "24"
     python = "3.12"
     pnpm = "latest"
   '';
