@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # 全homeConfigurationsが評価できるか確認（ビルドはしない）
+  eval:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        user: [chibiham, chibimaru]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v16
+      - name: Evaluate homeConfiguration
+        run: |
+          nix eval --raw ".#homeConfigurations.\"${{ matrix.user }}@darwin\".activationPackage.drvPath"
+
+  flake-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@v16
+      - name: Check flake
+        run: nix flake check --no-build

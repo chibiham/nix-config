@@ -93,9 +93,12 @@ bootstrap.sh がやること（全ステップ冪等。途中で失敗したら�
 4. `update-secrets` でAPIキー類を `~/.secrets/.env.secrets` に展開
 5. プライベートリポジトリのclone（memo, clawd, affairs, skills）
 6. mise ランタイム（node/python/pnpm）と clawdbot の導入
-7. macOSシステム設定（y/n確認あり、sudo必要）
+7. Homebrew導入（未導入なら）と `brew bundle`（GUIアプリ）
+8. macOSシステム設定（y/n確認あり、sudo必要）
 
 ### 3. GUIアプリ
+
+bootstrap.sh が `brew bundle` まで実行する。以降 `Brewfile` にアプリを追加したときは:
 
 ```bash
 brew bundle   # HOMEBREW_BREWFILE が設定済みなのでどこから実行してもOK
@@ -173,13 +176,23 @@ unfreeパッケージ（1password-cli等）は `flake.nix` の `allowUnfree = tr
 
 ## 依存の更新
 
+GitHub Actionsが毎週月曜に `flake.lock` 更新PRを自動作成する（`.github/workflows/update-flake-lock.yml`）。
+CIが全homeConfigurationsの評価チェックを行うので、通っていればmergeして各マシンでswitchすればよい。
+
+手動で更新する場合:
+
 ```bash
 cd ~/.config/nix-config
-nix flake update        # nixpkgs / home-manager / mac-app-util を更新
+nix flake update        # nixpkgs / nixpkgs-unstable / home-manager / mac-app-util を更新
 # 適用前に評価チェック
 nix eval --raw '.#homeConfigurations."chibiham@darwin".activationPackage.drvPath'
 # 問題なければ switch → 動作確認してから flake.lock をコミット
 ```
+
+更新の速いツール（gemini-cli, flyctl）は `flake.nix` のoverlayで
+nixpkgs-unstableから取得している。追加したいときはoverlayの `inherit` に足す。
+
+`.nix` ファイルの整形は `nix fmt`（nixfmt-rfc-style）。
 
 ## 切り分け・ロールバック
 

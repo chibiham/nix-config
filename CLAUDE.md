@@ -49,7 +49,8 @@ bootstrap.shがやること（すべて冪等、途中失敗しても再実行�
 4. `update-secrets` でシークレット展開
 5. プライベートリポジトリのclone（memo, clawd, affairs, skills）
 6. mise ランタイム（node/python/pnpm）と pnpm グローバルパッケージ導入
-7. macOSシステム設定（任意、sudo必要）
+7. Homebrew導入 + `brew bundle`（GUIアプリ）
+8. macOSシステム設定（任意、sudo必要）
 
 ### 日常の設定反映
 
@@ -65,6 +66,15 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 # 全構成が評価できるか確認（switchする前に）
 nix eval --raw '.#homeConfigurations."chibiham@darwin".activationPackage.drvPath'
 ```
+
+push/PR時はGitHub Actions CI（`.github/workflows/ci.yml`）が全ユーザー分の評価を実行。
+`flake.lock` は毎週月曜に自動更新PRが作られる（`update-flake-lock.yml`）。
+`.nix` の整形は `nix fmt`（nixfmt-rfc-style）。
+
+### unstableパッケージ
+
+更新の速いツール（gemini-cli, flyctl）は `flake.nix` の `unstableOverlay` で
+nixpkgs-unstableから取得。追加するときはoverlayの `inherit` リストに足す。
 
 ## 1Password連携
 
@@ -109,6 +119,9 @@ macOSのセキュリティ制約により自動化できないもの:
 
 - **Spotlight統合**: mac-app-util（トランポリンアプリ作成、switch時に自動実行）
 - **Karabiner-Elements**: karabiner.jsonをNix管理（GUI変更はswitchで上書きされる）
+- **Ghostty**: 設定（`~/.config/ghostty/config`）をNix管理。アプリ本体はHomebrew cask
+- **GUIアプリ**: Brewfile（bootstrap.shで `brew bundle` 実行）
+- **Nix GC**: 週次で30日超の世代を自動削除（`nix.gc`、launchd）
 
 ### シェル設定
 

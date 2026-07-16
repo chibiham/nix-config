@@ -5,6 +5,9 @@
     # Nixパッケージ（安定版）
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
 
+    # 更新の速いツール用（下のoverlayで個別に指定）
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+
     # Home Manager
     home-manager = {
       url = "github:nix-community/home-manager/release-25.11";
@@ -18,7 +21,7 @@
     };
   };
 
-  outputs = { nixpkgs, home-manager, mac-app-util, ... }:
+  outputs = { nixpkgs, nixpkgs-unstable, home-manager, mac-app-util, ... }:
     let
       # 対応システム
       systems = [
@@ -27,12 +30,25 @@
       ];
 
       forAllSystems = nixpkgs.lib.genAttrs systems;
+
+      # 更新の速いツールはunstableから取る（それ以外はstable）
+      unstableOverlay = system: final: prev:
+        let
+          unstable = import nixpkgs-unstable {
+            inherit system;
+            config.allowUnfree = true;
+          };
+        in {
+          inherit (unstable) gemini-cli flyctl;
+        };
+
       pkgsFor = system: import nixpkgs {
         inherit system;
         config = {
           # unfreeパッケージを許可（1password-cli等）
           allowUnfree = true;
         };
+        overlays = [ (unstableOverlay system) ];
       };
 
       # macOSユーザー用のHome Manager設定を生成
@@ -66,5 +82,8 @@
           program = "${home-manager.packages.${system}.home-manager}/bin/home-manager";
         };
       });
+
+      # `nix fmt` 用フォーマッター
+      formatter = forAllSystems (system: (pkgsFor system).nixfmt-rfc-style);
     };
 }

@@ -37,6 +37,16 @@ in
   programs.home-manager.enable = true;
 
   # ===================
+  # Nixガベージコレクション（launchdで週次実行）
+  # 古い世代のstore pathを自動削除してディスクを節約
+  # ===================
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 30d";
+  };
+
+  # ===================
   # パッケージ
   # ===================
   home.packages = with pkgs; [
@@ -49,7 +59,7 @@ in
     fzf             # ファジーファインダー
     eza             # モダンなls (旧exa)
     bat             # モダンなcat
-    delta           # gitのdiff表示
+    # delta は programs.delta で管理
 
     # バージョン管理
     mise  # Polyglot runtime version manager
@@ -147,6 +157,16 @@ in
       difftool.vscode.cmd = "code --wait --diff $LOCAL $REMOTE";
       merge.tool = "vscode";
       mergetool.vscode.cmd = "code --wait $MERGED";
+    };
+  };
+
+  # delta（gitのdiff表示。25.11からgit外のトップレベルオプション）
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+    options = {
+      navigate = true;  # n/N でファイル間移動
+      line-numbers = true;
     };
   };
 
@@ -249,15 +269,6 @@ in
       if command -v mise &> /dev/null; then
         eval "$(mise activate zsh)"
       fi
-
-      # カスタム関数: fzfでSSH接続
-      function sshf () {
-        local selected_host=$(grep "Host " ./ssh_config | grep -v '*' | cut -b 6- | fzf)
-        if [ -n "$selected_host" ]; then
-          echo "ssh -F ./ssh_config ''${selected_host}"
-          ssh -F ./ssh_config $selected_host
-        fi
-      }
     '';
   };
 

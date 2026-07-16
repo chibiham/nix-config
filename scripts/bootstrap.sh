@@ -125,7 +125,26 @@ else
 fi
 
 # -------------------------------------------------
-# 8. macOSシステム設定（sudoが必要なため対話的に確認）
+# 8. Homebrew + GUIアプリ（Brewfile）
+#    CLIツールはNix管理。casks/masのGUIアプリのみHomebrewで導入
+# -------------------------------------------------
+step "Homebrew と GUIアプリ（Brewfile）"
+if ! command -v brew &>/dev/null && [ ! -x /opt/homebrew/bin/brew ]; then
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+# インストール直後のシェルにはまだPATHが通っていない
+if ! command -v brew &>/dev/null && [ -x /opt/homebrew/bin/brew ]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
+if command -v brew &>/dev/null; then
+  brew bundle --file="$REPO_DIR/Brewfile" || warn "brew bundle が一部失敗しました（後で再実行してください）"
+  ok "Brewfile を適用しました"
+else
+  warn "Homebrewが見つかりません。手動でインストール後、'brew bundle --file=$REPO_DIR/Brewfile' を実行してください"
+fi
+
+# -------------------------------------------------
+# 9. macOSシステム設定（sudoが必要なため対話的に確認）
 # -------------------------------------------------
 step "macOSシステム設定"
 read -rp "macOSのシステム設定（defaults / sshd / pmset等）を適用しますか？ [y/N] " apply_defaults

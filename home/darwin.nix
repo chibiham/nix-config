@@ -157,32 +157,18 @@
     HOMEBREW_NO_AUTO_UPDATE = "1";  # 自動更新を無効化
   };
 
-  # macOS固有のPATH
-  # Note: Homebrewのパスは .zprofile の brew shellenv で設定
-  home.sessionPath = [
-    "$HOME/Library/pnpm"
-  ];
+  # Ghostty設定（アプリ本体はHomebrew cask、設定はNix管理）
+  # macOSのGhosttyは ~/.config/ghostty/config も読み込む
+  xdg.configFile."ghostty/config".text = ''
+    font-family = JetBrainsMono Nerd Font
+    font-size = 14
 
-  # macOS固有のZsh設定
-  programs.zsh.initContent = ''
-    # iTerm2 Shell Integration
-    if [[ "$TERM_PROGRAM" == "iTerm.app" ]]; then
-      iterm2_print_user_vars() {
-        iterm2_set_user_var badge $(whoami)
-      }
-      function badge() {
-        printf "\e]1337;SetBadgeFormat=%s\a" $(echo -n "$1" | base64)
-      }
-      test -e "$HOME/dotfiles/bin/.iterm2_shell_integration.zsh" && source "$HOME/dotfiles/bin/.iterm2_shell_integration.zsh"
-    fi
+    # ウィンドウ
+    window-padding-x = 4
+    window-padding-y = 4
 
-    # Google Cloud SDK (if installed)
-    if [[ -f "$HOME/Downloads/google-cloud-sdk/path.zsh.inc" ]]; then
-      source "$HOME/Downloads/google-cloud-sdk/path.zsh.inc"
-    fi
-    if [[ -f "$HOME/Downloads/google-cloud-sdk/completion.zsh.inc" ]]; then
-      source "$HOME/Downloads/google-cloud-sdk/completion.zsh.inc"
-    fi
+    # macOSでOption キーをAltとして使う
+    macos-option-as-alt = true
   '';
 
   # Ghostty terminfo配置（SSH接続元がGhosttyの場合に正常表示するため）
