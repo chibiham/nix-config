@@ -444,10 +444,10 @@ in
     experimental = true
 
     [tools]
-    # グローバルデフォルト（bootstrap.sh の mise install で導入）
+    # グローバルデフォルト（bootstrapの mise install で導入）
+    # pnpmはmise/Aquaのasset解決に依存させず、bootstrapでnpmから導入する。
     node = "24"
     python = "3.12"
-    pnpm = "latest"
   '';
 
   # ===================

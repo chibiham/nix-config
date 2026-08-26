@@ -32,6 +32,13 @@ export PATH="$HOME/.nix-profile/bin:$PATH"
 
 step "miseランタイム"
 mise install --yes
+export PATH="$HOME/.local/share/mise/shims:$PATH"
+
+step "pnpm"
+if ! command -v pnpm >/dev/null; then
+  mise exec -- npm install -g pnpm@latest
+  mise reshim
+fi
 
 ok "Ubuntuの基礎セットアップが完了しました"
 echo "次: $REPO_DIR/scripts/install-tailscale-ubuntu.sh"

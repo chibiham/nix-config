@@ -102,10 +102,17 @@ clone_repo "chibiham/skills" "$HOME/.agents/skills"
 nix run "$REPO_DIR#home-manager" -- switch --flake "$REPO_DIR#$FLAKE_TARGET"
 
 # -------------------------------------------------
-# 6. mise ランタイム（node/python/pnpm、config.tomlで宣言済み）
+# 6. mise ランタイム（node/python、config.tomlで宣言済み）
 # -------------------------------------------------
 step "mise ランタイムのインストール"
 mise install --yes || warn "miseランタイムのインストールに失敗（後で 'mise install' を実行してください）"
+
+# pnpmはmise/Aqua経由だと配布assetの変更で壊れやすいため、npmから導入
+export PATH="$HOME/.local/share/mise/shims:$PATH"
+if ! command -v pnpm &>/dev/null; then
+  mise exec -- npm install -g pnpm@latest
+  mise reshim
+fi
 
 # -------------------------------------------------
 # 7. pnpm グローバルパッケージ
