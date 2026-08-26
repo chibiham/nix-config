@@ -1,10 +1,10 @@
 # ちびはむ's Nix Config
 
-Nix + Home Manager によるmacOS環境構築。
-複数のMacで同じ開発環境を再現する。
+Nix + Home Manager によるmacOS / Ubuntu環境構築。
+複数のMacとUbuntu Serverで同じ開発環境を再現する。
 
 **設計方針**: `home-manager switch` は認証・ネットワーク不要で常に冪等。
-1Passwordやネットワークに依存する命令的な処理はすべて `scripts/bootstrap.sh` に分離。
+認証やネットワークに依存する命令的な処理は `scripts/` のOS別bootstrapに分離。
 
 ```
 ├── flake.nix              # エントリーポイント（ユーザー定義もここ）
@@ -12,9 +12,12 @@ Nix + Home Manager によるmacOS環境構築。
 ├── Brewfile               # Homebrew管理のGUIアプリ
 ├── home/
 │   ├── common.nix         # 共通設定（パッケージ、Git、Zsh、シークレット等）
-│   └── darwin.nix         # macOS固有（Karabiner、1Password SSH Agent等）
+│   ├── darwin.nix         # macOS固有（Karabiner、1Password SSH Agent等）
+│   └── linux.nix          # Linux固有（genericLinux、headless設定）
 └── scripts/
-    ├── bootstrap.sh       # 新マシン初期セットアップ（冪等、何度でも実行可）
+    ├── bootstrap.sh       # 新しいMacの初期セットアップ
+    ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
+    ├── install-tailscale-ubuntu.sh # Tailscale導入・認証
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
 
@@ -25,6 +28,7 @@ Nix + Home Manager によるmacOS環境構築。
 | やりたいこと | やること |
 |---|---|
 | 新しいMacをセットアップ | [→ 初回セットアップ](#初回セットアップ新しいmac) |
+| Ubuntu Serverをセットアップ | [→ Ubuntu Server手順](docs/ubuntu-server.md) |
 | `.nix` ファイルを変更した | `hms`（下記の適用コマンド） |
 | GUIアプリを追加したい | `Brewfile` に追記 → `brew bundle` |
 | CLIツールを追加したい | `home/common.nix` の `home.packages` に追記 → 適用 |

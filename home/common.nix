@@ -1,10 +1,9 @@
 # 共通設定
 #
 # 方針:
-# - このファイル（と darwin.nix）の適用 = `home-manager switch` は
+# - このファイル（と OS別モジュール）の適用 = `home-manager switch` は
 #   ネットワーク・1Password認証・sudo に依存せず、常に冪等であること
-# - 命令的な初期構築（SSH鍵取得、リポジトリclone、macOS設定等）は
-#   scripts/bootstrap.sh に分離
+# - 命令的な初期構築は scripts/ のOS別bootstrapに分離
 { pkgs, lib, ... }:
 
 let
@@ -151,12 +150,7 @@ in
       init.defaultBranch = "main";
       pull.rebase = true;
 
-      # VS Code をエディタ/diff/mergeツールに
-      core.editor = "code --wait";
-      diff.tool = "vscode";
-      difftool.vscode.cmd = "code --wait --diff $LOCAL $REMOTE";
-      merge.tool = "vscode";
-      mergetool.vscode.cmd = "code --wait $MERGED";
+      core.editor = "nvim";
     };
   };
 

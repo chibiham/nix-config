@@ -4,6 +4,15 @@
 { pkgs, config, lib, ... }:
 
 {
+  # macOSではVS CodeをGitのエディタ/diff/mergeツールに使う
+  programs.git.settings = {
+    core.editor = lib.mkForce "code --wait";
+    diff.tool = "vscode";
+    difftool.vscode.cmd = "code --wait --diff $LOCAL $REMOTE";
+    merge.tool = "vscode";
+    mergetool.vscode.cmd = "code --wait $MERGED";
+  };
+
   # Karabiner-Elements設定
   # Note: Karabiner GUIで変更しても home-manager switch で上書きされる
   xdg.configFile."karabiner/karabiner.json" = {

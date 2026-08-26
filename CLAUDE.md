@@ -1,14 +1,14 @@
 # Nix Configuration
 
-Nix + Home Managerによる環境構築プロジェクト（macOS用）。
-複数のMacで同じ開発環境を再現可能にする。
+Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
+複数のMacとUbuntu Serverで同じ開発環境を再現可能にする。
 
 ## 設計方針
 
 - **`home-manager switch` は認証・ネットワーク不要で常に冪等**
   （宣言的なファイル配置・パッケージ導入のみ。ローカル完結しない処理はactivationに書かない）
-- **命令的な初期構築は `scripts/bootstrap.sh` に集約**
-  （1PasswordからのSSH鍵取得、プライベートリポジトリclone、mise/pnpmの初期導入、macOS設定）
+- **命令的な初期構築は `scripts/` のOS別bootstrapに集約**
+  （認証、リポジトリclone、OSサービス、macOS設定等）
 - **Home Manager CLIはflake.lockでピン留め**
   （`nix run home-manager` はregistry経由でmaster追従になるため使わない。必ず `nix run .#home-manager` を使う）
 - **Git認証・署名・authorized_keysは1Password管理の共通マシン鍵 `~/.ssh/id_ed25519` に一本化**
@@ -17,13 +17,16 @@ Nix + Home Managerによる環境構築プロジェクト（macOS用）。
 
 ```
 .
-├── flake.nix          # エントリーポイント（mkDarwinHomeでユーザー定義）
+├── flake.nix          # エントリーポイント（OS別のHome設定）
 ├── flake.lock
 ├── home/
 │   ├── common.nix     # 共通設定
-│   └── darwin.nix     # macOS固有設定
+│   ├── darwin.nix     # macOS固有設定
+│   └── linux.nix      # Linux固有設定
 └── scripts/
-    ├── bootstrap.sh       # 新マシン初期セットアップ（冪等、再実行可）
+    ├── bootstrap.sh       # 新しいMacの初期セットアップ
+    ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
+    ├── install-tailscale-ubuntu.sh # Tailscale導入・認証
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
 
@@ -58,6 +61,8 @@ bootstrap.shがやること（すべて冪等、途中失敗しても再実行�
 nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@darwin
 ```
 
+Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@ubuntu-server` にする。
+
 **注意**: `$USER` のflake.nix該当エントリが必要（`mkDarwinHome` で追加）。
 
 ### 変更時の検証
@@ -65,6 +70,7 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 ```bash
 # 全構成が評価できるか確認（switchする前に）
 nix eval --raw '.#homeConfigurations."chibiham@darwin".activationPackage.drvPath'
+nix eval --raw '.#homeConfigurations."chibiham@ubuntu-server".activationPackage.drvPath'
 ```
 
 push/PR時はGitHub Actions CI（`.github/workflows/ci.yml`）が全ユーザー分の評価を実行。

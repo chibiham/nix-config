@@ -12,13 +12,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        user: [chibiham, chibimaru]
+        target: [chibiham@darwin, chibimaru@darwin, chibiham@ubuntu-server]
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v16
       - name: Evaluate homeConfiguration
         run: |
-          nix eval --raw ".#homeConfigurations.\"${{ matrix.user }}@darwin\".activationPackage.drvPath"
+          nix eval --raw ".#homeConfigurations.\"${{ matrix.target }}\".activationPackage.drvPath"
 
   flake-check:
     runs-on: ubuntu-latest

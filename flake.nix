@@ -27,6 +27,7 @@
       systems = [
         "aarch64-darwin"  # macOS (Apple Silicon)
         "x86_64-darwin"   # macOS (Intel)
+        "x86_64-linux"    # Ubuntu Server (Intel/AMD)
       ];
 
       forAllSystems = nixpkgs.lib.genAttrs systems;
@@ -65,12 +66,27 @@
             }
           ];
         };
+
+      # Ubuntu/Linuxユーザー用のHome Manager設定を生成
+      mkLinuxHome = { username, system ? "x86_64-linux" }:
+        home-manager.lib.homeManagerConfiguration {
+          pkgs = pkgsFor system;
+          modules = [
+            ./home/common.nix
+            ./home/linux.nix
+            {
+              home.username = username;
+              home.homeDirectory = "/home/${username}";
+            }
+          ];
+        };
     in
     {
       # Home Manager設定
       homeConfigurations = {
         "chibimaru@darwin" = mkDarwinHome { username = "chibimaru"; };
         "chibiham@darwin" = mkDarwinHome { username = "chibiham"; };
+        "chibiham@ubuntu-server" = mkLinuxHome { username = "chibiham"; };
       };
 
       # flake.lockでピン留めされたhome-manager CLI
