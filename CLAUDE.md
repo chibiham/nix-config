@@ -21,8 +21,9 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 ├── flake.lock
 ├── home/
 │   ├── common.nix     # 共通設定
-│   ├── darwin.nix     # macOS固有設定
-│   └── linux.nix      # Linux固有設定
+│   ├── darwin.nix     # macOS共通設定
+│   ├── linux.nix      # Linux固有設定
+│   └── hosts/         # Macごとの固有設定（macbook.nix / mac-mini.nix）
 └── scripts/
     ├── bootstrap.sh       # 新しいMacの初期セットアップ
     ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
@@ -63,7 +64,7 @@ bootstrap.shがやること（すべて冪等、途中失敗しても再実行�
 ### 日常の設定反映
 
 ```bash
-nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@darwin
+nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@mac-mini
 ```
 
 Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@ubuntu-server` にする。
@@ -74,7 +75,8 @@ Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@u
 
 ```bash
 # 全構成が評価できるか確認（switchする前に）
-nix eval --raw '.#homeConfigurations."chibiham@darwin".activationPackage.drvPath'
+nix eval --raw '.#homeConfigurations."chibiham@mac-mini".activationPackage.drvPath'
+nix eval --raw '.#homeConfigurations."chibimaru@macbook".activationPackage.drvPath'
 nix eval --raw '.#homeConfigurations."chibiham@ubuntu-server".activationPackage.drvPath'
 ```
 

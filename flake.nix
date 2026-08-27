@@ -72,6 +72,7 @@
       mkDarwinHome =
         {
           username,
+          hostModule,
           system ? "aarch64-darwin",
         }:
         home-manager.lib.homeManagerConfiguration {
@@ -79,6 +80,7 @@
           modules = [
             ./home/common.nix
             ./home/darwin.nix
+            hostModule
             mac-app-util.homeManagerModules.default # Spotlight統合
             {
               home.username = username;
@@ -108,14 +110,20 @@
     {
       # Home Manager設定
       homeConfigurations = {
-        "chibimaru@darwin" = mkDarwinHome { username = "chibimaru"; };
-        "chibiham@darwin" = mkDarwinHome { username = "chibiham"; };
+        "chibimaru@macbook" = mkDarwinHome {
+          username = "chibimaru";
+          hostModule = ./home/hosts/macbook.nix;
+        };
+        "chibiham@mac-mini" = mkDarwinHome {
+          username = "chibiham";
+          hostModule = ./home/hosts/mac-mini.nix;
+        };
         "chibiham@ubuntu-server" = mkLinuxHome { username = "chibiham"; };
       };
 
       # flake.lockでピン留めされたhome-manager CLI
       # `nix run home-manager` (registry経由=master追従) ではなくこちらを使う:
-      #   nix run .#home-manager -- switch --flake .#$USER@darwin
+      #   nix run .#home-manager -- switch --flake .#$USER@mac-mini
       apps = forAllSystems (system: {
         home-manager = {
           type = "app";

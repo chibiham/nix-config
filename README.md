@@ -12,8 +12,11 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
 ├── Brewfile               # Homebrew管理のGUIアプリ
 ├── home/
 │   ├── common.nix         # 共通設定（パッケージ、Git、Zsh、シークレット等）
-│   ├── darwin.nix         # macOS固有（Karabiner、1Password SSH Agent等）
-│   └── linux.nix          # Linux固有（genericLinux、headless設定）
+│   ├── darwin.nix         # macOS共通（Karabiner、1Password SSH Agent等）
+│   ├── linux.nix          # Linux固有（genericLinux、headless設定）
+│   └── hosts/             # Macごとの固有設定
+│       ├── macbook.nix
+│       └── mac-mini.nix
 └── scripts/
     ├── bootstrap.sh       # 新しいMacの初期セットアップ
     ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
@@ -46,7 +49,7 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
 ### 設定の適用コマンド
 
 ```bash
-nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@darwin
+nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@mac-mini
 ```
 
 **注意**: `nix run home-manager -- ...`（`.#` なし）は使わないこと。
@@ -56,7 +59,7 @@ registry経由でmaster版CLIを引いてしまい、端末間で挙動が変わ
 長いのでエイリアス推奨（zshrcはNix管理なので、シェルで一時定義するか common.nix に追加）:
 
 ```bash
-alias hms='nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@darwin'
+alias hms='nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@mac-mini'
 ```
 
 ---
@@ -194,7 +197,8 @@ CIが全homeConfigurationsの評価チェックを行うので、通っていれ
 cd ~/.config/nix-config
 nix flake update        # nixpkgs / nixpkgs-unstable / home-manager / mac-app-util を更新
 # 適用前に評価チェック
-nix eval --raw '.#homeConfigurations."chibiham@darwin".activationPackage.drvPath'
+nix eval --raw '.#homeConfigurations."chibiham@mac-mini".activationPackage.drvPath'
+nix eval --raw '.#homeConfigurations."chibimaru@macbook".activationPackage.drvPath'
 # 問題なければ switch → 動作確認してから flake.lock をコミット
 ```
 

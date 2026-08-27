@@ -11,7 +11,26 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FLAKE_TARGET="${USER}@darwin"
+
+if [ -z "${HOST_PROFILE:-}" ]; then
+  case "$(system_profiler SPHardwareDataType 2>/dev/null | awk -F': ' '/Model Name/ { print $2; exit }')" in
+    *"Mac mini"*) HOST_PROFILE="mac-mini" ;;
+    *"MacBook"*)  HOST_PROFILE="macbook" ;;
+    *)
+      echo "Macの種類を判別できませんでした。HOST_PROFILE=macbook または mac-mini を指定してください。"
+      exit 1
+      ;;
+  esac
+fi
+
+case "$HOST_PROFILE" in
+  macbook|mac-mini) ;;
+  *)
+    echo "HOST_PROFILEは macbook または mac-mini を指定してください。"
+    exit 1
+    ;;
+esac
+FLAKE_TARGET="${USER}@${HOST_PROFILE}"
 
 step() { printf '\n\033[1;36m==> %s\033[0m\n' "$1"; }
 warn() { printf '\033[1;33m⚠ %s\033[0m\n' "$1"; }
