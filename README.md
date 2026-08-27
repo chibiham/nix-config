@@ -18,6 +18,7 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
     ├── bootstrap.sh       # 新しいMacの初期セットアップ
     ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
     ├── install-tailscale-ubuntu.sh # Tailscale導入・認証
+    ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
 

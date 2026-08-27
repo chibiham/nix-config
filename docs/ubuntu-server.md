@@ -26,6 +26,26 @@ curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix 
 ~/.config/nix-config/scripts/install-tailscale-ubuntu.sh
 ```
 
+## NVIDIAドライバ
+
+GPUを装着した後、Ubuntuが推奨するドライバを導入する。
+
+```bash
+~/.config/nix-config/scripts/install-nvidia-driver-ubuntu.sh
+sudo reboot
+```
+
+再起動後にGPU名、VRAM、ドライバを確認する。
+
+```bash
+nvidia-smi
+nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
+```
+
+スクリプトは既にドライバが正常動作していれば何も変更せず終了する。ドライバの導入後も自動では再起動しない。Secure Bootが有効な環境でMOK登録画面が出た場合は、再起動時に画面の指示に従う。
+
+CUDA Toolkitはこの段階では導入しない。ComfyUI/PyTorchが必要とするCUDA runtimeは、ComfyUI専用Python環境で管理する。管理境界を決めた理由は [ADR 0001](adr/0001-ubuntu-serverの管理境界.md) を参照。
+
 Home Managerだけを再適用する場合:
 
 ```bash
