@@ -7,6 +7,11 @@ COMFY_REPO="https://github.com/comfy-org/ComfyUI.git"
 SERVICE_DIR="$HOME/.config/systemd/user"
 SERVICE_FILE="$SERVICE_DIR/comfyui.service"
 
+# NVIDIA/PyTorchのwheelは数百MBになるため、低速・不安定な回線でも完走できる値にする。
+# 呼び出し側で環境変数を指定すれば上書き可能。
+export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-300}"
+export UV_HTTP_RETRIES="${UV_HTTP_RETRIES:-5}"
+
 step() { printf '\n\033[1;36m==> %s\033[0m\n' "$1"; }
 warn() { printf '\033[1;33m⚠ %s\033[0m\n' "$1"; }
 ok()   { printf '\033[1;32m✓ %s\033[0m\n' "$1"; }
