@@ -114,9 +114,11 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 ~/.config/nix-config/scripts/install-qwen38-ubuntu.sh
 ```
 
-インストーラは、固定したUnslothリビジョンからQwen3.8-27B UD-Q4_K_Mを
-`~/models/qwen3.8-27b/`へaria2で並列・再開可能な形で取得し、128K context、Q8 KV cache、
-単一スロットの`qwen38.service`を作成する。再実行しても取得済みモデルは再取得しない。
+インストーラは、固定したリビジョンからQwen3.8-27B UD-Q4_K_Mと
+Qwen3.8-27B-Uncensored Q4_K_Mを`~/models/qwen3.8-27b/`へaria2で並列・再開可能な形で
+取得する。両モデルのVision Projectorも取得してRouter presetで関連付け、画像入力を有効にする。
+128K context、Q8 KV cache、単一モデルだけをVRAMへロードするRouterモードの
+`qwen38.service`を作成する。内蔵Web UIでモデルを切り替えられ、再実行しても取得済みファイルは再取得しない。
 
 RTX 3090を共有するため、`qwen38.service`と`comfyui.service`は排他的に起動する。
 
@@ -128,7 +130,9 @@ ai-mode status  # 両サービスの状態
 ```
 
 Qwenは再起動時に自動起動せず、既存のComfyUIを既定のままにする。APIは
-`http://127.0.0.1:8080/v1`で待ち受ける。
+`http://127.0.0.1:8080/v1`で待ち受ける。Tailscale接続済みの場合、内蔵Web UIは
+HTTPS 8443番でもtailnet内限定で公開する。公開ポートは
+`QWEN_TAILSCALE_HTTPS_PORT`で変更できる。
 
 Home Managerだけを再適用する場合:
 
