@@ -30,6 +30,7 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
     ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
     ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新
+    ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・排他的user service
     ├── configure-comfyui-tailscale-serve.sh # tailnet内だけにHTTPS公開
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
@@ -83,7 +84,7 @@ push/PR時はGitHub Actions CI（`.github/workflows/ci.yml`）が全ユーザー
 
 ### unstableパッケージ
 
-更新の速いツール（gemini-cli, flyctl）は `flake.nix` の `unstableOverlay` で
+更新の速いツール（gemini-cli, flyctl, llama-cpp）は `flake.nix` の `unstableOverlay` で
 nixpkgs-unstableから取得。追加するときはoverlayの `inherit` リストに足す。
 
 ## 1Password連携
@@ -124,6 +125,7 @@ macOSのセキュリティ制約により自動化できないもの:
 - pnpm グローバルパッケージ: clawdbot（bootstrap.shで導入）
 - シークレット管理: 1password-cli + update-secretsコマンド
 - その他: htop, tree, curl, wget, awscli, terraform, flyctl, cloudflared
+- Linux AI推論: CUDA対応llama.cpp + ai-mode（モデル取得は明示スクリプト）
 
 ### macOS統合
 

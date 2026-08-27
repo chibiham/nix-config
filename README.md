@@ -21,6 +21,7 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
     ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
     ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新
+    ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・排他的user service
     ├── configure-comfyui-tailscale-serve.sh # tailnet内だけにHTTPS公開
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
@@ -197,7 +198,7 @@ nix eval --raw '.#homeConfigurations."chibiham@darwin".activationPackage.drvPath
 # 問題なければ switch → 動作確認してから flake.lock をコミット
 ```
 
-更新の速いツール（gemini-cli, flyctl）は `flake.nix` のoverlayで
+更新の速いツール（gemini-cli, flyctl, llama-cpp）は `flake.nix` のoverlayで
 nixpkgs-unstableから取得している。追加したいときはoverlayの `inherit` に足す。
 
 `.nix` ファイルの整形は `nix fmt`（nixfmt-rfc-style）。

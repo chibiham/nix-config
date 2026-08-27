@@ -21,45 +21,65 @@
     };
   };
 
-  outputs = { nixpkgs, nixpkgs-unstable, home-manager, mac-app-util, ... }:
+  outputs =
+    {
+      nixpkgs,
+      nixpkgs-unstable,
+      home-manager,
+      mac-app-util,
+      ...
+    }:
     let
       # 対応システム
       systems = [
-        "aarch64-darwin"  # macOS (Apple Silicon)
-        "x86_64-darwin"   # macOS (Intel)
-        "x86_64-linux"    # Ubuntu Server (Intel/AMD)
+        "aarch64-darwin" # macOS (Apple Silicon)
+        "x86_64-darwin" # macOS (Intel)
+        "x86_64-linux" # Ubuntu Server (Intel/AMD)
       ];
 
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
       # 更新の速いツールはunstableから取る（それ以外はstable）
-      unstableOverlay = system: final: prev:
+      unstableOverlay =
+        system: final: prev:
         let
           unstable = import nixpkgs-unstable {
             inherit system;
-            config.allowUnfree = true;
+            config = {
+              allowUnfree = true;
+              # Ubuntu機のRTX 3090 (Ampere) 専用。全CUDA世代をコンパイルせず、
+              # llama.cppの初回構築時間とNix store使用量を抑える。
+              cudaCapabilities = [ "8.6" ];
+            };
           };
-        in {
-          inherit (unstable) gemini-cli flyctl;
+        in
+        {
+          inherit (unstable) gemini-cli flyctl llama-cpp;
         };
 
-      pkgsFor = system: import nixpkgs {
-        inherit system;
-        config = {
-          # unfreeパッケージを許可（1password-cli等）
-          allowUnfree = true;
+      pkgsFor =
+        system:
+        import nixpkgs {
+          inherit system;
+          config = {
+            # unfreeパッケージを許可（1password-cli等）
+            allowUnfree = true;
+          };
+          overlays = [ (unstableOverlay system) ];
         };
-        overlays = [ (unstableOverlay system) ];
-      };
 
       # macOSユーザー用のHome Manager設定を生成
-      mkDarwinHome = { username, system ? "aarch64-darwin" }:
+      mkDarwinHome =
+        {
+          username,
+          system ? "aarch64-darwin",
+        }:
         home-manager.lib.homeManagerConfiguration {
           pkgs = pkgsFor system;
           modules = [
             ./home/common.nix
             ./home/darwin.nix
-            mac-app-util.homeManagerModules.default  # Spotlight統合
+            mac-app-util.homeManagerModules.default # Spotlight統合
             {
               home.username = username;
               home.homeDirectory = "/Users/${username}";
@@ -68,7 +88,11 @@
         };
 
       # Ubuntu/Linuxユーザー用のHome Manager設定を生成
-      mkLinuxHome = { username, system ? "x86_64-linux" }:
+      mkLinuxHome =
+        {
+          username,
+          system ? "x86_64-linux",
+        }:
         home-manager.lib.homeManagerConfiguration {
           pkgs = pkgsFor system;
           modules = [

@@ -102,6 +102,34 @@ ComfyUIを明示的に更新する場合:
 
 モデルは自動取得しない。チェックポイントは`~/ComfyUI/models/checkpoints/`へ配置する。モデルごとにVAE、text encoder、diffusion modelなどの配置先が異なる場合は、そのモデルの公式手順に従う。
 
+## Qwen3.8-27B
+
+Home Manager設定を適用すると、CUDA対応llama.cppと、ComfyUI/Qwenを切り替える
+`ai-mode`コマンドが導入される。Ubuntu管理のNVIDIAドライバから`libcuda`だけを
+ユーザー領域へリンクするため、Nix製CUDAアプリのための追加sudo設定は不要。
+その後、モデル取得とuser service作成を行う。
+
+```bash
+nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@ubuntu-server
+~/.config/nix-config/scripts/install-qwen38-ubuntu.sh
+```
+
+インストーラは、固定したUnslothリビジョンからQwen3.8-27B UD-Q4_K_Mを
+`~/models/qwen3.8-27b/`へaria2で並列・再開可能な形で取得し、128K context、Q8 KV cache、
+単一スロットの`qwen38.service`を作成する。再実行しても取得済みモデルは再取得しない。
+
+RTX 3090を共有するため、`qwen38.service`と`comfyui.service`は排他的に起動する。
+
+```bash
+ai-mode qwen    # ComfyUIを止めてQwenを起動
+ai-mode comfy   # Qwenを止めてComfyUIを起動
+ai-mode stop    # 両方停止
+ai-mode status  # 両サービスの状態
+```
+
+Qwenは再起動時に自動起動せず、既存のComfyUIを既定のままにする。APIは
+`http://127.0.0.1:8080/v1`で待ち受ける。
+
 Home Managerだけを再適用する場合:
 
 ```bash
@@ -114,10 +142,11 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 
 | 対象 | 管理方法 |
 |---|---|
-| CLI、Zsh、Neovim、mise | Nix / Home Manager |
+| CLI、Zsh、Neovim、mise、llama.cpp | Nix / Home Manager |
 | Python、Node.js | mise |
 | sshd、Tailscale daemon | apt / systemd |
 | NVIDIAドライバ | Ubuntuの推奨ドライバ |
 | ComfyUIとPython依存 | ComfyUI専用venvまたはuv環境 |
+| Qwenモデル、Qwen user service | 専用の冪等インストールスクリプト |
 
 GUIなしでもTailscaleは使える。`sudo tailscale up`が表示するURLをMacのブラウザで開いて認証する。CodexやClaude Codeも同様に、SSHセッションへ表示されたURLをMac側で開く方式を使える。
