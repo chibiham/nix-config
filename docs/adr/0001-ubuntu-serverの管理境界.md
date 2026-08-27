@@ -19,6 +19,8 @@ ComfyUI専用サーバーを再構築可能にしつつ、NVIDIA GPUに関する
 - NVIDIAドライバのバージョンはスクリプトへ固定せず、Ubuntuが推奨する署名済みパッケージへ追従する
 - CUDA Toolkitをホストへ一律導入せず、ComfyUI/PyTorchのCUDA runtimeと分離する
 - ComfyUIとPython依存は専用環境で管理する
+- ComfyUIはlocalhostだけで待ち受け、Tailscale上のSSHポートフォワーディングで利用する
+- ComfyUIはsystemd user serviceとして動かし、lingerでOS起動時から実行する
 
 ## Alternatives considered
 
@@ -44,3 +46,4 @@ Ubuntuのカーネル更新とパッケージ管理から外れ、更新・削�
 - Home Managerの適用だけではOS全体を再構築できない
 - 初期構築はOS別スクリプトを順番に実行する必要がある
 - ドライバ導入後は再起動が必要だが、SSH接続を切断するためスクリプトから自動再起動しない
+- ComfyUIへ接続するMac側ではSSHトンネルを維持する必要がある

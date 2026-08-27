@@ -19,6 +19,8 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
     ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
     ├── install-tailscale-ubuntu.sh # Tailscale導入・認証
     ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
+    ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
+    ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
 

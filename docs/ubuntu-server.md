@@ -46,6 +46,46 @@ nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
 
 CUDA Toolkitはこの段階では導入しない。ComfyUI/PyTorchが必要とするCUDA runtimeは、ComfyUI専用Python環境で管理する。管理境界を決めた理由は [ADR 0001](adr/0001-ubuntu-serverの管理境界.md) を参照。
 
+## ComfyUI
+
+NVIDIAドライバの再起動後、専用uv環境へComfyUIを導入する。
+
+```bash
+~/.config/nix-config/scripts/install-comfyui-ubuntu.sh
+```
+
+インストーラは次を行う。
+
+- `~/ComfyUI`へ公式リポジトリをclone
+- Python 3.12の`.venv`を作成
+- NVIDIA向けPyTorchとComfyUI依存を導入
+- PyTorchからRTX 3090とVRAMを確認
+- `comfyui.service`をsystemd user serviceとして登録・起動
+- lingerを有効にし、ログイン前から自動起動
+
+ComfyUIは`127.0.0.1:8188`だけで待ち受ける。MacからTailscale経由でSSHトンネルを作成する。
+
+```bash
+ssh -N -L 8188:127.0.0.1:8188 chibiham@<TAILSCALE_IP>
+```
+
+トンネルを開いたまま、Macのブラウザで <http://127.0.0.1:8188> を開く。LAN全体へ公開する`--listen 0.0.0.0`は使用しない。
+
+状態とログ:
+
+```bash
+systemctl --user status comfyui --no-pager
+journalctl --user -u comfyui -f
+```
+
+ComfyUIを明示的に更新する場合:
+
+```bash
+~/.config/nix-config/scripts/update-comfyui-ubuntu.sh
+```
+
+モデルは自動取得しない。チェックポイントは`~/ComfyUI/models/checkpoints/`へ配置する。モデルごとにVAE、text encoder、diffusion modelなどの配置先が異なる場合は、そのモデルの公式手順に従う。
+
 Home Managerだけを再適用する場合:
 
 ```bash
