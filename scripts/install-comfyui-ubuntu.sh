@@ -111,8 +111,7 @@ ok "ComfyUIをインストールして起動しました"
 echo "状態: systemctl --user status comfyui --no-pager"
 echo "ログ: journalctl --user -u comfyui -f"
 echo
-echo "MacからTailscale経由でSSHトンネルを作成:"
-echo "  ssh -N -L 8188:127.0.0.1:8188 $USER@<TAILSCALE_IP>"
-echo "ブラウザ: http://127.0.0.1:8188"
+echo "同じtailnetの全端末から利用する設定:"
+echo "  ~/.config/nix-config/scripts/configure-comfyui-tailscale-serve.sh"
 echo
 warn "モデルは自動ダウンロードしていません。$COMFY_DIR/models/ 以下へ配置してください"

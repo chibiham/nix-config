@@ -63,13 +63,29 @@ NVIDIAドライバの再起動後、専用uv環境へComfyUIを導入する。
 - `comfyui.service`をsystemd user serviceとして登録・起動
 - lingerを有効にし、ログイン前から自動起動
 
-ComfyUIは`127.0.0.1:8188`だけで待ち受ける。MacからTailscale経由でSSHトンネルを作成する。
+ComfyUIは`127.0.0.1:8188`だけで待ち受ける。インストール後、Tailscale Serveを設定する。
+
+```bash
+~/.config/nix-config/scripts/configure-comfyui-tailscale-serve.sh
+```
+
+表示された`https://<hostname>.<tailnet>.ts.net`を、同じtailnetへ登録した端末から開く。`--bg`で登録したServe設定はTailscale daemonへ保存され、UbuntuやTailscaleの再起動後も復帰する。
+
+Tailscale Serveはtailnet内だけの公開であり、インターネット公開するFunnelは使用しない。LAN全体へ公開する`--listen 0.0.0.0`も使用しない。tailnetのAccess Controlsを変更している場合は、接続元からUbuntuのHTTPSへの通信が許可されている必要がある。
+
+Serveの状態:
+
+```bash
+sudo tailscale serve status
+```
+
+Serveを利用できない場合の代替として、SSHトンネルでも接続できる。
 
 ```bash
 ssh -N -L 8188:127.0.0.1:8188 chibiham@<TAILSCALE_IP>
 ```
 
-トンネルを開いたまま、Macのブラウザで <http://127.0.0.1:8188> を開く。LAN全体へ公開する`--listen 0.0.0.0`は使用しない。
+この場合はトンネルを開いたまま、ブラウザで <http://127.0.0.1:8188> を開く。
 
 状態とログ:
 
