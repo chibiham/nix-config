@@ -40,6 +40,9 @@ if ! command -v pnpm >/dev/null; then
   mise reshim
 fi
 
+step "Codex CLI"
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+
 ok "Ubuntuの基礎セットアップが完了しました"
 echo "次: $REPO_DIR/scripts/install-tailscale-ubuntu.sh"
 echo "GPUドライバとComfyUIはGPU装着後に別途セットアップします"
