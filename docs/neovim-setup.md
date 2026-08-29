@@ -173,7 +173,7 @@ VISUAL=nvim        # 同上
 ```bash
 # 1. Home Manager適用
 cd ~/dotfiles/.config/nix-config
-nix run home-manager -- switch --flake .#chibimaru@darwin
+nix run home-manager -- switch --flake .#chibiham@macbook
 
 # 2. シェル再起動
 exec zsh
@@ -190,7 +190,7 @@ nvim
 git add home/
 
 # Home Manager再適用
-nix run home-manager -- switch --flake .#chibimaru@darwin
+nix run home-manager -- switch --flake .#chibiham@macbook
 
 # NeoVim再起動
 nvim
@@ -278,7 +278,7 @@ git status
 git add home/nvim/
 
 # Home Manager再適用
-nix run home-manager -- switch --flake .#chibimaru@darwin
+nix run home-manager -- switch --flake .#chibiham@macbook
 ```
 
 ## バックアップ

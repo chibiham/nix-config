@@ -272,7 +272,7 @@ cd ~/dotfiles/.config/nix-config
 nix flake update
 
 # 2. Home Manager適用
-home-manager switch --flake .#chibimaru@darwin
+home-manager switch --flake .#chibiham@macbook
 
 # 3. mise バージョン確認
 mise --version
@@ -294,7 +294,7 @@ cd ~/dotfiles/.config/nix-config
 vim home/common.nix
 # xdg.configFile."mise/config.toml".text の [tools] セクションを編集
 
-home-manager switch --flake .#chibimaru@darwin
+home-manager switch --flake .#chibiham@macbook
 ```
 
 ## direnv連携
@@ -359,13 +359,13 @@ NeoVimで `:LspInfo` を実行して、LSPサーバーが正常動作してい�
 
 ```bash
 which node
-# => /Users/chibimaru/.local/share/mise/shims/node
+# => /Users/chibiham/.local/share/mise/shims/node
 
 node --version
 # => v22.x.x (または .node-version で指定されたバージョン)
 
 which python
-# => /Users/chibimaru/.local/share/mise/shims/python
+# => /Users/chibiham/.local/share/mise/shims/python
 
 python --version
 # => Python 3.12.x (または .python-version で指定されたバージョン)
@@ -468,7 +468,7 @@ vim ~/dotfiles/.config/nix-config/home/common.nix
 
 # 適用
 cd ~/dotfiles/.config/nix-config
-home-manager switch --flake .#chibimaru@darwin
+home-manager switch --flake .#chibiham@macbook
 ```
 
 ### プロジェクト設定
@@ -627,7 +627,7 @@ A: Yes。`home/common.nix`に設定しているため、macOSとWSL両方で同�
 
 ```bash
 # WSLで
-home-manager switch --flake .#chibimaru@wsl
+home-manager switch --flake .#chibiham@wsl
 ```
 
 ## 参考リンク

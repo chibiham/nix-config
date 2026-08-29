@@ -54,7 +54,7 @@
           };
         in
         {
-          inherit (unstable) gemini-cli flyctl llama-cpp;
+          inherit (unstable) flyctl llama-cpp;
         };
 
       pkgsFor =
@@ -110,8 +110,8 @@
     {
       # Home Manager設定
       homeConfigurations = {
-        "chibimaru@macbook" = mkDarwinHome {
-          username = "chibimaru";
+        "chibiham@macbook" = mkDarwinHome {
+          username = "chibiham";
           hostModule = ./home/hosts/macbook.nix;
         };
         "chibiham@mac-mini" = mkDarwinHome {

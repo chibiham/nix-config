@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [chibiham@mac-mini, chibimaru@macbook, chibiham@ubuntu-server]
+        target: [chibiham@mac-mini, chibiham@macbook, chibiham@ubuntu-server]
     steps:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@v16

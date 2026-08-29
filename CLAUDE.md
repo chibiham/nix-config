@@ -76,7 +76,7 @@ Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@u
 ```bash
 # 全構成が評価できるか確認（switchする前に）
 nix eval --raw '.#homeConfigurations."chibiham@mac-mini".activationPackage.drvPath'
-nix eval --raw '.#homeConfigurations."chibimaru@macbook".activationPackage.drvPath'
+nix eval --raw '.#homeConfigurations."chibiham@macbook".activationPackage.drvPath'
 nix eval --raw '.#homeConfigurations."chibiham@ubuntu-server".activationPackage.drvPath'
 ```
 
@@ -86,7 +86,7 @@ push/PR時はGitHub Actions CI（`.github/workflows/ci.yml`）が全ユーザー
 
 ### unstableパッケージ
 
-更新の速いツール（gemini-cli, flyctl, llama-cpp）は `flake.nix` の `unstableOverlay` で
+更新の速いツール（flyctl, llama-cpp）は `flake.nix` の `unstableOverlay` で
 nixpkgs-unstableから取得。追加するときはoverlayの `inherit` リストに足す。
 
 ## 1Password連携

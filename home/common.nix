@@ -77,9 +77,6 @@ in
     # ビルドツール
     cmake           # クロスプラットフォームビルドシステム
 
-    # AI CLI
-    gemini-cli      # Google Gemini CLI
-
     # アーカイブ
     unrar           # RAR解凍
 
