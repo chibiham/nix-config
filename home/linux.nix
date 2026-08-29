@@ -38,6 +38,7 @@ in
 
   home.packages = [
     llama-cpp-cuda
+    pkgs.cudaPackages.cuda_nvcc
     pkgs.aria2
     ai-mode
   ];

@@ -23,6 +23,7 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
     ├── install-tailscale-ubuntu.sh # Tailscale導入・認証
     ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
+    ├── install-diffusion-pipe-ubuntu.sh # Anima LoRA学習環境
     ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新
     ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・排他的user service
     ├── configure-comfyui-tailscale-serve.sh # tailnet内だけにHTTPS公開
