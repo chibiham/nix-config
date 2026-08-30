@@ -150,6 +150,16 @@ else
   warn "pnpmが見つかりません。'mise install' 後に再実行してください"
 fi
 
+# Qwen CodeはNode.js 22以上が必要。mise管理のNode.jsへ導入し、
+# 実行ファイルをmiseのshimから利用できるようにする。
+if ! command -v qwen &>/dev/null; then
+  mise exec -- npm install -g @qwen-code/qwen-code@latest \
+    && mise reshim \
+    && ok "Qwen Code をインストールしました"
+else
+  ok "Qwen Code はインストール済み"
+fi
+
 # -------------------------------------------------
 # 8. Homebrew + GUIアプリ（Brewfile）
 #    CLIツールはNix管理。casks/masのGUIアプリのみHomebrewで導入

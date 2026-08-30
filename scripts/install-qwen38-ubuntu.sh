@@ -15,6 +15,7 @@ SERVICE_DIR="$HOME/.config/systemd/user"
 SERVICE_FILE="$SERVICE_DIR/qwen38.service"
 PRESET_DIR="$HOME/.config/llama.cpp"
 PRESET_FILE="$PRESET_DIR/qwen38-models.ini"
+CHAT_TEMPLATE_FILE="$PRESET_DIR/qwen38-chat-template.jinja"
 PORT="${QWEN_PORT:-8080}"
 CONTEXT_SIZE="${QWEN_CONTEXT_SIZE:-131072}"
 TAILSCALE_HTTPS_PORT="${QWEN_TAILSCALE_HTTPS_PORT:-8443}"
@@ -27,7 +28,7 @@ if [[ "$(uname -s)" != "Linux" ]] || ! command -v systemctl >/dev/null; then
   exit 1
 fi
 
-for command in aria2c llama-server nvidia-smi; do
+for command in aria2c llama-server nvidia-smi uv; do
   if ! command -v "$command" >/dev/null; then
     echo "必要なコマンドがありません: $command" >&2
     echo "先にUbuntu用Home Manager設定を適用してください" >&2
@@ -69,6 +70,18 @@ download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORE
 
 step "Router model presets"
 mkdir -p "$PRESET_DIR"
+
+# Uncensored版の埋め込みテンプレートは複数system messageを拒否するため、
+# Codexで動作する通常版GGUFのテンプレートを共用する。
+uvx --from gguf python -c '
+import sys
+from gguf import GGUFReader
+
+field = GGUFReader(sys.argv[1]).fields["tokenizer.chat_template"]
+sys.stdout.write(bytes(field.parts[-1]).decode("utf-8"))
+' "$MODEL_DIR/$MODEL_FILE" > "$CHAT_TEMPLATE_FILE.tmp"
+mv "$CHAT_TEMPLATE_FILE.tmp" "$CHAT_TEMPLATE_FILE"
+
 cat > "$PRESET_FILE" <<EOF
 version = 1
 
@@ -79,6 +92,7 @@ mmproj = $MODEL_DIR/$MODEL_VISION_FILE
 [Qwen3.8-27B-Uncensored-Q4_K_M]
 model = $MODEL_DIR/$UNCENSORED_MODEL_FILE
 mmproj = $MODEL_DIR/$UNCENSORED_MODEL_VISION_FILE
+chat-template-file = $CHAT_TEMPLATE_FILE
 EOF
 
 step "systemd user service"

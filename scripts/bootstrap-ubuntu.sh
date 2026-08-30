@@ -40,6 +40,12 @@ if ! command -v pnpm >/dev/null; then
   mise reshim
 fi
 
+step "Qwen Code"
+if ! command -v qwen >/dev/null; then
+  mise exec -- npm install -g @qwen-code/qwen-code@latest
+  mise reshim
+fi
+
 step "Codex CLI"
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
 
