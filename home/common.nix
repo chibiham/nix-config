@@ -456,6 +456,9 @@ in
     analytics.enabled = false
     feedback.enabled = false
 
+    [tui]
+    status_line = ["model-name", "context-remaining", "context-window-size", "used-tokens", "current-dir"]
+
     [otel]
     exporter = "none"
     metrics_exporter = "none"
@@ -475,6 +478,9 @@ in
     model_context_window = 131072
     analytics.enabled = false
     feedback.enabled = false
+
+    [tui]
+    status_line = ["model-name", "context-remaining", "context-window-size", "used-tokens", "current-dir"]
 
     [otel]
     exporter = "none"
