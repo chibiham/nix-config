@@ -7,11 +7,13 @@ let
   # ネットワーク依存なので、scripts/install-qwen38-ubuntu.shで取得する。
   llama-cpp-cuda = pkgs.llama-cpp.override { cudaSupport = true; };
 
+  # 3090の24GBを取り合うサービス（Qwen/ComfyUI/Applio）を排他で切り替える。
+  # 実体の排他はunit側のConflicts=で担保し、ここは入口を揃えるだけにする。
   ai-mode = pkgs.writeShellScriptBin "ai-mode" ''
     set -euo pipefail
 
     usage() {
-      echo "usage: ai-mode {qwen|comfy|stop|status}" >&2
+      echo "usage: ai-mode {qwen|comfy|applio|stop|status}" >&2
       exit 2
     }
 
@@ -22,15 +24,19 @@ let
       comfy)
         systemctl --user start comfyui.service
         ;;
+      applio)
+        systemctl --user start applio.service
+        ;;
       stop)
-        systemctl --user stop qwen38.service comfyui.service
+        systemctl --user stop qwen38.service comfyui.service applio.service
         ;;
       status)
-        systemctl --user --no-pager --full status qwen38.service comfyui.service || true
+        systemctl --user --no-pager --full status qwen38.service comfyui.service applio.service || true
         ;;
       *) usage ;;
     esac
   '';
+
 in
 
 {

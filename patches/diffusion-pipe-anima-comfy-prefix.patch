@@ -1,0 +1,15 @@
+diff --git a/models/anima.py b/models/anima.py
+--- a/models/anima.py
++++ b/models/anima.py
+@@ -778,7 +778,9 @@ class AnimaPipeline(BasePipeline):
+             if k.startswith('net.'):
+                 k = k[len('net.'):]
+-            # Handle ComfyUI format with 'diffusion_model.' prefix
+-            if k.startswith('diffusion_model.'):
++            # Handle ComfyUI checkpoint prefixes
++            if k.startswith('model.diffusion_model.'):
++                k = k[len('model.diffusion_model.'):]
++            elif k.startswith('diffusion_model.'):
+                 k = k[len('diffusion_model.'):]
+             new_state_dict[k] = v
+         state_dict = new_state_dict

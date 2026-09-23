@@ -29,8 +29,13 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
     ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
     ├── install-tailscale-ubuntu.sh # Tailscale導入・認証
     ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
+    ├── configure-ubuntu-hardware.sh # HWEとGPU起動時消灯を反映（再起動なし）
+    ├── install-hwe-kernel-ubuntu.sh # HWE・対応NVIDIAモジュール
+    ├── install-gpu-led-off-ubuntu.sh # OpenRGBと消灯サービスの導入
+    ├── turn-off-gpu-led.sh # Gigabyte RTX 3090だけを消灯
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
     ├── install-diffusion-pipe-ubuntu.sh # Anima LoRA学習環境
+    ├── install-applio-ubuntu.sh # Applio（RVC学習・リアルタイム音声変換）
     ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新
     ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・排他的user service
     ├── configure-comfyui-tailscale-serve.sh # tailnet内だけにHTTPS公開
@@ -129,6 +134,7 @@ macOSのセキュリティ制約により自動化できないもの:
 - シークレット管理: 1password-cli + update-secretsコマンド
 - その他: htop, tree, curl, wget, awscli, terraform, flyctl, cloudflared
 - Linux AI推論: CUDA対応llama.cpp + ai-mode（モデル取得は明示スクリプト）
+- ai-modeの排他対象: qwen38 / comfyui / applio。3090の24GBを取り合うため、unitの `Conflicts=` で同時起動を禁止している
 
 ### macOS統合
 

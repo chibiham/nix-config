@@ -22,6 +22,10 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
     ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
     ├── install-tailscale-ubuntu.sh # Tailscale導入・認証
     ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
+    ├── configure-ubuntu-hardware.sh # HWEとGPU起動時消灯を反映（再起動なし）
+    ├── install-hwe-kernel-ubuntu.sh # HWE・対応NVIDIAモジュール
+    ├── install-gpu-led-off-ubuntu.sh # OpenRGBと消灯サービスの導入
+    ├── turn-off-gpu-led.sh # Gigabyte RTX 3090だけを消灯
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
     ├── install-diffusion-pipe-ubuntu.sh # Anima LoRA学習環境
     ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新

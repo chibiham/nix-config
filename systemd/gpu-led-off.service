@@ -1,0 +1,21 @@
+[Unit]
+Description=Turn off Gigabyte RTX 3090 lighting
+After=systemd-modules-load.service nvidia-persistenced.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+ExecStartPre=/sbin/modprobe nvidia
+ExecStartPre=/sbin/modprobe i2c-dev
+ExecStart=/usr/local/sbin/turn-off-gpu-led
+StateDirectory=gpu-led-off
+Environment=HOME=/var/lib/gpu-led-off
+Environment=QT_QPA_PLATFORM=offscreen
+TimeoutStartSec=45
+RemainAfterExit=yes
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -5,11 +5,17 @@ set -euo pipefail
 MODEL_REPO="unsloth/Qwen3.8-27B-GGUF"
 MODEL_REVISION="4ca720788d1e01f1bff70c033e0d0028fd02e502"
 MODEL_FILE="Qwen3.8-27B-UD-Q4_K_M.gguf"
+MODEL_XL_FILE="Qwen3.8-27B-UD-Q4_K_XL.gguf"
 MODEL_VISION_FILE="mmproj-BF16.gguf"
 UNCENSORED_MODEL_REPO="JonathanColetti/Qwen3.8-27B-Uncensored-GGUF"
 UNCENSORED_MODEL_REVISION="b7ff25715ee2ae49c9ff32159bc73de864648aef"
 UNCENSORED_MODEL_FILE="Qwen3.8-27B-Uncensored-Q4_K_M.gguf"
 UNCENSORED_MODEL_VISION_FILE="Qwen3.8-27B-Uncensored-vision-bf16.gguf"
+HERETIC_MODEL_REPO="OS-Software/Qwen3.8-27B-Uncensored-Heretic-v2-GGUF"
+HERETIC_MODEL_REVISION="f4dc8fb5115f21b55b0d093660ef32bb7303369a"
+HERETIC_MODEL_FILE="Qwen3.8-27B-Uncensored-Heretic-v2-UD-Q4_K_XL.gguf"
+HERETIC_MODEL_VISION_REMOTE_FILE="mmproj-BF16.gguf"
+HERETIC_MODEL_VISION_FILE="Qwen3.8-27B-Uncensored-Heretic-v2-mmproj-BF16.gguf"
 MODEL_DIR="${QWEN_MODEL_DIR:-$HOME/models/qwen3.8-27b}"
 SERVICE_DIR="$HOME/.config/systemd/user"
 SERVICE_FILE="$SERVICE_DIR/qwen38.service"
@@ -42,8 +48,8 @@ if ! nvidia-smi >/dev/null 2>&1; then
 fi
 
 download_model() {
-  local repo="$1" revision="$2" file="$3"
-  local path="$MODEL_DIR/$file"
+  local repo="$1" revision="$2" file="$3" output="${4:-$3}"
+  local path="$MODEL_DIR/$output"
   if [[ -s "$path" ]]; then
     ok "$path は取得済みです"
     return
@@ -51,7 +57,7 @@ download_model() {
 
   aria2c --continue=true --max-connection-per-server=16 --split=16 \
     --min-split-size=16M --max-tries=0 --retry-wait=5 \
-    --dir="$MODEL_DIR" --out="$file.part" \
+    --dir="$MODEL_DIR" --out="$output.part" \
     "https://huggingface.co/$repo/resolve/$revision/$file"
   mv "$path.part" "$path"
   ok "$path を取得しました"
@@ -61,12 +67,15 @@ step "ComfyUIとQwenを停止"
 systemctl --user stop comfyui.service 2>/dev/null || true
 systemctl --user stop qwen38.service 2>/dev/null || true
 
-step "通常版・Uncensored版とVision Projectorを取得"
+step "通常版Q4_K_M・Q4_K_XL、Uncensored 2種とVision Projectorを取得"
 mkdir -p "$MODEL_DIR"
 download_model "$MODEL_REPO" "$MODEL_REVISION" "$MODEL_FILE"
+download_model "$MODEL_REPO" "$MODEL_REVISION" "$MODEL_XL_FILE"
 download_model "$MODEL_REPO" "$MODEL_REVISION" "$MODEL_VISION_FILE"
 download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORED_MODEL_FILE"
 download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORED_MODEL_VISION_FILE"
+download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_FILE"
+download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_VISION_REMOTE_FILE" "$HERETIC_MODEL_VISION_FILE"
 
 step "Router model presets"
 mkdir -p "$PRESET_DIR"
@@ -89,10 +98,18 @@ version = 1
 model = $MODEL_DIR/$MODEL_FILE
 mmproj = $MODEL_DIR/$MODEL_VISION_FILE
 
+[Qwen3.8-27B-UD-Q4_K_XL]
+model = $MODEL_DIR/$MODEL_XL_FILE
+mmproj = $MODEL_DIR/$MODEL_VISION_FILE
+
 [Qwen3.8-27B-Uncensored-Q4_K_M]
 model = $MODEL_DIR/$UNCENSORED_MODEL_FILE
 mmproj = $MODEL_DIR/$UNCENSORED_MODEL_VISION_FILE
 chat-template-file = $CHAT_TEMPLATE_FILE
+
+[Qwen3.8-27B-Uncensored-Heretic-v2-UD-Q4_K_XL]
+model = $MODEL_DIR/$HERETIC_MODEL_FILE
+mmproj = $MODEL_DIR/$HERETIC_MODEL_VISION_FILE
 EOF
 
 step "systemd user service"

@@ -9,6 +9,7 @@ QWEN_DIR="$DIFFUSION_PIPE_DIR/models/Qwen3-0.6B"
 CONFIG_DIR="$DIFFUSION_PIPE_DIR/configs/local"
 DATASET_DIR="$DIFFUSION_PIPE_DIR/datasets/anima-lora"
 OUTPUT_DIR="$DIFFUSION_PIPE_DIR/output/anima-lora"
+ANIMA_PREFIX_PATCH="$HOME/.config/nix-config/patches/diffusion-pipe-anima-comfy-prefix.patch"
 
 export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-300}"
 export UV_HTTP_RETRIES="${UV_HTTP_RETRIES:-5}"
@@ -44,6 +45,15 @@ else
   git clone --recurse-submodules "$DIFFUSION_PIPE_REPO" "$DIFFUSION_PIPE_DIR"
 fi
 
+if git -C "$DIFFUSION_PIPE_DIR" apply --reverse --check "$ANIMA_PREFIX_PATCH" 2>/dev/null; then
+  ok "ComfyUI形式のAnimaチェックポイント対応パッチは適用済みです"
+elif git -C "$DIFFUSION_PIPE_DIR" apply --check "$ANIMA_PREFIX_PATCH"; then
+  git -C "$DIFFUSION_PIPE_DIR" apply "$ANIMA_PREFIX_PATCH"
+else
+  echo "Animaチェックポイント対応パッチを適用できません" >&2
+  exit 1
+fi
+
 step "Python 3.12専用環境"
 if [[ ! -x "$DIFFUSION_PIPE_DIR/.venv/bin/python" ]]; then
   uv venv --python 3.12 "$DIFFUSION_PIPE_DIR/.venv"
@@ -76,7 +86,7 @@ snapshot_download(
 PY
 fi
 
-TRANSFORMER="$COMFY_DIR/models/diffusion_models/anima/miaomiaoHarem_anima16.safetensors"
+TRANSFORMER="$COMFY_DIR/models/diffusion_models/anima/fnMixAnimaTurbo_baseNoTurbo.safetensors"
 VAE="$COMFY_DIR/models/vae/qwen/qwen_image_vae.safetensors"
 for model in "$TRANSFORMER" "$VAE"; do
   if [[ ! -f "$model" ]]; then
@@ -147,7 +157,7 @@ rank = 16
 dtype = 'bfloat16'
 
 [optimizer]
-type = 'AdamW8bitKahan'
+type = 'adamw_optimi'
 lr = 5e-5
 betas = [0.9, 0.99]
 weight_decay = 0.01
@@ -157,6 +167,23 @@ eps = 1e-8
 enable_wandb = false
 PATCH
 fi
+
+install -Dm755 /dev/stdin "$DIFFUSION_PIPE_DIR/train-anima-lora.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")"
+
+export PYTORCH_ALLOC_CONF=expandable_segments:True
+export NCCL_P2P_DISABLE=1
+export NCCL_IB_DISABLE=1
+
+exec .venv/bin/deepspeed \
+  --num_gpus=1 \
+  train.py \
+  --deepspeed \
+  --config "$PWD/configs/local/anima-lora.toml"
+SH
 
 step "CUDA動作確認"
 "$DIFFUSION_PIPE_DIR/.venv/bin/python" - <<'PY'
@@ -175,5 +202,4 @@ ok "diffusion-pipeのAnima LoRA学習環境を構築しました"
 echo "画像: $DATASET_DIR/images"
 echo "設定: $CONFIG_DIR/anima-lora.toml"
 echo "実行:"
-echo "  cd $DIFFUSION_PIPE_DIR"
-echo "  PYTORCH_ALLOC_CONF=expandable_segments:True NCCL_P2P_DISABLE=1 NCCL_IB_DISABLE=1 .venv/bin/deepspeed --num_gpus=1 train.py --deepspeed --config '$CONFIG_DIR/anima-lora.toml'"
+echo "  $DIFFUSION_PIPE_DIR/train-anima-lora.sh"

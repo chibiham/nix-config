@@ -63,6 +63,7 @@ in
     # バージョン管理
     mise # Polyglot runtime version manager
     uv # Fast Python package installer and resolver
+    python3Packages.huggingface-hub # Hugging Face Hub CLI (hf)
 
     # シークレット管理
     _1password-cli # op コマンド

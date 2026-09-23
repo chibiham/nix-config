@@ -35,7 +35,10 @@ fi
 
 step "OS依存パッケージ"
 sudo apt-get update
-sudo apt-get install -y ffmpeg git-lfs libgl1 libglib2.0-0
+# Animaなどで使われるTritonは、初回実行時にホスト側のCコードを
+# コンパイルする。systemdサービスからも確実に利用できるよう、
+# OS標準のコンパイラ一式とPython開発ヘッダを導入する。
+sudo apt-get install -y build-essential ffmpeg git-lfs libgl1 libglib2.0-0 python3.12-dev
 git lfs install --skip-repo
 
 step "ComfyUIソース"
@@ -92,6 +95,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$COMFY_DIR
+Environment=CC=/usr/bin/cc
+Environment=CXX=/usr/bin/c++
 ExecStart=$COMFY_DIR/.venv/bin/python $COMFY_DIR/main.py --listen 127.0.0.1 --port 8188 --enable-manager
 Restart=on-failure
 RestartSec=5

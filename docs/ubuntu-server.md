@@ -26,6 +26,20 @@ curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix 
 ~/.config/nix-config/scripts/install-tailscale-ubuntu.sh
 ```
 
+## Claude Code
+
+`bootstrap-ubuntu.sh`で[公式ネイティブインストーラ](https://code.claude.com/docs/en/quickstart)を使い、
+Claude Codeを`~/.local/bin/claude`へ導入する。PATHはHome Managerで設定済み。
+既存のUbuntu環境へClaude Codeだけを追加する場合:
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+~/.local/bin/claude --version
+claude
+```
+
+初回起動時は表示される案内に従って認証する。
+
 ## NVIDIAドライバ
 
 GPUを装着した後、Ubuntuが推奨するドライバを導入する。
@@ -45,6 +59,68 @@ nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
 スクリプトは既にドライバが正常動作していれば何も変更せず終了する。ドライバの導入後も自動では再起動しない。Secure Bootが有効な環境でMOK登録画面が出た場合は、再起動時に画面の指示に従う。
 
 CUDA Toolkitはこの段階では導入しない。ComfyUI/PyTorchが必要とするCUDA runtimeは、ComfyUI専用Python環境で管理する。管理境界を決めた理由は [ADR 0001](adr/0001-ubuntu-serverの管理境界.md) を参照。
+
+## HWEカーネルとGPU LED
+
+HWEカーネルの追加と、GPU LEDの起動時消灯をまとめて反映する:
+
+```bash
+~/.config/nix-config/scripts/configure-ubuntu-hardware.sh
+```
+
+sudo認証が必要。スクリプトは再実行可能で、OSの再起動やNVIDIAドライバの再ロードは行わない。
+LEDはその場で消灯し、カーネルの切り替えは次回の手動再起動時になる。
+カーネル・OSサービスはこのリポジトリのスクリプトからapt/systemdで管理し、
+`home-manager switch`のactivationには含めない。
+
+### HWEカーネル
+
+2026-09-10のクラッシュは、RTL8852BEの`rtw89_pci`で送信完了報告の番号を配列範囲外参照し、
+NULL参照からカーネルパニックに至ったもの。
+[CVE-2026-43213](https://ubuntu.com/security/CVE-2026-43213)の説明と一致し、
+確認時点でUbuntu 24.04の標準6.8系は影響あり、HWE 7.0系は影響なしとされている。
+
+カーネルだけを導入する場合:
+
+```bash
+# 現在のAPTキャッシュを使って依存関係を確認するだけ
+~/.config/nix-config/scripts/install-hwe-kernel-ubuntu.sh --dry-run
+
+# インストールする。再起動はしない
+~/.config/nix-config/scripts/install-hwe-kernel-ubuntu.sh
+```
+
+`linux-generic-hwe-24.04`と、導入済みのNVIDIAドライバ世代に対応する
+`linux-modules-nvidia-<世代>-generic-hwe-24.04`を追加する。
+2026-09-10の環境ではHWE `7.0.0-31`とNVIDIA `595-open`。
+HWEメタパッケージを使うため、以後の更新はUbuntuのHWEに追従する。
+インストール時に動作中のカーネルとGPUモジュールを手動導入扱いにし、
+`autoremove`で復旧用カーネルが削除されるのを防ぐ。パッケージ削除は許可しない。
+
+後日、手動で再起動したら`uname -r`、`nvidia-smi`、Wi-Fi/SSH接続を確認する。
+起動に問題があれば、本体でGRUBメニューの「Advanced options for Ubuntu」から残した6.8系を選ぶ。
+メニューが非表示の場合は起動時にEsc（UEFI）またはShift（BIOS）で表示する。
+
+### GPU LEDの起動時消灯
+
+```bash
+~/.config/nix-config/scripts/install-gpu-led-off-ubuntu.sh
+systemctl status gpu-led-off.service --no-pager
+journalctl -u gpu-led-off.service -b --no-pager
+```
+
+以前の`~/turn-off-gpu-led.sh`と同じOpenRGB `1.0rc3.1`を使う。
+`~/OpenRGB.AppImage`があれば再利用し、なければ公式リリースから取得する。
+どちらも固定SHA256で検証してから`/opt/openrgb-1.0rc3.1`へ展開する。
+
+`systemd/gpu-led-off.service`がOS起動時にNVIDIAと`i2c-dev`をロードし、
+`/usr/local/sbin/turn-off-gpu-led`を一度実行する。Gigabyte RTX 3090を名前で検出して
+`Off`を設定し、機器番号・I2Cバス番号は固定しない。GPUが未検出・複数一致なら変更せず失敗し、
+初期化遅延に備えてサービス側で再試行する。
+
+root所有のsystem serviceとして動くため、SSHログインやユーザー領域の実行ファイルに依存しない。
+I2Cデバイスを全ユーザーへ開放する設定も不要。OpenRGBの設定は`/var/lib/gpu-led-off`に分離する。
+電源投入直後からサービス実行までの間は、GPU本体の既定の点灯状態になる場合がある。
 
 ## ComfyUI
 
@@ -114,9 +190,10 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 ~/.config/nix-config/scripts/install-qwen38-ubuntu.sh
 ```
 
-インストーラは、固定したリビジョンからQwen3.8-27B UD-Q4_K_Mと
-Qwen3.8-27B-Uncensored Q4_K_Mを`~/models/qwen3.8-27b/`へaria2で並列・再開可能な形で
-取得する。両モデルのVision Projectorも取得してRouter presetで関連付け、画像入力を有効にする。
+インストーラは、固定したリビジョンからQwen3.8-27B UD-Q4_K_M、UD-Q4_K_XLと
+Qwen3.8-27B-Uncensored Q4_K_M、Uncensored-Heretic-v2 UD-Q4_K_XLを
+`~/models/qwen3.8-27b/`へaria2で並列・再開可能な形で取得する。各モデルのVision Projectorも
+取得してRouter presetで関連付け、画像入力を有効にする。
 128K context、Q8 KV cache、単一モデルだけをVRAMへロードするRouterモードの
 `qwen38.service`を作成する。内蔵Web UIでモデルを切り替えられ、再実行しても取得済みファイルは再取得しない。
 
@@ -147,9 +224,12 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 | 対象 | 管理方法 |
 |---|---|
 | CLI、Zsh、Neovim、mise、llama.cpp | Nix / Home Manager |
+| Codex CLI、Claude Code | Ubuntu用bootstrap / 公式インストーラ |
 | Python、Node.js | mise |
 | sshd、Tailscale daemon | apt / systemd |
 | NVIDIAドライバ | Ubuntuの推奨ドライバ |
+| HWEカーネル・対応NVIDIAモジュール | `scripts/install-hwe-kernel-ubuntu.sh` / apt |
+| GPU LED消灯 | 固定版OpenRGB / systemd system service |
 | ComfyUIとPython依存 | ComfyUI専用venvまたはuv環境 |
 | Qwenモデル、Qwen user service | 専用の冪等インストールスクリプト |
 
