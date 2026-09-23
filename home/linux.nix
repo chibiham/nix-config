@@ -17,21 +17,34 @@ let
       exit 2
     }
 
+    # LoRA学習（~/ai/scripts/lora-train）もConflicts=で排他にしているため、
+    # ここで起動すると学習が止まる。学習中は明示的に止めるまで切り替えさせない。
+    guard_training() {
+      if systemctl --user is-active --quiet 'lora-train-*.service'; then
+        echo "LoRA学習が実行中です。止める場合は lora-train stop <name>" >&2
+        systemctl --user list-units --no-legend 'lora-train-*.service' >&2
+        exit 1
+      fi
+    }
+
     case "''${1:-}" in
       qwen)
+        guard_training
         systemctl --user start qwen38.service
         ;;
       comfy)
+        guard_training
         systemctl --user start comfyui.service
         ;;
       applio)
+        guard_training
         systemctl --user start applio.service
         ;;
       stop)
         systemctl --user stop qwen38.service comfyui.service applio.service
         ;;
       status)
-        systemctl --user --no-pager --full status qwen38.service comfyui.service applio.service || true
+        systemctl --user --no-pager --full status qwen38.service comfyui.service applio.service 'lora-train-*.service' || true
         ;;
       *) usage ;;
     esac
@@ -57,6 +70,7 @@ in
     llama-cpp-cuda
     pkgs.cudaPackages.cuda_nvcc
     pkgs.aria2
+    pkgs.rclone
     ai-mode
     civitai-download
   ];
@@ -68,8 +82,19 @@ in
     force = true;
     text = ''
       export CIVITAI_TOKEN="op://chibihamuntu/CIVITAI_TOKEN/credential"
+      export RCLONE_CONFIG_R2_ACCESS_KEY_ID="op://chibihamuntu/R2_CHIBIHAM_AI/access_key_id"
+      export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="op://chibihamuntu/R2_CHIBIHAM_AI/secret_access_key"
+      export RCLONE_CONFIG_R2_ENDPOINT="op://chibihamuntu/R2_CHIBIHAM_AI/endpoint"
     '';
   };
+
+  # AI作業の方針・資産は private repo（chibiham/chibiham-ai を ~/ai にclone）で管理する。
+  # どのディレクトリで起動しても読まれるよう、Claude Code / Codex のグローバル指示として配る。
+  # clone前はリンク切れになるだけで、switchは失敗しない。
+  home.file.".claude/CLAUDE.md".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/ai/AGENTS.md";
+  home.file.".codex/AGENTS.md".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/ai/AGENTS.md";
 
   # Claude Code skill（~/.claude/skills はマシン横断のskills repoと共存するため
   # ディレクトリ単位で置く）

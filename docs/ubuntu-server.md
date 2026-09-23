@@ -218,13 +218,16 @@ Qwen3.8-27B-Uncensored Q4_K_M、Uncensored-Heretic-v2 UD-Q4_K_XLを
 128K context、Q8 KV cache、単一モデルだけをVRAMへロードするRouterモードの
 `qwen38.service`を作成する。内蔵Web UIでモデルを切り替えられ、再実行しても取得済みファイルは再取得しない。
 
-RTX 3090を共有するため、`qwen38.service`と`comfyui.service`は排他的に起動する。
+RTX 3090を共有するため、`qwen38.service`・`comfyui.service`・`applio.service`は
+unitの`Conflicts=`で排他的に起動する。LoRA学習も private repo（`~/ai`）の`lora-train`が
+同じ`Conflicts=`を持つ一時unitとして起動し、学習中は`ai-mode`での切替を拒否する。
 
 ```bash
-ai-mode qwen    # ComfyUIを止めてQwenを起動
-ai-mode comfy   # Qwenを止めてComfyUIを起動
-ai-mode stop    # 両方停止
-ai-mode status  # 両サービスの状態
+ai-mode qwen    # 他を止めてQwenを起動
+ai-mode comfy   # 他を止めてComfyUIを起動
+ai-mode applio  # 他を止めてApplioを起動
+ai-mode stop    # すべて停止（LoRA学習は止めない）
+ai-mode status  # 各サービスと学習の状態
 ```
 
 Qwenは再起動時に自動起動せず、既存のComfyUIを既定のままにする。APIは
@@ -253,5 +256,16 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 | GPU LED消灯 | 固定版OpenRGB / systemd system service |
 | ComfyUIとPython依存 | ComfyUI専用venvまたはuv環境 |
 | Qwenモデル、Qwen user service | 専用の冪等インストールスクリプト |
+| ComfyUIのモデル台帳・ワークフロー・custom_nodes、LoRAプロジェクト、AGENTS.md | private repo（`~/ai`）。自作モデルの実体はCloudflare R2 |
+
+## private repo（~/ai）とR2
+
+モデル名やワークフロー、データセットなど個人的な資産はこのpublic repoに入れず、
+private repoを`~/ai`へcloneして管理する。`~/.claude/CLAUDE.md`と`~/.codex/AGENTS.md`は
+`~/ai/AGENTS.md`へのリンクとしてHome Managerが配置する（clone前はリンク切れになるだけ）。
+
+自作モデルのバックアップ先はCloudflare R2（rclone、S3互換）。認証情報は`chibihamuntu` Vaultの
+`R2_CHIBIHAM_AI`アイテム（`access_key_id`・`secret_access_key`・`endpoint`フィールド）から
+`RCLONE_CONFIG_R2_*`として展開する。rcloneの設定ファイルは使わない。
 
 GUIなしでもTailscaleは使える。`sudo tailscale up`が表示するURLをMacのブラウザで開いて認証する。CodexやClaude Codeも同様に、SSHセッションへ表示されたURLをMac側で開く方式を使える。
