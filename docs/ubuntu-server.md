@@ -26,6 +26,25 @@ curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix 
 ~/.config/nix-config/scripts/install-tailscale-ubuntu.sh
 ```
 
+## シークレット（1Password）
+
+Mac用の`MyMachine` Vaultは使わず、このマシン専用の`chibihamuntu` Vaultを参照する。
+1Passwordで`chibihamuntu` Vaultだけを読めるService Accountを作り、そのトークンを
+`bootstrap-ubuntu.sh`の入力に渡す（`~/.secrets/.env`に保存され、`update-secrets`まで実行される）。
+
+参照するアイテムは`home/linux.nix`の`env.tpl`で管理する。追加する手順は次のとおり:
+
+1. `chibihamuntu` Vaultにアイテムを作る（例: `CIVITAI_TOKEN`、credentialフィールド）
+2. `home/linux.nix`の`env.tpl`に`op://chibihamuntu/<アイテム>/credential`を追記してswitchする
+3. `update-secrets`を実行する（`op inject`は参照先が1つでも欠けると全体が失敗するため、先にアイテムを作っておく）
+
+既存環境でトークンだけ設定する場合:
+
+```bash
+echo 'export OP_SERVICE_ACCOUNT_TOKEN="ops_..."' >> ~/.secrets/.env && chmod 600 ~/.secrets/.env
+update-secrets
+```
+
 ## Claude Code
 
 `bootstrap-ubuntu.sh`で[公式ネイティブインストーラ](https://code.claude.com/docs/en/quickstart)を使い、
@@ -176,7 +195,9 @@ ComfyUIを明示的に更新する場合:
 ~/.config/nix-config/scripts/update-comfyui-ubuntu.sh
 ```
 
-モデルは自動取得しない。チェックポイントは`~/ComfyUI/models/checkpoints/`へ配置する。モデルごとにVAE、text encoder、diffusion modelなどの配置先が異なる場合は、そのモデルの公式手順に従う。
+モデルはインストール時には自動取得しない。チェックポイントは`~/ComfyUI/models/checkpoints/`へ配置する。
+Civitaiのモデルは`civitai-download <URL>`（Claude Codeからは`civitai-download` skill）で、
+種別に応じた`~/ComfyUI/models/`以下へ取得できる。`CIVITAI_TOKEN`は上記のchibihamuntu Vaultから展開する。モデルごとにVAE、text encoder、diffusion modelなどの配置先が異なる場合は、そのモデルの公式手順に従う。
 
 ## Qwen3.8-27B
 

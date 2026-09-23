@@ -13,6 +13,25 @@
     mergetool.vscode.cmd = "code --wait $MERGED";
   };
 
+  # op inject用テンプレート（update-secretsコマンドで展開）
+  # Mac用Service Accountが読める "MyMachine" Vault を参照する
+  home.file.".secrets/env.tpl" = {
+    force = true;
+    text = ''
+      export OPENAI_API_KEY="op://MyMachine/OPEN_AI_API_KEY/credential"
+      export AWS_ACCESS_KEY_ID="op://MyMachine/AWS_CREDENTIALS/access_key_id"
+      export AWS_SECRET_ACCESS_KEY="op://MyMachine/AWS_CREDENTIALS/secret_access_key"
+      export CLOUDFLARE_API_TOKEN="op://MyMachine/CLOUDFLARE_API_TOKEN/credential"
+      export GEMINI_API_KEY="op://MyMachine/GEMINI_API_KEY/credential"
+      export CLAUDE_CODE_OAUTH_TOKEN="op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential"
+      export BRAVE_SEARCH_API_KEY="op://MyMachine/BRAVE_API_KEY/credential"
+      export SWITCHBOT_TOKEN="op://MyMachine/SWITCHBOT_TOKEN/credential"
+      export SWITCHBOT_SECRET="op://MyMachine/SWITCHBOT_SECRET/credential"
+      export XAI_API_KEY="op://MyMachine/XAI_API_KEY/credential"
+      export GITHUB_TOKEN="op://MyMachine/GITHUB_TOKEN/credential"
+    '';
+  };
+
   # Karabiner-Elements設定
   # Note: Karabiner GUIで変更しても home-manager switch で上書きされる
   xdg.configFile."karabiner/karabiner.json" = {

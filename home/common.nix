@@ -548,7 +548,7 @@ in
     # シークレット環境変数設定
     # このファイルをコピーして .env を作成してください
     # cp ~/.secrets/.env.template ~/.secrets/.env
-    # （scripts/bootstrap.sh を使えば対話的に作成されます）
+    # （scripts/bootstrap.sh / bootstrap-ubuntu.sh を使えば対話的に作成されます）
 
     # 必須: 1Password Service Account Token
     # https://my.1password.com/developer/serviceaccounts から取得
@@ -556,26 +556,12 @@ in
 
     # 他のシークレットは `update-secrets` コマンドで
     # ~/.secrets/.env.secrets に展開されます（env.tpl参照）
-    # 注意: 1Passwordの "MyMachine" Vault に該当アイテムが存在する必要があります
+    # 注意: env.tpl が参照するVault（macOS: MyMachine / Ubuntu: chibihamuntu）に
+    #       該当アイテムが存在する必要があります
   '';
 
-  # op inject用テンプレート（update-secretsコマンドで展開）
-  home.file.".secrets/env.tpl" = {
-    force = true;
-    text = ''
-      export OPENAI_API_KEY="op://MyMachine/OPEN_AI_API_KEY/credential"
-      export AWS_ACCESS_KEY_ID="op://MyMachine/AWS_CREDENTIALS/access_key_id"
-      export AWS_SECRET_ACCESS_KEY="op://MyMachine/AWS_CREDENTIALS/secret_access_key"
-      export CLOUDFLARE_API_TOKEN="op://MyMachine/CLOUDFLARE_API_TOKEN/credential"
-      export GEMINI_API_KEY="op://MyMachine/GEMINI_API_KEY/credential"
-      export CLAUDE_CODE_OAUTH_TOKEN="op://MyMachine/CLAUDE_CODE_AUTH_TOKEN/credential"
-      export BRAVE_SEARCH_API_KEY="op://MyMachine/BRAVE_API_KEY/credential"
-      export SWITCHBOT_TOKEN="op://MyMachine/SWITCHBOT_TOKEN/credential"
-      export SWITCHBOT_SECRET="op://MyMachine/SWITCHBOT_SECRET/credential"
-      export XAI_API_KEY="op://MyMachine/XAI_API_KEY/credential"
-      export GITHUB_TOKEN="op://MyMachine/GITHUB_TOKEN/credential"
-    '';
-  };
+  # op inject用テンプレート ~/.secrets/env.tpl はOSごとに参照するVaultが違うため
+  # darwin.nix（MyMachine）/ linux.nix（chibihamuntu）に置く
 
   # ===================
   # 追加のPATH

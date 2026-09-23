@@ -37,6 +37,17 @@ let
     esac
   '';
 
+  # Civitaiのモデル取得（Claude Codeのcivitai-download skillから使う）
+  civitai-download = pkgs.writeShellApplication {
+    name = "civitai-download";
+    runtimeInputs = with pkgs; [
+      curl
+      jq
+      coreutils
+      gnused
+    ];
+    text = builtins.readFile ../scripts/civitai-download.sh;
+  };
 in
 
 {
@@ -47,7 +58,22 @@ in
     pkgs.cudaPackages.cuda_nvcc
     pkgs.aria2
     ai-mode
+    civitai-download
   ];
+
+  # op inject用テンプレート（update-secretsコマンドで展開）
+  # Mac用の MyMachine Vault は読ませず、このマシン専用の Service Account が
+  # 読める "chibihamuntu" Vault だけを参照する
+  home.file.".secrets/env.tpl" = {
+    force = true;
+    text = ''
+      export CIVITAI_TOKEN="op://chibihamuntu/CIVITAI_TOKEN/credential"
+    '';
+  };
+
+  # Claude Code skill（~/.claude/skills はマシン横断のskills repoと共存するため
+  # ディレクトリ単位で置く）
+  home.file.".claude/skills/civitai-download".source = ../claude/skills/civitai-download;
 
   # generic Linux上のNix製CUDAアプリから、Ubuntu/apt管理のNVIDIA driverだけを
   # 参照する。LD_LIBRARY_PATHへ/usr/lib全体を入れるとglibcが衝突するため、

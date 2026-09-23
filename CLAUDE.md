@@ -24,6 +24,7 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 │   ├── darwin.nix     # macOS共通設定
 │   ├── linux.nix      # Linux固有設定
 │   └── hosts/         # Macごとの固有設定（macbook.nix / mac-mini.nix）
+├── claude/skills/     # Nixで ~/.claude/skills に配るClaude Code skill（civitai-download）
 └── scripts/
     ├── bootstrap.sh       # 新しいMacの初期セットアップ
     ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
@@ -37,6 +38,7 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
     ├── install-diffusion-pipe-ubuntu.sh # Anima LoRA学習環境
     ├── install-applio-ubuntu.sh # Applio（RVC学習・リアルタイム音声変換）
     ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新
+    ├── civitai-download.sh # Civitaiモデル取得（linux.nixがコマンド化）
     ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・排他的user service
     ├── configure-comfyui-tailscale-serve.sh # tailnet内だけにHTTPS公開
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
@@ -102,7 +104,10 @@ nixpkgs-unstableから取得。追加するときはoverlayの `inherit` リス�
 - `home-manager switch` は1Password認証不要
 - シークレットの実体は `update-secrets` コマンド（Nixが配布）で
   `~/.secrets/env.tpl` から `~/.secrets/.env.secrets` に展開され、zshrcが読み込む
-- シークレットを追加するときは `common.nix` の `env.tpl` にop参照を追記 → switch → `update-secrets`
+- `env.tpl` はOS別: macOSは `darwin.nix`（`MyMachine` Vault）、Ubuntuは `linux.nix`
+  （`chibihamuntu` Vault、専用Service Account）。Mac用Vaultをサーバーに読ませない
+- シークレットを追加するときは該当OSの `env.tpl` にop参照を追記 → switch → `update-secrets`
+  （`op inject` は参照先が1つでも欠けると全体失敗するので、先にVaultへアイテムを作る）
 
 ```bash
 # シークレットを更新したいとき

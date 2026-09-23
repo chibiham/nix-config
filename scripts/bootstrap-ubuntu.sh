@@ -30,6 +30,24 @@ step "Home Manager"
 nix run "$REPO_DIR#home-manager" -- switch -b backup --flake "$REPO_DIR#$FLAKE_TARGET"
 export PATH="$HOME/.nix-profile/bin:$PATH"
 
+# このマシン専用のService Account（chibihamuntu Vaultのみ読み取り可）を使う
+step "1Password Service Account Token"
+mkdir -p "$HOME/.secrets"
+chmod 700 "$HOME/.secrets"
+if ! grep -q '^export OP_SERVICE_ACCOUNT_TOKEN=' "$HOME/.secrets/.env" 2>/dev/null; then
+  echo "chibihamuntu Vault を読めるService Accountのトークンを入力してください"
+  read -rsp "OP_SERVICE_ACCOUNT_TOKEN: " token
+  echo
+  printf 'export OP_SERVICE_ACCOUNT_TOKEN="%s"\n' "$token" >> "$HOME/.secrets/.env"
+  chmod 600 "$HOME/.secrets/.env"
+  ok "~/.secrets/.env にトークンを保存しました"
+else
+  ok "トークンは設定済み"
+fi
+
+step "シークレットの展開"
+update-secrets
+
 step "miseランタイム"
 mise install --yes
 export PATH="$HOME/.local/share/mise/shims:$PATH"
