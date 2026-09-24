@@ -674,6 +674,8 @@ in
 
   # settings.jsonはPi自身も更新する（/modelのCtrl+S等）ため、既定モデルが
   # 未設定のときだけローカルQwenを既定にする。
+  # AWS認証情報の環境変数でBedrockが大量に出るので、enabledModelsで
+  # /modelとCtrl+Pの候補をローカルQwenに絞る（/model内のTabで全件表示）。
   home.activation.setupPiDefaultModel = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
     SETTINGS_DIR="$HOME/.pi/agent"
     SETTINGS_FILE="$SETTINGS_DIR/settings.json"
@@ -687,6 +689,7 @@ in
       if .defaultProvider == null then
         .defaultProvider = "qwen-local" | .defaultModel = "Qwen3.8-27B-UD-Q4_K_M"
       else . end
+      | if .enabledModels == null then .enabledModels = ["qwen-local/*"] else . end
     ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" \
       && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
   '';
