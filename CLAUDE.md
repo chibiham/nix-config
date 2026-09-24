@@ -39,8 +39,10 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
     ├── install-applio-ubuntu.sh # Applio（RVC学習・リアルタイム音声変換）
     ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新
     ├── civitai-download.sh # Civitaiモデル取得（linux.nixがコマンド化）
+    ├── install-qwen38-mac-mini.sh # Mac mini用Qwen3.8モデル取得
     ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・排他的user service
     ├── configure-comfyui-tailscale-serve.sh # tailnet内だけにHTTPS公開
+    ├── install-vcclient-mac.sh # VCClient（Macローカルのリアルタイム音声変換）
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
 
@@ -65,7 +67,7 @@ bootstrap.shがやること（すべて冪等、途中失敗しても再実行�
 3. SSH鍵を1Passwordから取得（`op://MyMachine/chibiham_machine_key`）
 4. `update-secrets` でシークレット展開
 5. プライベートリポジトリのclone（memo, clawd, affairs, skills）
-6. mise ランタイム（node/python/pnpm）と pnpm グローバルパッケージ導入
+6. mise ランタイム（node/python）、pnpm と pnpm グローバルパッケージ導入
 7. Homebrew導入 + `brew bundle`（GUIアプリ）
 8. macOSシステム設定（任意、sudo必要）
 
@@ -133,9 +135,11 @@ macOSのセキュリティ制約により自動化できないもの:
 ### パッケージ
 
 - 開発ツール: git, gh, jq, ripgrep, fd, fzf, eza, bat, delta
-- バージョン管理: mise (Node.js, Python, pnpm等はmise管理)
+- バージョン管理: mise（Node.js、Python等。pnpmはmise管理のNode.jsへnpmで導入）
 - LSPサーバー: Nix管理（typescript-language-server, pyright, gopls等 - 全8言語）
 - pnpm グローバルパッケージ: clawdbot（bootstrap.shで導入）
+- コーディングエージェント: Qwen Code, Pi（pi.dev）をmise管理のNode.jsへnpmで導入（bootstrap）。
+  Piは `~/.pi/agent/models.json`（Nix管理）でchibihamuntuのQwen3.8（tailnet経由）を既定モデルにする
 - シークレット管理: 1password-cli + update-secretsコマンド
 - その他: htop, tree, curl, wget, awscli, terraform, flyctl, cloudflared
 - Linux AI推論: CUDA対応llama.cpp + ai-mode（モデル取得は明示スクリプト）

@@ -32,6 +32,7 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
     ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新
     ├── civitai-download.sh # Civitaiモデル取得（linux.nixがコマンド化）
     ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・排他的user service
+    ├── install-qwen38-mac-mini.sh # Mac mini用Qwen3.8モデル取得
     ├── configure-comfyui-tailscale-serve.sh # tailnet内だけにHTTPS公開
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
@@ -50,6 +51,7 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
 | シークレットを追加/ローテーションした | `env.tpl` 編集（追加時のみ）→ 適用 → `update-secrets` |
 | Node/Python等のバージョンを変えたい | `mise use node@XX`（Nixは関与しない） |
 | macOSのdefaults設定を変えたい | `scripts/macos-defaults.sh` を編集して実行 |
+| Mac miniでQwen3.8を使いたい | `scripts/install-qwen38-mac-mini.sh` → `qwen38 start` |
 | パッケージを最新にしたい | `nix flake update` → 適用 |
 | switchしたら環境が壊れた | [→ ロールバック](#切り分けロールバック) |
 
@@ -111,7 +113,7 @@ bootstrap.sh がやること（全ステップ冪等。途中で失敗したら�
 3. SSH鍵（マシン共通鍵）を1Passwordから `~/.ssh/id_ed25519` に取得
 4. `update-secrets` でAPIキー類を `~/.secrets/.env.secrets` に展開
 5. プライベートリポジトリのclone（memo, clawd, affairs, skills）
-6. mise ランタイム（node/python/pnpm）と clawdbot の導入
+6. mise ランタイム（node/python）、pnpm と clawdbot の導入
 7. Homebrew導入（未導入なら）と `brew bundle`（GUIアプリ）
 8. macOSシステム設定（y/n確認あり、sudo必要）
 

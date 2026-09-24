@@ -5,6 +5,8 @@ brew "mas"
 cask "1password"
 cask "alt-tab"
 cask "android-studio"
+# 仮想オーディオデバイス。変換後の音声をZoom/Discord/OBSへ「マイク」として渡す。
+cask "blackhole-2ch"
 cask "brave-browser"
 cask "claude"
 cask "claude-code"

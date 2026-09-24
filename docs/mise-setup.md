@@ -1,6 +1,6 @@
 # mise セットアップ完全ガイド
 
-最終更新: 2026-01-25
+最終更新: 2026-08-29
 
 ## 概要
 
@@ -49,8 +49,9 @@ miseは複数のプログラミング言語のバージョンを管理するツ�
 
 - Node.js (各バージョン)
 - Python (各バージョン)
-- pnpm (パッケージマネージャー)
 - その他言語ランタイム（Ruby, Go, Rust等）
+
+pnpmはmise/Aquaの配布assetに依存させず、mise管理のNode.jsに付属するnpmで導入する。
 
 ## 対応言語
 
@@ -61,7 +62,6 @@ miseは複数のプログラミング言語のバージョンを管理するツ�
 - **Ruby** (`.ruby-version`)
 - **Go** (`.go-version`)
 - **Rust** (`rust-toolchain.toml`)
-- **pnpm** (パッケージマネージャー)
 - その他多数
 
 ## 基本的な使い方
@@ -127,8 +127,9 @@ mise use node@18
 #### パッケージマネージャー
 
 ```bash
-# pnpm も mise で管理
-mise use pnpm@latest
+# mise管理のNode.jsへpnpmをインストール
+mise exec -- npm install -g pnpm@latest
+mise reshim
 
 # グローバルパッケージインストール
 pnpm add -g some-package
@@ -436,10 +437,11 @@ mise use --global node@22
 ```bash
 # 1. pnpm確認
 which pnpm
-mise ls | grep pnpm
+npm list -g --depth=0 | grep pnpm
 
 # 2. pnpmインストール
-mise use --global pnpm@latest
+mise exec -- npm install -g pnpm@latest
+mise reshim
 
 # 3. グローバルパッケージ再インストール
 pnpm add -g clawdbot@latest
@@ -464,7 +466,6 @@ vim ~/dotfiles/.config/nix-config/home/common.nix
 # [tools]
 # node = "22"
 # python = "3.12"
-# pnpm = "latest"
 
 # 適用
 cd ~/dotfiles/.config/nix-config
@@ -645,6 +646,7 @@ home-manager switch --flake .#chibiham@wsl
 - mise統合（Nix + Home Manager）
 - direnv連携
 - 対応言語: Node.js, Python, Go, Rust, Ruby
-- グローバルデフォルト: Node.js 22, Python 3.12, pnpm latest
+- グローバルデフォルト: Node.js 22, Python 3.12
+- pnpmはmise管理のNode.jsへnpmで導入
 - LSPサーバーはNix管理継続
 - activation hookによる自動インストール

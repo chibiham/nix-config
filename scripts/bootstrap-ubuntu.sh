@@ -64,6 +64,12 @@ if ! command -v qwen >/dev/null; then
   mise reshim
 fi
 
+step "Pi"
+if ! command -v pi >/dev/null; then
+  mise exec -- npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest
+  mise reshim
+fi
+
 step "Codex CLI"
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
 

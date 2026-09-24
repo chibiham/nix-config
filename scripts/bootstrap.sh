@@ -160,6 +160,16 @@ else
   ok "Qwen Code はインストール済み"
 fi
 
+# Pi（pi.dev）。公式手順どおり--ignore-scriptsで導入する。
+# 接続先（chibihamuntuのQwen）はHome Managerの~/.pi/agent/models.jsonで設定済み。
+if ! command -v pi &>/dev/null; then
+  mise exec -- npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest \
+    && mise reshim \
+    && ok "Pi をインストールしました"
+else
+  ok "Pi はインストール済み"
+fi
+
 # -------------------------------------------------
 # 8. Homebrew + GUIアプリ（Brewfile）
 #    CLIツールはNix管理。casks/masのGUIアプリのみHomebrewで導入

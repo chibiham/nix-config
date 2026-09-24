@@ -621,6 +621,76 @@ in
     fi
   '';
 
+  # Pi（pi.dev）からtailnet内のllama.cppルーター（chibihamuntuのQwen3.8）を利用する。
+  # compat・thinking設定はPi組み込みのllama.cppプロバイダーと同じ値。
+  # models.jsonはPi自身は書き換えないためNix管理にする。
+  home.file.".pi/agent/models.json".text = builtins.toJSON {
+    providers.qwen-local =
+      let
+        qwenModel = id: name: {
+          inherit id name;
+          reasoning = true;
+          thinkingLevelMap = {
+            off = "off";
+            minimal = null;
+            low = null;
+            medium = "medium";
+            high = null;
+            xhigh = null;
+          };
+          input = [
+            "text"
+            "image"
+          ];
+          contextWindow = 131072;
+          maxTokens = 32768;
+          cost = {
+            input = 0;
+            output = 0;
+            cacheRead = 0;
+            cacheWrite = 0;
+          };
+        };
+      in
+      {
+        baseUrl = "https://chibihamuntu.tailded45d.ts.net:8443/v1";
+        api = "openai-completions";
+        apiKey = "not-needed";
+        compat = {
+          supportsStore = false;
+          supportsDeveloperRole = false;
+          supportsReasoningEffort = false;
+          supportsUsageInStreaming = true;
+          supportsStrictMode = false;
+          maxTokensField = "max_tokens";
+          thinkingFormat = "qwen-chat-template";
+        };
+        models = [
+          (qwenModel "Qwen3.8-27B-UD-Q4_K_M" "Qwen3.8 27B (Ubuntu)")
+          (qwenModel "Qwen3.8-27B-Uncensored-Q4_K_M" "Qwen3.8 27B Uncensored (Ubuntu)")
+        ];
+      };
+  };
+
+  # settings.jsonはPi自身も更新する（/modelのCtrl+S等）ため、既定モデルが
+  # 未設定のときだけローカルQwenを既定にする。
+  home.activation.setupPiDefaultModel = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    SETTINGS_DIR="$HOME/.pi/agent"
+    SETTINGS_FILE="$SETTINGS_DIR/settings.json"
+    mkdir -p "$SETTINGS_DIR"
+
+    if [ ! -f "$SETTINGS_FILE" ]; then
+      echo '{}' > "$SETTINGS_FILE"
+    fi
+
+    ${pkgs.jq}/bin/jq '
+      if .defaultProvider == null then
+        .defaultProvider = "qwen-local" | .defaultModel = "Qwen3.8-27B-UD-Q4_K_M"
+      else . end
+    ' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp" \
+      && mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
+  '';
+
   # Qwen Codeからtailnet内のOpenAI互換llama.cppサーバーを利用する。
   # settings.jsonはQwen Code自身も更新するため、Nix Storeへのリンクではなく
   # activationで対象項目だけを冪等にマージする。
