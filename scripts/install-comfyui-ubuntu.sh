@@ -86,6 +86,9 @@ PY
 
 step "systemd user service"
 mkdir -p "$SERVICE_DIR"
+# --fast fp16_accumulation: fp16の行列積・畳み込みをfp16で累積する（RTX 3090では約2倍のスループット）。
+# 対応するVAE/モデルが高速化される。
+# https://blog.comfy.org/p/making-the-minimax-h3-video-vae-2x
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=ComfyUI
@@ -97,7 +100,7 @@ Type=simple
 WorkingDirectory=$COMFY_DIR
 Environment=CC=/usr/bin/cc
 Environment=CXX=/usr/bin/c++
-ExecStart=$COMFY_DIR/.venv/bin/python $COMFY_DIR/main.py --listen 127.0.0.1 --port 8188 --enable-manager
+ExecStart=$COMFY_DIR/.venv/bin/python $COMFY_DIR/main.py --listen 127.0.0.1 --port 8188 --enable-manager --fast fp16_accumulation
 Restart=on-failure
 RestartSec=5
 
