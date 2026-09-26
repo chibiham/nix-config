@@ -713,6 +713,8 @@ in
         models = [
           (qwenModel "Qwen3.8-27B-UD-Q4_K_M" "Qwen3.8 27B (Ubuntu)")
           (qwenModel "Qwen3.8-27B-Uncensored-Q4_K_M" "Qwen3.8 27B Uncensored (Ubuntu)")
+          (qwenModel "Qwen3.8-Flash-Next-UD-Q3_K_XL" "Qwen3.8 Flash Next (Ubuntu)")
+          (qwenModel "Qwen3.8-Flash-Next-Uncensored-i1-IQ3_M" "Qwen3.8 Flash Next Uncensored (Ubuntu)")
         ];
       };
   };
