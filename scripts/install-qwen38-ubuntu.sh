@@ -24,6 +24,15 @@ FLASH_MODEL_REVISION="38bb39ee97821de2c9009abb7e93950eec396e66"
 FLASH_MODEL_QUANT="UD-Q3_K_XL"
 FLASH_MODEL_SHARDS=3
 FLASH_MODEL_VISION_FILE="mmproj-BF16.gguf"
+# orcarouter/Qwen3.8-Flash-Next-Uncensored（元リポジトリはHFログイン必須）のmradermacher imatrix量子化。
+# i1-IQ3_Mは非エキスパート部分がUD-Q3_K_XLより小さく、3層多くGPUへ置ける（実測でVRAM 22.6GB、生成約22 tok/s）。
+FLASH_UNCENSORED_MODEL_REPO="mradermacher/Qwen3.8-Flash-Next-Uncensored-i1-GGUF"
+FLASH_UNCENSORED_MODEL_REVISION="27694ee82244cdac3539501330e9bbde98d5d8b8"
+FLASH_UNCENSORED_MODEL_FILE="Qwen3.8-Flash-Next-Uncensored.i1-IQ3_M.gguf"
+FLASH_UNCENSORED_VISION_REPO="mradermacher/Qwen3.8-Flash-Next-Uncensored-GGUF"
+FLASH_UNCENSORED_VISION_REVISION="61f739cd47b26ba67764deb28c99c92501892e26"
+FLASH_UNCENSORED_VISION_FILE="Qwen3.8-Flash-Next-Uncensored.mmproj-f16.gguf"
+FLASH_UNCENSORED_N_CPU_MOE="${QWEN_FLASH_UNCENSORED_N_CPU_MOE:-35}"
 # エキスパートをRAMへ置く層数（48層中）。ubatch 2048の計算バッファ（約4GB）と128K ctxを含めて
 # VRAM 24GBに収まる実測値。ubatchを512から上げるとprompt処理が約100→480 tok/sになる（生成は約21 tok/s）。
 FLASH_N_CPU_MOE="${QWEN_FLASH_N_CPU_MOE:-38}"
@@ -35,6 +44,7 @@ SERVICE_FILE="$SERVICE_DIR/qwen38.service"
 PRESET_DIR="$HOME/.config/llama.cpp"
 PRESET_FILE="$PRESET_DIR/qwen38-models.ini"
 CHAT_TEMPLATE_FILE="$PRESET_DIR/qwen38-chat-template.jinja"
+FLASH_CHAT_TEMPLATE_FILE="$PRESET_DIR/qwen38-flash-chat-template.jinja"
 PORT="${QWEN_PORT:-8080}"
 CONTEXT_SIZE="${QWEN_CONTEXT_SIZE:-131072}"
 TAILSCALE_HTTPS_PORT="${QWEN_TAILSCALE_HTTPS_PORT:-8443}"
@@ -90,7 +100,7 @@ download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORE
 download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_FILE"
 download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_VISION_REMOTE_FILE" "$HERETIC_MODEL_VISION_FILE"
 
-step "Qwen3.8-Flash-Next $FLASH_MODEL_QUANT とVision Projectorを取得"
+step "Qwen3.8-Flash-Next $FLASH_MODEL_QUANT、Uncensored i1-IQ3_MとVision Projectorを取得"
 mkdir -p "$FLASH_MODEL_DIR"
 flash_shard() { printf 'Qwen3.8-Flash-Next-%s-%05d-of-%05d.gguf' "$FLASH_MODEL_QUANT" "$1" "$FLASH_MODEL_SHARDS"; }
 for ((i = 1; i <= FLASH_MODEL_SHARDS; i++)); do
@@ -98,20 +108,27 @@ for ((i = 1; i <= FLASH_MODEL_SHARDS; i++)); do
   download_model "$FLASH_MODEL_REPO" "$FLASH_MODEL_REVISION" "$FLASH_MODEL_QUANT/$shard" "$shard" "$FLASH_MODEL_DIR"
 done
 download_model "$FLASH_MODEL_REPO" "$FLASH_MODEL_REVISION" "$FLASH_MODEL_VISION_FILE" "$FLASH_MODEL_VISION_FILE" "$FLASH_MODEL_DIR"
+download_model "$FLASH_UNCENSORED_MODEL_REPO" "$FLASH_UNCENSORED_MODEL_REVISION" "$FLASH_UNCENSORED_MODEL_FILE" "$FLASH_UNCENSORED_MODEL_FILE" "$FLASH_MODEL_DIR"
+download_model "$FLASH_UNCENSORED_VISION_REPO" "$FLASH_UNCENSORED_VISION_REVISION" "$FLASH_UNCENSORED_VISION_FILE" "$FLASH_UNCENSORED_VISION_FILE" "$FLASH_MODEL_DIR"
 
 step "Router model presets"
 mkdir -p "$PRESET_DIR"
 
 # Uncensored版の埋め込みテンプレートは複数system messageを拒否するため、
-# Codexで動作する通常版GGUFのテンプレートを共用する。
-uvx --from gguf python -c '
+# Codexで動作する通常版GGUF（unsloth）のテンプレートを共用する。27B・Flash-Nextとも同じ事情。
+extract_chat_template() {
+  local gguf="$1" output="$2"
+  uvx --from gguf python -c '
 import sys
 from gguf import GGUFReader
 
 field = GGUFReader(sys.argv[1]).fields["tokenizer.chat_template"]
 sys.stdout.write(bytes(field.parts[-1]).decode("utf-8"))
-' "$MODEL_DIR/$MODEL_FILE" > "$CHAT_TEMPLATE_FILE.tmp"
-mv "$CHAT_TEMPLATE_FILE.tmp" "$CHAT_TEMPLATE_FILE"
+' "$gguf" > "$output.tmp"
+  mv "$output.tmp" "$output"
+}
+extract_chat_template "$MODEL_DIR/$MODEL_FILE" "$CHAT_TEMPLATE_FILE"
+extract_chat_template "$FLASH_MODEL_DIR/$(flash_shard 1)" "$FLASH_CHAT_TEMPLATE_FILE"
 
 cat > "$PRESET_FILE" <<EOF
 version = 1
@@ -137,6 +154,14 @@ mmproj = $MODEL_DIR/$HERETIC_MODEL_VISION_FILE
 model = $FLASH_MODEL_DIR/$(flash_shard 1)
 mmproj = $FLASH_MODEL_DIR/$FLASH_MODEL_VISION_FILE
 n-cpu-moe = $FLASH_N_CPU_MOE
+batch-size = $FLASH_UBATCH_SIZE
+ubatch-size = $FLASH_UBATCH_SIZE
+
+[Qwen3.8-Flash-Next-Uncensored-i1-IQ3_M]
+model = $FLASH_MODEL_DIR/$FLASH_UNCENSORED_MODEL_FILE
+mmproj = $FLASH_MODEL_DIR/$FLASH_UNCENSORED_VISION_FILE
+chat-template-file = $FLASH_CHAT_TEMPLATE_FILE
+n-cpu-moe = $FLASH_UNCENSORED_N_CPU_MOE
 batch-size = $FLASH_UBATCH_SIZE
 ubatch-size = $FLASH_UBATCH_SIZE
 EOF

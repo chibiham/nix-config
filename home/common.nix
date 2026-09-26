@@ -518,6 +518,28 @@ in
     wire_api = "responses"
     requires_openai_auth = false
   '';
+  home.file.".codex/qwen-local-flash-uncensored.config.toml".text = ''
+    model = "Qwen3.8-Flash-Next-Uncensored-i1-IQ3_M"
+    model_provider = "qwen-local"
+    model_context_window = 131072
+    analytics.enabled = false
+    feedback.enabled = false
+
+    [tui]
+    status_line = ["model-name", "context-remaining", "context-window-size", "used-tokens", "current-dir"]
+
+    [otel]
+    exporter = "none"
+    metrics_exporter = "none"
+    trace_exporter = "none"
+    log_user_prompt = false
+
+    [model_providers.qwen-local]
+    name = "Qwen local (Ubuntu)"
+    base_url = "https://chibihamuntu.tailded45d.ts.net:8443/v1"
+    wire_api = "responses"
+    requires_openai_auth = false
+  '';
 
   # ===================
   # 環境変数
@@ -750,6 +772,18 @@ in
             "id": "Qwen3.8-Flash-Next-UD-Q3_K_XL",
             "name": "Qwen3.8 Flash Next (Ubuntu)",
             "description": "Local Qwen3.8-Flash-Next via Tailscale",
+            "envKey": "LOCAL_QWEN_API_KEY",
+            "baseUrl": $baseUrl,
+            "generationConfig": {
+              "timeout": 300000,
+              "maxRetries": 1,
+              "contextWindowSize": 131072
+            }
+          },
+          {
+            "id": "Qwen3.8-Flash-Next-Uncensored-i1-IQ3_M",
+            "name": "Qwen3.8 Flash Next Uncensored (Ubuntu)",
+            "description": "Local uncensored Qwen3.8-Flash-Next via Tailscale",
             "envKey": "LOCAL_QWEN_API_KEY",
             "baseUrl": $baseUrl,
             "generationConfig": {
