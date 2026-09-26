@@ -199,7 +199,7 @@ ComfyUIを明示的に更新する場合:
 Civitaiのモデルは`civitai-download <URL>`（Claude Codeからは`civitai-download` skill）で、
 種別に応じた`~/ComfyUI/models/`以下へ取得できる。`CIVITAI_TOKEN`は上記のchibihamuntu Vaultから展開する。モデルごとにVAE、text encoder、diffusion modelなどの配置先が異なる場合は、そのモデルの公式手順に従う。
 
-## Qwen3.8-27B
+## Qwen3.8（27B / Flash-Next）
 
 Home Manager設定を適用すると、CUDA対応llama.cppと、ComfyUI/Qwenを切り替える
 `ai-mode`コマンドが導入される。Ubuntu管理のNVIDIAドライバから`libcuda`だけを
@@ -213,7 +213,12 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 
 インストーラは、固定したリビジョンからQwen3.8-27B UD-Q4_K_M、UD-Q4_K_XLと
 Qwen3.8-27B-Uncensored Q4_K_M、Uncensored-Heretic-v2 UD-Q4_K_XLを
-`~/models/qwen3.8-27b/`へaria2で並列・再開可能な形で取得する。各モデルのVision Projectorも
+`~/models/qwen3.8-27b/`へaria2で並列・再開可能な形で取得する。
+あわせてQwen3.8-Flash-Next（125B-A6B MoE、llama.cpp v0.5.0以降）のUD-Q3_K_XLを
+`~/models/qwen3.8-flash-next/`へ取得する。VRAMに収まらないエキスパートは`n-cpu-moe`で
+RAMへ置き（48層中38層）、n-gram埋め込み（約29GB）はmmapのまま使う。ubatchを2048にして
+prompt処理を速くしている（実測: prompt約480 tok/s、生成約21 tok/s。ロード直後はページキャッシュが
+温まるまで遅い）。`codex -p qwen-local-flash`で選べる。各モデルのVision Projectorも
 取得してRouter presetで関連付け、画像入力を有効にする。
 128K context、Q8 KV cache、単一モデルだけをVRAMへロードするRouterモードの
 `qwen38.service`を作成する。内蔵Web UIでモデルを切り替えられ、再実行しても取得済みファイルは再取得しない。

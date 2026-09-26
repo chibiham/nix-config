@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Qwen3.8-27Bの通常版・Uncensored版を取得し、切替可能なuser serviceを構成する。
+# Qwen3.8-27Bの通常版・Uncensored版とQwen3.8-Flash-Nextを取得し、切替可能なuser serviceを構成する。
 set -euo pipefail
 
 MODEL_REPO="unsloth/Qwen3.8-27B-GGUF"
@@ -16,7 +16,20 @@ HERETIC_MODEL_REVISION="f4dc8fb5115f21b55b0d093660ef32bb7303369a"
 HERETIC_MODEL_FILE="Qwen3.8-27B-Uncensored-Heretic-v2-UD-Q4_K_XL.gguf"
 HERETIC_MODEL_VISION_REMOTE_FILE="mmproj-BF16.gguf"
 HERETIC_MODEL_VISION_FILE="Qwen3.8-27B-Uncensored-Heretic-v2-mmproj-BF16.gguf"
+# Qwen3.8-Flash-Next（125B-A6B MoE + 51B n-gram埋め込み）。llama.cpp v0.5.0以降が必要。
+# Q3_K_XLはエキスパートの一部をGPU、残りをRAMに置いて62GB RAM + 24GB VRAMに収まる上限。
+# n-gram埋め込み（per_layer_token_embd）は1トークンあたり数行しか読まないのでmmapのままでよい。
+FLASH_MODEL_REPO="unsloth/Qwen3.8-Flash-Next-GGUF"
+FLASH_MODEL_REVISION="38bb39ee97821de2c9009abb7e93950eec396e66"
+FLASH_MODEL_QUANT="UD-Q3_K_XL"
+FLASH_MODEL_SHARDS=3
+FLASH_MODEL_VISION_FILE="mmproj-BF16.gguf"
+# エキスパートをRAMへ置く層数（48層中）。ubatch 2048の計算バッファ（約4GB）と128K ctxを含めて
+# VRAM 24GBに収まる実測値。ubatchを512から上げるとprompt処理が約100→480 tok/sになる（生成は約21 tok/s）。
+FLASH_N_CPU_MOE="${QWEN_FLASH_N_CPU_MOE:-38}"
+FLASH_UBATCH_SIZE="${QWEN_FLASH_UBATCH_SIZE:-2048}"
 MODEL_DIR="${QWEN_MODEL_DIR:-$HOME/models/qwen3.8-27b}"
+FLASH_MODEL_DIR="${QWEN_FLASH_MODEL_DIR:-$HOME/models/qwen3.8-flash-next}"
 SERVICE_DIR="$HOME/.config/systemd/user"
 SERVICE_FILE="$SERVICE_DIR/qwen38.service"
 PRESET_DIR="$HOME/.config/llama.cpp"
@@ -48,8 +61,8 @@ if ! nvidia-smi >/dev/null 2>&1; then
 fi
 
 download_model() {
-  local repo="$1" revision="$2" file="$3" output="${4:-$3}"
-  local path="$MODEL_DIR/$output"
+  local repo="$1" revision="$2" file="$3" output="${4:-$3}" dir="${5:-$MODEL_DIR}"
+  local path="$dir/$output"
   if [[ -s "$path" ]]; then
     ok "$path は取得済みです"
     return
@@ -57,7 +70,7 @@ download_model() {
 
   aria2c --continue=true --max-connection-per-server=16 --split=16 \
     --min-split-size=16M --max-tries=0 --retry-wait=5 \
-    --dir="$MODEL_DIR" --out="$output.part" \
+    --dir="$dir" --out="$output.part" \
     "https://huggingface.co/$repo/resolve/$revision/$file"
   mv "$path.part" "$path"
   ok "$path を取得しました"
@@ -76,6 +89,15 @@ download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORE
 download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORED_MODEL_VISION_FILE"
 download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_FILE"
 download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_VISION_REMOTE_FILE" "$HERETIC_MODEL_VISION_FILE"
+
+step "Qwen3.8-Flash-Next $FLASH_MODEL_QUANT とVision Projectorを取得"
+mkdir -p "$FLASH_MODEL_DIR"
+flash_shard() { printf 'Qwen3.8-Flash-Next-%s-%05d-of-%05d.gguf' "$FLASH_MODEL_QUANT" "$1" "$FLASH_MODEL_SHARDS"; }
+for ((i = 1; i <= FLASH_MODEL_SHARDS; i++)); do
+  shard="$(flash_shard "$i")"
+  download_model "$FLASH_MODEL_REPO" "$FLASH_MODEL_REVISION" "$FLASH_MODEL_QUANT/$shard" "$shard" "$FLASH_MODEL_DIR"
+done
+download_model "$FLASH_MODEL_REPO" "$FLASH_MODEL_REVISION" "$FLASH_MODEL_VISION_FILE" "$FLASH_MODEL_VISION_FILE" "$FLASH_MODEL_DIR"
 
 step "Router model presets"
 mkdir -p "$PRESET_DIR"
@@ -110,13 +132,20 @@ chat-template-file = $CHAT_TEMPLATE_FILE
 [Qwen3.8-27B-Uncensored-Heretic-v2-UD-Q4_K_XL]
 model = $MODEL_DIR/$HERETIC_MODEL_FILE
 mmproj = $MODEL_DIR/$HERETIC_MODEL_VISION_FILE
+
+[Qwen3.8-Flash-Next-$FLASH_MODEL_QUANT]
+model = $FLASH_MODEL_DIR/$(flash_shard 1)
+mmproj = $FLASH_MODEL_DIR/$FLASH_MODEL_VISION_FILE
+n-cpu-moe = $FLASH_N_CPU_MOE
+batch-size = $FLASH_UBATCH_SIZE
+ubatch-size = $FLASH_UBATCH_SIZE
 EOF
 
 step "systemd user service"
 mkdir -p "$SERVICE_DIR"
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=Qwen3.8-27B model router (llama.cpp)
+Description=Qwen3.8 model router (llama.cpp)
 After=network-online.target
 Wants=network-online.target
 Conflicts=comfyui.service
