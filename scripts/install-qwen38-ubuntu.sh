@@ -173,7 +173,6 @@ cat > "$SERVICE_FILE" <<EOF
 Description=Qwen3.8 model router (llama.cpp)
 After=network-online.target
 Wants=network-online.target
-Conflicts=comfyui.service
 
 [Service]
 Type=simple
@@ -194,12 +193,15 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=default.target
+WantedBy=comfyui.service
 EOF
 
 systemctl --user daemon-reload
-# 再起動後は既存のComfyUIを既定とする。Qwenはai-mode qwenで明示起動する。
+# Router本体はモデル未ロードならVRAMを使わないので、ComfyUIと同時に動かしてよい。
+# ComfyUIのノードがComfyUI側のモデルを退避してからLLMをロードし、生成後にアンロードする。
+# 再起動後はComfyUIに連れて起動する（モデルはロードしない）。ai-mode qwenはComfyUIを止めて専有する。
 systemctl --user disable qwen38.service >/dev/null 2>&1 || true
+systemctl --user enable qwen38.service >/dev/null
 systemctl --user start qwen38.service
 
 ok "Qwen3.8 model routerを起動しました: http://127.0.0.1:$PORT"

@@ -31,7 +31,7 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
     ├── install-applio-ubuntu.sh # Applio（RVC学習・リアルタイム音声変換）
     ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新
     ├── civitai-download.sh # Civitaiモデル取得（linux.nixがコマンド化）
-    ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・排他的user service
+    ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・Router user service
     ├── install-qwen38-mac-mini.sh # Mac mini用Qwen3.8モデル取得
     ├── configure-comfyui-tailscale-serve.sh # tailnet内だけにHTTPS公開
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）

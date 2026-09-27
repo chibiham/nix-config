@@ -225,19 +225,24 @@ Qwen3.8-Flash-Next-Uncensoredのmradermacher i1-IQ3_M（`n-cpu-moe`は35）も�
 128K context、Q8 KV cache、単一モデルだけをVRAMへロードするRouterモードの
 `qwen38.service`を作成する。内蔵Web UIでモデルを切り替えられ、再実行しても取得済みファイルは再取得しない。
 
-RTX 3090を共有するため、`qwen38.service`・`comfyui.service`・`applio.service`は
-unitの`Conflicts=`で排他的に起動する。LoRA学習も private repo（`~/ai`）の`lora-train`が
-同じ`Conflicts=`を持つ一時unitとして起動し、学習中は`ai-mode`での切替を拒否する。
+RTX 3090を共有するため、`applio.service`はComfyUI・Qwenとunitの`Conflicts=`で排他的に起動する。
+LoRA学習も private repo（`~/ai`）の`lora-train`が同じ`Conflicts=`を持つ一時unitとして起動し、
+学習中は`ai-mode`での切替を拒否する。
+
+Qwen Router（`qwen38.service`）の親プロセスはモデル未ロードならVRAMを使わないため、
+`WantedBy=comfyui.service`でComfyUIと同時に動かす。ComfyUIのノードからLLMを使うときは、
+ノードがComfyUI側のモデルを退避 → `/models/load` → 生成 → `/models/unload` の順に
+VRAMを受け渡す（ノード自体は private repo 側）。チャット等でQwenを専有するときは`ai-mode qwen`。
 
 ```bash
-ai-mode qwen    # 他を止めてQwenを起動
-ai-mode comfy   # 他を止めてComfyUIを起動
+ai-mode qwen    # ComfyUIを止めてQwenを専有
+ai-mode comfy   # Qwenのロード済みモデルを下ろし、ComfyUIとQwen Router（モデル未ロード）を起動
 ai-mode applio  # 他を止めてApplioを起動
 ai-mode stop    # すべて停止（LoRA学習は止めない）
 ai-mode status  # 各サービスと学習の状態
 ```
 
-Qwenは再起動時に自動起動せず、既存のComfyUIを既定のままにする。APIは
+再起動後はComfyUIとQwen Router（モデル未ロード）が起動する。APIは
 `http://127.0.0.1:8080/v1`で待ち受ける。Tailscale接続済みの場合、内蔵Web UIは
 HTTPS 8443番でもtailnet内限定で公開する。公開ポートは
 `QWEN_TAILSCALE_HTTPS_PORT`で変更できる。

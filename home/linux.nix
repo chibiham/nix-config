@@ -8,13 +8,28 @@ let
   llama-cpp-cuda = pkgs.llama-cpp.override { cudaSupport = true; };
 
   # 3090の24GBを取り合うサービス（Qwen/ComfyUI/Applio）を排他で切り替える。
-  # 実体の排他はunit側のConflicts=で担保し、ここは入口を揃えるだけにする。
+  # Applio・LoRA学習の排他はunit側のConflicts=で担保する。
+  # Qwen RouterはモデルをロードしていなければVRAMを使わないので、ComfyUIと同時に動かし、
+  # ComfyUIのノードからLLMをロード→生成→アンロードする。qwenモードではComfyUIを止めて専有する。
   ai-mode = pkgs.writeShellScriptBin "ai-mode" ''
     set -euo pipefail
 
     usage() {
       echo "usage: ai-mode {qwen|comfy|applio|stop|status}" >&2
       exit 2
+    }
+
+    # チャット等でロードしたままのモデルを下ろしてから、ComfyUIへVRAMを渡す
+    unload_qwen_models() {
+      local models model
+      systemctl --user is-active --quiet qwen38.service || return 0
+      models=$(${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:8080/models 2>/dev/null \
+        | ${pkgs.jq}/bin/jq -r '.data[] | select(.status.value != "unloaded") | .id') || return 0
+      for model in $models; do
+        echo "Qwenのモデルをアンロード: $model" >&2
+        ${pkgs.curl}/bin/curl -fsS --max-time 30 -H 'Content-Type: application/json' \
+          -d "{\"model\":\"$model\"}" http://127.0.0.1:8080/models/unload >/dev/null || true
+      done
     }
 
     # LoRA学習（~/ai/scripts/lora-train）もConflicts=で排他にしているため、
@@ -30,11 +45,14 @@ let
     case "''${1:-}" in
       qwen)
         guard_training
+        systemctl --user stop comfyui.service
         systemctl --user start qwen38.service
         ;;
       comfy)
         guard_training
-        systemctl --user start comfyui.service
+        unload_qwen_models
+        # qwen38.serviceはWantedBy=comfyui.serviceで一緒に起動する
+        systemctl --user start comfyui.service qwen38.service
         ;;
       applio)
         guard_training

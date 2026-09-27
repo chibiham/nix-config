@@ -40,7 +40,7 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
     ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新
     ├── civitai-download.sh # Civitaiモデル取得（linux.nixがコマンド化）
     ├── install-qwen38-mac-mini.sh # Mac mini用Qwen3.8モデル取得
-    ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・排他的user service
+    ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・Router user service
     ├── configure-comfyui-tailscale-serve.sh # tailnet内だけにHTTPS公開
     ├── install-vcclient-mac.sh # VCClient（Macローカルのリアルタイム音声変換）
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
@@ -143,7 +143,8 @@ macOSのセキュリティ制約により自動化できないもの:
 - シークレット管理: 1password-cli + update-secretsコマンド
 - その他: htop, tree, curl, wget, awscli, terraform, flyctl, cloudflared
 - Linux AI推論: CUDA対応llama.cpp + ai-mode（モデル取得は明示スクリプト）
-- ai-modeの排他対象: qwen38 / comfyui / applio。3090の24GBを取り合うため、unitの `Conflicts=` で同時起動を禁止している
+- ai-modeの排他対象: qwen38 / comfyui / applio。3090の24GBを取り合うため、applioはunitの `Conflicts=` で同時起動を禁止している。
+  qwen38（Router）はモデル未ロードならVRAMを使わないのでComfyUIと同時に動かし、VRAMの受け渡しはComfyUIノードと `ai-mode` が行う
 
 ### macOS統合
 
