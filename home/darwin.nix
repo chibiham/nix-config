@@ -29,6 +29,7 @@
       export SWITCHBOT_SECRET="op://MyMachine/SWITCHBOT_SECRET/credential"
       export XAI_API_KEY="op://MyMachine/XAI_API_KEY/credential"
       export GITHUB_TOKEN="op://MyMachine/GITHUB_TOKEN/credential"
+      export CONTROL_PLANE_API_KEY="op://MyMachine/OPENAI_TUNNEL_API_KEY/credential"
     '';
   };
 

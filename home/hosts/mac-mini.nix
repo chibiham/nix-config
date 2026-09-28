@@ -58,6 +58,8 @@ let
 in
 
 {
+  imports = [ ./blender-mcp-tunnel.nix ];
+
   home.packages = [
     pkgs.llama-cpp
     pkgs.aria2
