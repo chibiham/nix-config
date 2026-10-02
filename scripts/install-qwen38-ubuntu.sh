@@ -33,6 +33,13 @@ FLASH_UNCENSORED_VISION_REPO="mradermacher/Qwen3.8-Flash-Next-Uncensored-GGUF"
 FLASH_UNCENSORED_VISION_REVISION="61f739cd47b26ba67764deb28c99c92501892e26"
 FLASH_UNCENSORED_VISION_FILE="Qwen3.8-Flash-Next-Uncensored.mmproj-f16.gguf"
 FLASH_UNCENSORED_N_CPU_MOE="${QWEN_FLASH_UNCENSORED_N_CPU_MOE:-35}"
+# huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated のmradermacher静的量子化（i1は未公開）。
+# 公式GGUFのUD-Q4_K_XL（111GB）はRAM+VRAMを超えるので、同じ90GB級のQ3_K_Sを使う。
+FLASH_ABLITERATED_MODEL_REPO="mradermacher/Huihui-Qwen3.8-Flash-Next-abliterated-GGUF"
+FLASH_ABLITERATED_MODEL_REVISION="ca27375ea941f67768d01f5bfccca096a84808c4"
+FLASH_ABLITERATED_MODEL_FILE="Huihui-Qwen3.8-Flash-Next-abliterated.Q3_K_S.gguf"
+FLASH_ABLITERATED_VISION_FILE="Huihui-Qwen3.8-Flash-Next-abliterated.mmproj-f16.gguf"
+FLASH_ABLITERATED_N_CPU_MOE="${QWEN_FLASH_ABLITERATED_N_CPU_MOE:-35}"
 # エキスパートをRAMへ置く層数（48層中）。ubatch 2048の計算バッファ（約4GB）と128K ctxを含めて
 # VRAM 24GBに収まる実測値。ubatchを512から上げるとprompt処理が約100→480 tok/sになる（生成は約21 tok/s）。
 FLASH_N_CPU_MOE="${QWEN_FLASH_N_CPU_MOE:-38}"
@@ -100,7 +107,7 @@ download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORE
 download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_FILE"
 download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_VISION_REMOTE_FILE" "$HERETIC_MODEL_VISION_FILE"
 
-step "Qwen3.8-Flash-Next $FLASH_MODEL_QUANT、Uncensored i1-IQ3_MとVision Projectorを取得"
+step "Qwen3.8-Flash-Next $FLASH_MODEL_QUANT、Uncensored i1-IQ3_M、Abliterated Q3_K_SとVision Projectorを取得"
 mkdir -p "$FLASH_MODEL_DIR"
 flash_shard() { printf 'Qwen3.8-Flash-Next-%s-%05d-of-%05d.gguf' "$FLASH_MODEL_QUANT" "$1" "$FLASH_MODEL_SHARDS"; }
 for ((i = 1; i <= FLASH_MODEL_SHARDS; i++)); do
@@ -110,12 +117,15 @@ done
 download_model "$FLASH_MODEL_REPO" "$FLASH_MODEL_REVISION" "$FLASH_MODEL_VISION_FILE" "$FLASH_MODEL_VISION_FILE" "$FLASH_MODEL_DIR"
 download_model "$FLASH_UNCENSORED_MODEL_REPO" "$FLASH_UNCENSORED_MODEL_REVISION" "$FLASH_UNCENSORED_MODEL_FILE" "$FLASH_UNCENSORED_MODEL_FILE" "$FLASH_MODEL_DIR"
 download_model "$FLASH_UNCENSORED_VISION_REPO" "$FLASH_UNCENSORED_VISION_REVISION" "$FLASH_UNCENSORED_VISION_FILE" "$FLASH_UNCENSORED_VISION_FILE" "$FLASH_MODEL_DIR"
+download_model "$FLASH_ABLITERATED_MODEL_REPO" "$FLASH_ABLITERATED_MODEL_REVISION" "$FLASH_ABLITERATED_MODEL_FILE" "$FLASH_ABLITERATED_MODEL_FILE" "$FLASH_MODEL_DIR"
+download_model "$FLASH_ABLITERATED_MODEL_REPO" "$FLASH_ABLITERATED_MODEL_REVISION" "$FLASH_ABLITERATED_VISION_FILE" "$FLASH_ABLITERATED_VISION_FILE" "$FLASH_MODEL_DIR"
 
 step "Router model presets"
 mkdir -p "$PRESET_DIR"
 
 # Uncensored版の埋め込みテンプレートは複数system messageを拒否するため、
 # Codexで動作する通常版GGUF（unsloth）のテンプレートを共用する。27B・Flash-Nextとも同じ事情。
+# Abliterated版もテンプレート自体は変えていないので、挙動を揃えるため同じものを使う。
 extract_chat_template() {
   local gguf="$1" output="$2"
   uvx --from gguf python -c '
@@ -162,6 +172,14 @@ model = $FLASH_MODEL_DIR/$FLASH_UNCENSORED_MODEL_FILE
 mmproj = $FLASH_MODEL_DIR/$FLASH_UNCENSORED_VISION_FILE
 chat-template-file = $FLASH_CHAT_TEMPLATE_FILE
 n-cpu-moe = $FLASH_UNCENSORED_N_CPU_MOE
+batch-size = $FLASH_UBATCH_SIZE
+ubatch-size = $FLASH_UBATCH_SIZE
+
+[Qwen3.8-Flash-Next-Abliterated-Q3_K_S]
+model = $FLASH_MODEL_DIR/$FLASH_ABLITERATED_MODEL_FILE
+mmproj = $FLASH_MODEL_DIR/$FLASH_ABLITERATED_VISION_FILE
+chat-template-file = $FLASH_CHAT_TEMPLATE_FILE
+n-cpu-moe = $FLASH_ABLITERATED_N_CPU_MOE
 batch-size = $FLASH_UBATCH_SIZE
 ubatch-size = $FLASH_UBATCH_SIZE
 EOF
