@@ -186,6 +186,8 @@ ubatch-size = $FLASH_UBATCH_SIZE
 EOF
 
 step "systemd user service"
+# --agentはWeb UIの組み込みツール（シェル実行・ファイル編集を含む）を有効にする。
+# 公開はtailnet内のみなので許容する。
 mkdir -p "$SERVICE_DIR"
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
@@ -207,7 +209,8 @@ ExecStart=$HOME/.nix-profile/bin/llama-server \\
   --cache-type-k q8_0 \\
   --cache-type-v q8_0 \\
   --parallel 1 \\
-  --jinja
+  --jinja \\
+  --agent
 Restart=on-failure
 RestartSec=5
 

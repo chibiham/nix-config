@@ -225,7 +225,7 @@ Q3_K_S（約89GB、公式GGUFのUD-Q4_K_XLはRAM+VRAMを超える）を取得し
 `codex -p qwen-local-flash-abliterated`で選べる（`n-cpu-moe`は35）。各モデルのVision Projectorも
 取得してRouter presetで関連付け、画像入力を有効にする。
 128K context、Q8 KV cache、単一モデルだけをVRAMへロードするRouterモードの
-`qwen38.service`を作成する。内蔵Web UIでモデルを切り替えられ、再実行しても取得済みファイルは再取得しない。
+`qwen38.service`を作成する。`--agent`でWeb UIの組み込みツール（シェル実行・ファイル編集を含む）とMCPプロキシを有効にしている（tailnet内のみ公開）。内蔵Web UIでモデルを切り替えられ、再実行しても取得済みファイルは再取得しない。
 
 RTX 3090を共有するため、`applio.service`はComfyUI・Qwenとunitの`Conflicts=`で排他的に起動する。
 LoRA学習も private repo（`~/ai`）の`lora-train`が同じ`Conflicts=`を持つ一時unitとして起動し、
