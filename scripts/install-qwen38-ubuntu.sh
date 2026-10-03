@@ -35,6 +35,7 @@ FLASH_UNCENSORED_VISION_FILE="Qwen3.8-Flash-Next-Uncensored.mmproj-f16.gguf"
 FLASH_UNCENSORED_N_CPU_MOE="${QWEN_FLASH_UNCENSORED_N_CPU_MOE:-35}"
 # huihui-ai/Huihui-Qwen3.8-Flash-Next-abliterated のmradermacher静的量子化（i1は未公開）。
 # 公式GGUFのUD-Q4_K_XL（111GB）はRAM+VRAMを超えるので、同じ90GB級のQ3_K_Sを使う。
+# n-cpu-moe 35で実測VRAM 22.3GB、prompt約710 tok/s、生成約16〜21 tok/s。
 FLASH_ABLITERATED_MODEL_REPO="mradermacher/Huihui-Qwen3.8-Flash-Next-abliterated-GGUF"
 FLASH_ABLITERATED_MODEL_REVISION="ca27375ea941f67768d01f5bfccca096a84808c4"
 FLASH_ABLITERATED_MODEL_FILE="Huihui-Qwen3.8-Flash-Next-abliterated.Q3_K_S.gguf"
