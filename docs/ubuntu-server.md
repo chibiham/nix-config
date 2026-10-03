@@ -220,9 +220,7 @@ RAMへ置き（48層中38層）、n-gram埋め込み（約29GB）はmmapのま�
 prompt処理を速くしている（実測: prompt約480 tok/s、生成約21 tok/s。ロード直後はページキャッシュが
 温まるまで遅い）。`codex -p qwen-local-flash`で選べる。無検閲版として
 Qwen3.8-Flash-Next-Uncensoredのmradermacher i1-IQ3_M（`n-cpu-moe`は35）も取得し、
-`codex -p qwen-local-flash-uncensored`で選べる。huihui-aiのAbliterated版はmradermacherの
-Q3_K_S（約89GB、公式GGUFのUD-Q4_K_XLはRAM+VRAMを超える）を取得し、
-`codex -p qwen-local-flash-abliterated`で選べる（`n-cpu-moe`は35）。各モデルのVision Projectorも
+`codex -p qwen-local-flash-uncensored`で選べる。各モデルのVision Projectorも
 取得してRouter presetで関連付け、画像入力を有効にする。
 128K context、Q8 KV cache、単一モデルだけをVRAMへロードするRouterモードの
 `qwen38.service`を作成する。`--agent`でWeb UIの組み込みツール（シェル実行・ファイル編集を含む）とMCPプロキシを有効にしている（tailnet内のみ公開）。内蔵Web UIでモデルを切り替えられ、再実行しても取得済みファイルは再取得しない。
