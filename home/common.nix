@@ -576,13 +576,20 @@ in
       IN=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
       OUT=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0')
       COST=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
+      # 使用制限(Claude.ai の購読のとき渡される)。subako が読めるようにファイルにも書き出す
+      echo "$input" | jq -c '{at: now, rate_limits: (.rate_limits // null)}' > "$HOME/.claude/statusline-last.json" 2>/dev/null
+      H5=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty' | cut -d. -f1)
+      D7=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty' | cut -d. -f1)
+      LIMITS=""
+      [ -n "$H5" ] && LIMITS=" | 5h:$H5%"
+      [ -n "$D7" ] && LIMITS="$LIMITS 7d:$D7%"
 
       if [ "$USED" -gt 80 ]; then COLOR="\033[91m"
       elif [ "$USED" -gt 50 ]; then COLOR="\033[93m"
       else COLOR="\033[92m"; fi
       RESET="\033[0m"
 
-      echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COST}''${RESET}"
+      echo -e "''${COLOR}[$MODEL] in:''${IN} out:''${OUT} | ctx:''${USED}% | \$''${COST}''${LIMITS}''${RESET}"
     '';
   };
 
