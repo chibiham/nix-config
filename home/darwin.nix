@@ -154,6 +154,17 @@
   };
   };
 
+  # macOSだけで使うmiseランタイム（共通の config.toml に足して読まれる）。
+  # RustはTauriアプリ（~/repos/chibiham-manager の app/）のビルド用。iOS向けのtargetも入れる。
+  # switchは設定を置くだけで、ツールチェーン本体は `mise install`（bootstrap）か初回利用時に入る。
+  xdg.configFile."mise/conf.d/darwin.toml".text = ''
+    [tools]
+    rust = { version = "stable", targets = "aarch64-apple-ios,aarch64-apple-ios-sim" }
+  '';
+  # miseのRustはrustup経由で入り、実行ファイルは ~/.cargo/bin に置かれる（shimは作られない）。
+  # `mise activate` を通らないシェル（ログインシェル、npmから起動するビルド）でも cargo を見つけられるようにする。
+  home.sessionPath = [ "$HOME/.cargo/bin" ];
+
   # macOS専用パッケージ
   home.packages = with pkgs; [
     coreutils     # GNU版コマンド（gls, gcat等）

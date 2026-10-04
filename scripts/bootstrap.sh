@@ -121,7 +121,7 @@ clone_repo "chibiham/skills" "$HOME/.agents/skills"
 nix run "$REPO_DIR#home-manager" -- switch --flake "$REPO_DIR#$FLAKE_TARGET"
 
 # -------------------------------------------------
-# 6. mise ランタイム（node/python、config.tomlで宣言済み）
+# 6. mise ランタイム（node/python、macOSはrustも。config.toml と conf.d/darwin.toml で宣言済み）
 # -------------------------------------------------
 step "mise ランタイムのインストール"
 mise install --yes || warn "miseランタイムのインストールに失敗（後で 'mise install' を実行してください）"

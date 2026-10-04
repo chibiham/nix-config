@@ -69,7 +69,7 @@ bootstrap.shがやること（すべて冪等、途中失敗しても再実行�
 3. SSH鍵を1Passwordから取得（`op://MyMachine/chibiham_machine_key`）
 4. `update-secrets` でシークレット展開
 5. プライベートリポジトリのclone（memo, clawd, affairs, skills）
-6. mise ランタイム（node/python）、pnpm と pnpm グローバルパッケージ導入
+6. mise ランタイム（node/python、macOSはrustも）、pnpm と pnpm グローバルパッケージ導入
 7. Homebrew導入 + `brew bundle`（GUIアプリ）
 8. macOSシステム設定（任意、sudo必要）
 
