@@ -24,16 +24,18 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 │   ├── darwin.nix     # macOS共通設定
 │   ├── linux.nix      # Linux固有設定
 │   └── hosts/         # Macごとの固有設定（macbook.nix / mac-mini.nix）
+├── udev/             # Ubuntuへ配るudevルール（RAPL読み取り権限）
 ├── claude/skills/     # Nixで ~/.claude/skills に配るClaude Code skill（civitai-download）
 └── scripts/
     ├── bootstrap.sh       # 新しいMacの初期セットアップ
     ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
     ├── install-tailscale-ubuntu.sh # Tailscale導入・認証
     ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
-    ├── configure-ubuntu-hardware.sh # HWEとGPU起動時消灯を反映（再起動なし）
+    ├── configure-ubuntu-hardware.sh # HWE・GPU起動時消灯・RAPL権限を反映（再起動なし）
     ├── install-hwe-kernel-ubuntu.sh # HWE・対応NVIDIAモジュール
     ├── install-gpu-led-off-ubuntu.sh # OpenRGBと消灯サービスの導入
     ├── turn-off-gpu-led.sh # Gigabyte RTX 3090だけを消灯
+    ├── install-rapl-power-access-ubuntu.sh # RAPL energy_ujをpowerグループへ（udev）
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
     ├── install-diffusion-pipe-ubuntu.sh # Anima LoRA学習環境
     ├── install-applio-ubuntu.sh # Applio（RVC学習・リアルタイム音声変換）

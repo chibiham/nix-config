@@ -1,0 +1,3 @@
+# RAPLの積算エネルギー（energy_uj）をpowerグループに読ませる。
+# カーネル既定はroot専用（CVE-2020-8694のサイドチャネル対策）なので、全ユーザーには開放しない。
+SUBSYSTEM=="powercap", ACTION=="add", TEST=="energy_uj", RUN+="/bin/chgrp power /sys%p/energy_uj", RUN+="/bin/chmod 0440 /sys%p/energy_uj"

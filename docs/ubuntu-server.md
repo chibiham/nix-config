@@ -79,9 +79,9 @@ nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv
 
 CUDA Toolkitはこの段階では導入しない。ComfyUI/PyTorchが必要とするCUDA runtimeは、ComfyUI専用Python環境で管理する。管理境界を決めた理由は [ADR 0001](adr/0001-ubuntu-serverの管理境界.md) を参照。
 
-## HWEカーネルとGPU LED
+## HWEカーネル・GPU LED・RAPL
 
-HWEカーネルの追加と、GPU LEDの起動時消灯をまとめて反映する:
+HWEカーネルの追加、GPU LEDの起動時消灯、RAPL（CPU消費電力）の読み取り権限をまとめて反映する:
 
 ```bash
 ~/.config/nix-config/scripts/configure-ubuntu-hardware.sh
@@ -140,6 +140,24 @@ journalctl -u gpu-led-off.service -b --no-pager
 root所有のsystem serviceとして動くため、SSHログインやユーザー領域の実行ファイルに依存しない。
 I2Cデバイスを全ユーザーへ開放する設定も不要。OpenRGBの設定は`/var/lib/gpu-led-off`に分離する。
 電源投入直後からサービス実行までの間は、GPU本体の既定の点灯状態になる場合がある。
+
+### RAPL（CPU消費電力）の読み取り
+
+```bash
+~/.config/nix-config/scripts/install-rapl-power-access-ubuntu.sh
+# 確認（新しいSSHログインで）
+ls -l /sys/class/powercap/intel-rapl:0/energy_uj   # -r--r----- root power
+cat /sys/class/powercap/intel-rapl:0/energy_uj
+```
+
+`energy_uj`（積算エネルギー、µJ）はカーネル既定でroot専用
+（CVE-2020-8694の電力サイドチャネル対策）。全ユーザーには開放せず、
+systemグループ`power`を作って実行ユーザー（sudo元、または引数のユーザー）だけを加える。
+
+`udev/99-rapl-power.rules`を`/etc/udev/rules.d/`へ置き、powercapデバイスの追加時に
+`energy_uj`を`root:power 0440`にする。sysfsの権限は起動ごとに戻るのでudevで毎回設定し、
+インストール時は`udevadm trigger --action=add`で既存デバイスにも即座に反映する。
+グループ所属は新しいログインから有効（SSHは毎回新しいログインなのでMacからはすぐ読める）。
 
 ## ComfyUI
 
@@ -266,6 +284,7 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 | NVIDIAドライバ | Ubuntuの推奨ドライバ |
 | HWEカーネル・対応NVIDIAモジュール | `scripts/install-hwe-kernel-ubuntu.sh` / apt |
 | GPU LED消灯 | 固定版OpenRGB / systemd system service |
+| RAPL読み取り権限 | `power`グループ / udevルール（`scripts/install-rapl-power-access-ubuntu.sh`） |
 | ComfyUIとPython依存 | ComfyUI専用venvまたはuv環境 |
 | Qwenモデル、Qwen user service | 専用の冪等インストールスクリプト |
 | ComfyUIのモデル台帳・ワークフロー・custom_nodes、LoRAプロジェクト、AGENTS.md | private repo（`~/ai`）。自作モデルの実体はCloudflare R2 |
