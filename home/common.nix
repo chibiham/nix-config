@@ -736,7 +736,12 @@ in
       disabledProviders = [ "llama.cpp" ];
       # 既定はChatGPTサブスクのGPT-6.1 Sol。ompの曖昧一致は最新版を選ぶ保証がないのでIDで固定する。
       # （偽装しないAnthropic OAuthはHaiku 4.5以外が429になるため、Claudeは既定にしない）
-      modelRoles.default = "openai-codex/gpt-6.1-sol";
+      # smolは軽い下請け（scout等）、slowは重い作業（reviewer等）と --smol / --slow で使う。
+      modelRoles = {
+        default = "openai-codex/gpt-6.1-sol";
+        smol = "openai-codex/gpt-6-luna";
+        slow = "openai-codex/gpt-6.1-sol:xhigh";
+      };
     };
   };
 
