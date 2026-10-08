@@ -75,6 +75,9 @@ in
         "${lib.getExe' pkgs.llama-cpp "llama-server"}"
         "--model"
         modelFile
+        # クライアント（omp等）から見えるモデルIDをファイルパスではなく名前にする
+        "--alias"
+        "Qwen3.8-27B-Uncensored-Q4_K_M"
         "--host"
         "127.0.0.1"
         "--port"

@@ -726,6 +726,35 @@ in
       };
   };
 
+  # Oh My Pi（omp）。本体と~/.omp/agent/config.ymlはforkのHome Managerモジュールが配る。
+  # ClaudeとChatGPTは組み込みプロバイダー（`/login anthropic` / `/login openai-codex`）。
+  # forkのAnthropic OAuthはClaude Codeを装わず、拒否されたらAPIキーを案内して止まる。
+  programs.omp = {
+    enable = true;
+    settings.startup.quiet = true;
+  };
+
+  # ローカルのllama.cpp。モデルはサーバーから自動で列挙する（Qwen系はopenai-completions）。
+  # - llama.cpp: このマシンのllama-server（Mac miniは `qwen38 start`）
+  # - qwen-ubuntu: tailnet内のchibihamuntuのRouter
+  # ompはmodels.ymlを書き換えないのでNix Storeへのリンクでよい。
+  home.file.".omp/agent/models.yml".source = (pkgs.formats.yaml { }).generate "omp-models.yml" {
+    providers = {
+      "llama.cpp" = {
+        baseUrl = "http://127.0.0.1:8080";
+        api = "openai-completions";
+        auth = "none";
+        discovery.type = "llama.cpp";
+      };
+      qwen-ubuntu = {
+        baseUrl = "https://chibihamuntu.tailded45d.ts.net:8443";
+        api = "openai-completions";
+        auth = "none";
+        discovery.type = "llama.cpp";
+      };
+    };
+  };
+
   # settings.jsonはPi自身も更新する（/modelのCtrl+S等）ため、既定モデルが
   # 未設定のときだけローカルQwenを既定にする。
   # AWS認証情報の環境変数でBedrockが大量に出るので、enabledModelsで

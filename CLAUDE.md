@@ -142,6 +142,9 @@ macOSのセキュリティ制約により自動化できないもの:
 - pnpm グローバルパッケージ: clawdbot（bootstrap.shで導入）
 - コーディングエージェント: Qwen Code, Pi（pi.dev）をmise管理のNode.jsへnpmで導入（bootstrap）。
   Piは `~/.pi/agent/models.json`（Nix管理）でchibihamuntuのQwen3.8（tailnet経由）を既定モデルにする
+- Oh My Pi（omp）: flake input `omp`（fork `chibiham/oh-my-pi` の honest-oauth をコミット固定）のHome Managerモジュールで導入。
+  Anthropic OAuthはClaude Codeを装わない（偽装は `PI_ANTHROPIC_OAUTH_CLAUDE_CODE_FINGERPRINT=1` のときだけ）。
+  `~/.omp/agent/models.yml`（Nix管理）でローカルllama.cppとchibihamuntuを宣言。Claude/ChatGPTは `/login` で各自認証
 - シークレット管理: 1password-cli + update-secretsコマンド
 - その他: htop, tree, curl, wget, awscli, terraform, flyctl, cloudflared
 - Linux AI推論: CUDA対応llama.cpp + ai-mode（モデル取得は明示スクリプト）
