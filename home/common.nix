@@ -731,27 +731,23 @@ in
   # forkのAnthropic OAuthはClaude Codeを装わず、拒否されたらAPIキーを案内して止まる。
   programs.omp = {
     enable = true;
-    settings.startup.quiet = true;
+    settings = {
+      startup.quiet = true;
+      disabledProviders = [ "llama.cpp" ];
+    };
   };
 
   # ローカルのllama.cpp。モデルはサーバーから自動で列挙する（Qwen系はopenai-completions）。
-  # - llama.cpp: このマシンのllama-server（Mac miniは `qwen38 start`）
   # - qwen-ubuntu: tailnet内のchibihamuntuのRouter
+  # Macでモデルを動かすとメモリが足りなくなるので、このマシンのllama-serverは使わない
+  # （ompが既定で足す127.0.0.1:8080のllama.cppはsettingsのdisabledProvidersで止める）。
   # ompはmodels.ymlを書き換えないのでNix Storeへのリンクでよい。
   home.file.".omp/agent/models.yml".source = (pkgs.formats.yaml { }).generate "omp-models.yml" {
-    providers = {
-      "llama.cpp" = {
-        baseUrl = "http://127.0.0.1:8080";
-        api = "openai-completions";
-        auth = "none";
-        discovery.type = "llama.cpp";
-      };
-      qwen-ubuntu = {
-        baseUrl = "https://chibihamuntu.tailded45d.ts.net:8443";
-        api = "openai-completions";
-        auth = "none";
-        discovery.type = "llama.cpp";
-      };
+    providers.qwen-ubuntu = {
+      baseUrl = "https://chibihamuntu.tailded45d.ts.net:8443";
+      api = "openai-completions";
+      auth = "none";
+      discovery.type = "llama.cpp";
     };
   };
 
