@@ -726,6 +726,39 @@ in
       };
   };
 
+  # Oh My Pi（omp）。本体と~/.omp/agent/config.ymlはforkのHome Managerモジュールが配る。
+  # ClaudeとChatGPTは組み込みプロバイダー（`/login anthropic` / `/login openai-codex`）。
+  # forkのAnthropic OAuthはClaude Codeを装わず、拒否されたらAPIキーを案内して止まる。
+  programs.omp = {
+    enable = true;
+    settings = {
+      startup.quiet = true;
+      disabledProviders = [ "llama.cpp" ];
+      # 既定はChatGPTサブスクのGPT-6.1 Sol。ompの曖昧一致は最新版を選ぶ保証がないのでIDで固定する。
+      # （偽装しないAnthropic OAuthはHaiku 4.5以外が429になるため、Claudeは既定にしない）
+      # smolは軽い下請け（scout等）、slowは重い作業（reviewer等）と --smol / --slow で使う。
+      modelRoles = {
+        default = "openai-codex/gpt-6.1-sol";
+        smol = "openai-codex/gpt-6-luna";
+        slow = "openai-codex/gpt-6.1-sol:xhigh";
+      };
+    };
+  };
+
+  # ローカルのllama.cpp。モデルはサーバーから自動で列挙する（Qwen系はopenai-completions）。
+  # - qwen-ubuntu: tailnet内のchibihamuntuのRouter
+  # Macでモデルを動かすとメモリが足りなくなるので、このマシンのllama-serverは使わない
+  # （ompが既定で足す127.0.0.1:8080のllama.cppはsettingsのdisabledProvidersで止める）。
+  # ompはmodels.ymlを書き換えないのでNix Storeへのリンクでよい。
+  home.file.".omp/agent/models.yml".source = (pkgs.formats.yaml { }).generate "omp-models.yml" {
+    providers.qwen-ubuntu = {
+      baseUrl = "https://chibihamuntu.tailded45d.ts.net:8443";
+      api = "openai-completions";
+      auth = "none";
+      discovery.type = "llama.cpp";
+    };
+  };
+
   # settings.jsonはPi自身も更新する（/modelのCtrl+S等）ため、既定モデルが
   # 未設定のときだけローカルQwenを既定にする。
   # AWS認証情報の環境変数でBedrockが大量に出るので、enabledModelsで

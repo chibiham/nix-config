@@ -14,6 +14,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Oh My Pi（omp）。Claude Codeを装わないAnthropic OAuthにしたfork。
+    # nixpkgsはfollowsしない（ビルドにunstableとbun2nixが要るため上流の固定に任せる）。
+    omp.url = "github:chibiham/oh-my-pi/d874579702a0a21e800312b520fe94a5d33c58da";
+
     # macOS Spotlight統合
     mac-app-util = {
       url = "github:hraban/mac-app-util";
@@ -27,6 +31,7 @@
       nixpkgs-unstable,
       home-manager,
       mac-app-util,
+      omp,
       ...
     }:
     let
@@ -81,6 +86,7 @@
             ./home/common.nix
             ./home/darwin.nix
             hostModule
+            omp.homeManagerModules.default
             mac-app-util.homeManagerModules.default # Spotlight統合
             {
               home.username = username;
@@ -100,6 +106,7 @@
           modules = [
             ./home/common.nix
             ./home/linux.nix
+            omp.homeManagerModules.default
             {
               home.username = username;
               home.homeDirectory = "/home/${username}";
