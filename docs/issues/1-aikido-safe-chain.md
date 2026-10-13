@@ -32,3 +32,7 @@ assignee: agent
 - まず Safe Chain の入れ方(nixpkgs にあるか、npm の全体に入れてシェルの別名で挟むか)と、3日の設定の書き方を公式の文書で確かめる
 - nix-config に書き、本人の Mac で効くことを確かめる。chibihamuntu にも当てるかは本人に確かめる
 - darwin-rebuild switch・home-manager switch は本人が流す(システムを作り直すため)。エージェントは nix の構文の検査と、作り直したあとの確かめの手順までを用意する
+
+## 作業ログ
+
+- 2026-10-13 23:33 [agent] f4e8df6: safe-chain 1.5.25 の公式バイナリを sha256 固定で home/common.nix に入れた。SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS=72(sessionVariables とラッパーの既定値)。包む入れ口: npm/npx/pnpm/pnpx/yarn/bun/bunx/rush/rushx/pip/pip3/uv/uvx/poetry/pipx/pdm。非対話シェルには home.sessionPath 先頭のラッパー、対話 zsh には mise activate の後の関数。対象外: python -m pip、絶対パスでの呼び出し、hm-session-vars を読まないプロセス。npm は新しすぎる版をメタデータから消し、PyPI も同様。switch 前の試験: safe-chain-test 拒否、公開54時間の typescript dev 版 notarget(48h なら入る)、is-number 入る、pip3 safe-chain-pi-test 拒否。nix eval 3構成が通った。switch 待ち
