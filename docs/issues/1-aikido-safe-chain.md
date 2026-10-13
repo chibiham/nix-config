@@ -1,5 +1,5 @@
 ---
-status: todo
+status: doing
 created: 2026-10-13
 related: [t-20261013-002]
 goal:
