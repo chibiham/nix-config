@@ -95,6 +95,10 @@ let
   # PATH先頭に置く同名ラッパー。非対話シェル（エージェント・スクリプト）でも効く。
   # 自分のディレクトリをPATHから外してから `safe-chain <cmd>` を呼ぶので、
   # safe-chainが本物のnpm等を探すときに再びラッパーへ戻らない。
+  safeChainPathFirst = ''
+    path=(${safe-chain-shims}/bin ''${path:#${safe-chain-shims}/bin})
+  '';
+
   safe-chain-shims = pkgs.runCommandLocal "safe-chain-shims" { } (
     ''
       mkdir -p $out/bin
@@ -336,6 +340,13 @@ in
       gl = "git pull";
     };
 
+    # Safe Chainのラッパーを常にPATH先頭へ置く。hm-session-vars.shは
+    # __HM_SESS_VARS_SOURCED で子シェルでは再実行されず、ログインシェルでは
+    # /etc/zprofile（path_helper）と ~/.zprofile（brew shellenv）が前へ割り込むため、
+    # .zshenv（zsh -c 用）と .zlogin（zprofileより後、zsh -lc 用）で毎回並べ直す。
+    envExtra = safeChainPathFirst;
+    loginExtra = safeChainPathFirst;
+
     # 追加の初期化スクリプト（.zshrc の末尾に追加される）
     initContent = ''
       # シークレット環境変数の読み込み（update-secretsで生成）
@@ -362,7 +373,8 @@ in
       # 対話シェルでは関数でもラッパーへ向ける（公式の手動セットアップと同じ方式）
       ${lib.concatMapStrings (cmd: ''
         ${cmd}() { ${safe-chain-shims}/bin/${cmd} "$@"; }
-      '') safeChainCommands}'';
+      '') safeChainCommands}
+      ${safeChainPathFirst}'';
   };
 
   # ===================
