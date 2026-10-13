@@ -86,6 +86,18 @@ snapshot_download(
 PY
 fi
 
+step "SDXLの構成ファイル"
+# SDXLの学習は diffusers の from_single_file で単体checkpointを読み、構成（json・tokenizer）をHFから引く。
+# train.sh は HF_HUB_OFFLINE=1 で動かすので、重み以外をキャッシュに入れておく
+"$DIFFUSION_PIPE_DIR/.venv/bin/python" - <<PY
+from huggingface_hub import snapshot_download
+
+snapshot_download(
+    repo_id="stabilityai/stable-diffusion-xl-base-1.0",
+    allow_patterns=["*.json", "*.txt"],
+)
+PY
+
 TRANSFORMER="$COMFY_DIR/models/diffusion_models/anima/fnMixAnimaTurbo_baseNoTurbo.safetensors"
 VAE="$COMFY_DIR/models/vae/qwen/qwen_image_vae.safetensors"
 for model in "$TRANSFORMER" "$VAE"; do
