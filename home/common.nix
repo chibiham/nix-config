@@ -27,6 +27,101 @@ let
     chmod 600 "$HOME/.secrets/.env.secrets"
     echo "✓ ~/.secrets/.env.secrets を更新しました（新しいシェルで反映）"
   '';
+
+  # Aikido Safe Chain（パッケージ取得をマルウェア判定・公開から72時間未満の版を除外）
+  # nixpkgs未収録のため公式リリースのビルド済みバイナリをハッシュ固定で取得する。
+  # sha256は公式 install-safe-chain.sh に埋め込まれた値と同じ。
+  safeChainVersion = "1.5.25";
+  safeChainAssets = {
+    aarch64-darwin = {
+      name = "macos-arm64";
+      sha256 = "5bd4896868e214f6bdeaa600dc8df9721501176686888513eb46d3ad51d22d86";
+    };
+    x86_64-darwin = {
+      name = "macos-x64";
+      sha256 = "9ec0af06f6bbbe0d416dd8c03727930edabe39720361cda1b398c32ad769c378";
+    };
+    # Linuxは動的リンカに依存しない静的版
+    x86_64-linux = {
+      name = "linuxstatic-x64";
+      sha256 = "3462a8395f822b392b7c0808c70116ef90e17a5a1479e604cfc41d57bfbd827c";
+    };
+    aarch64-linux = {
+      name = "linuxstatic-arm64";
+      sha256 = "c180f262f935f2167a63798ab195709f2f92f1c5818fd1192c07c22c1169d9df";
+    };
+  };
+  safeChainAsset = safeChainAssets.${pkgs.stdenv.hostPlatform.system};
+  safe-chain = pkgs.stdenvNoCC.mkDerivation {
+    pname = "safe-chain";
+    version = safeChainVersion;
+    src = pkgs.fetchurl {
+      url = "https://github.com/AikidoSec/safe-chain/releases/download/${safeChainVersion}/safe-chain-${safeChainAsset.name}";
+      inherit (safeChainAsset) sha256;
+    };
+    dontUnpack = true;
+    # 単一実行ファイルに埋め込まれたペイロードを壊さないよう、strip等は行わない
+    dontFixup = true;
+    # 実体を bin/ 以外に置く。親ディレクトリ名が bin だとその1つ上（読み取り専用の
+    # store）をデータ置き場とみなすため。こうすると証明書等は ~/.safe-chain に作られる。
+    installPhase = ''
+      install -Dm755 $src $out/libexec/safe-chain/safe-chain
+      mkdir -p $out/bin
+      ln -s $out/libexec/safe-chain/safe-chain $out/bin/safe-chain
+    '';
+  };
+
+  # Safe Chainで包むパッケージマネージャー
+  safeChainCommands = [
+    "npm"
+    "npx"
+    "pnpm"
+    "pnpx"
+    "yarn"
+    "bun"
+    "bunx"
+    "rush"
+    "rushx"
+    "pip"
+    "pip3"
+    "uv"
+    "uvx"
+    "poetry"
+    "pipx"
+    "pdm"
+  ];
+  # 公開から72時間経っていない版は入れない（Safe Chainの既定は48時間）
+  safeChainMinAgeHours = "72";
+  # PATH先頭に置く同名ラッパー。非対話シェル（エージェント・スクリプト）でも効く。
+  # 自分のディレクトリをPATHから外してから `safe-chain <cmd>` を呼ぶので、
+  # safe-chainが本物のnpm等を探すときに再びラッパーへ戻らない。
+  safe-chain-shims = pkgs.runCommandLocal "safe-chain-shims" { } (
+    ''
+      mkdir -p $out/bin
+    ''
+    + lib.concatMapStrings (cmd: ''
+      cat > $out/bin/${cmd} <<'EOF'
+      #!/bin/sh
+      shim_dir=@out@/bin
+      new_path=
+      set -f
+      IFS=:
+      for p in $PATH; do
+        [ "$p" = "$shim_dir" ] && continue
+        new_path="''${new_path:+$new_path:}$p"
+      done
+      unset IFS
+      set +f
+      export PATH="$new_path"
+      export SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS="''${SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS:-${safeChainMinAgeHours}}"
+      # yao-pkg製バイナリが引数をスクリプトパスと誤認しないように
+      unset PKG_EXECPATH
+      exec ${safe-chain}/libexec/safe-chain/safe-chain ${cmd} "$@"
+      EOF
+      substituteInPlace $out/bin/${cmd} --replace-fail @out@ $out
+      chmod +x $out/bin/${cmd}
+    '') safeChainCommands
+  );
 in
 {
   # Home Managerのバージョン（変更しないで）
@@ -68,6 +163,7 @@ in
     # シークレット管理
     _1password-cli # op コマンド
     update-secrets # ~/.secrets/.env.secrets を1Passwordから再生成
+    safe-chain # Aikido Safe Chain（npm/pip等のマルウェア・新着版ブロック）
 
     # インフラ・クラウドツール
     awscli # AWS CLI
@@ -261,7 +357,12 @@ in
       if command -v mise &> /dev/null; then
         eval "$(mise activate zsh)"
       fi
-    '';
+
+      # Aikido Safe Chain: mise activateがPATH先頭へnode等を足すため、
+      # 対話シェルでは関数でもラッパーへ向ける（公式の手動セットアップと同じ方式）
+      ${lib.concatMapStrings (cmd: ''
+        ${cmd}() { ${safe-chain-shims}/bin/${cmd} "$@"; }
+      '') safeChainCommands}'';
   };
 
   # ===================
@@ -561,6 +662,9 @@ in
     MISE_CACHE_DIR = "$HOME/.cache/mise";
     MISE_AUTO_INSTALL = "1"; # バージョンファイル検出時に自動インストール
     MISE_TRUSTED_CONFIG_PATHS = "$HOME"; # ホームディレクトリ配下を信頼
+
+    # Aikido Safe Chain: 公開から72時間未満の版を除外（ラッパーにも同じ既定値を埋め込み済み）
+    SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS = safeChainMinAgeHours;
   };
 
   # ===================
@@ -622,13 +726,17 @@ in
   # ===================
   # 追加のPATH
   # ===================
-  home.sessionPath = [
-    "$HOME/.local/bin" # claude-code等
-    "$HOME/bin"
-    "$HOME/bin/gamadv-xtd3" # Google Workspace管理ツール
-    "$HOME/go/bin"
-    "$HOME/.local/share/pnpm" # pnpm グローバルbin
-    "$HOME/.local/share/mise/shims" # mise shims
+  # Safe Chainのラッパーはmiseやpnpmのbinより前に置く
+  home.sessionPath = lib.mkMerge [
+    (lib.mkBefore [ "${safe-chain-shims}/bin" ])
+    [
+      "$HOME/.local/bin" # claude-code等
+      "$HOME/bin"
+      "$HOME/bin/gamadv-xtd3" # Google Workspace管理ツール
+      "$HOME/go/bin"
+      "$HOME/.local/share/pnpm" # pnpm グローバルbin
+      "$HOME/.local/share/mise/shims" # mise shims
+    ]
   ];
 
   # ===================
