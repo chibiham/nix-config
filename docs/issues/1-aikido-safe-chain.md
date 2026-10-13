@@ -12,7 +12,7 @@ goal:
   - text: "確かめる: マルウェアとして知られた試しのパッケージ(Safe Chain の文書の確かめ方)が止まること、公開から3日たたない版が入らないこと、ふつうのパッケージは入ること。subako のエージェントの worktree での npm install にも効くこと"
     done: true
   - text: nix の構文の検査が通り、develop に commit している。darwin-rebuild switch は本人が流す(その前で止まって本人に頼む)。chibihamuntu にも当てるかは本人に確かめる
-    done: false
+    done: true
 ---
 # Aikido Safe Chain を入れ、公開から3日たたないパッケージを入れない
 
@@ -50,3 +50,4 @@ goal:
 - 2026-10-14 07:24 [agent] 完了条件 0 を済みにした: 本人が 8338b86 を Mac に switch(~/.zlogin・~/.zshenv が 10/14 07:24 に作り直された)。zsh -c と zsh -lc で command -v npm / pip3 が .../safe-chain-shims/bin を指し、zsh -lic では npm・pip3 が関数。SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS=72。包む入れ口: npm/npx/pnpm/pnpx/yarn/bun/bunx/rush/rushx/pip/pip3/uv/uvx/poetry/pipx/pdm(home/common.nix)
 - 2026-10-14 07:25 [agent] 完了条件 2 を済みにした: switch 後、subako worktree のエージェントの Bash から zsh -lc で一時ディレクトリに入れて確かめた。npm install safe-chain-test →「Safe-chain: Exiting without installing malicious packages.」。npm cache clean のあと typescript@7.1.0-dev.20261013.1(2026-10-13T08:33Z公開、約14時間)→ notarget と「minimum package age で除外」の表示。npm install is-number@7.0.0 → 入った。注意: npm のキャッシュに入った版は年齢の検査をすり抜けた。venv を activate すると venv の pip が前に来て包まれない
 - 2026-10-14 07:25 [agent] 返事待ち: chibihamuntu にも当てますか。当てるならこのまま閉じて、develop に入ったあと chibihamuntu で pull して switch してもらいます。当てないなら、common.nix から Mac 用の設定に移します。
+- 2026-10-14 07:25 [agent] 完了条件 3 を済みにした: nix fmt と nix eval の3構成(mac-mini/macbook/ubuntu-server)が通り、mac-mini は nix build まで通った。f4e8df6・8338b86 を agent/1 に commit した。develop へは TASK_DONE のあと subako が早送りで入れる。Mac の switch は本人が流した(10/14 07:24)。chibihamuntu には当てると本人が返事した(develop に入れたあと pull して ubuntu-server を switch)
