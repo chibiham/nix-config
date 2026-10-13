@@ -7,6 +7,8 @@ goal:
   - { text: "公開から3日(72時間)たたない版を入れない設定が入っている。設定の書き方と、どの入れ口に効くかを issue に書く", done: false }
   - { text: "確かめる: マルウェアとして知られた試しのパッケージ(Safe Chain の文書の確かめ方)が止まること、公開から3日たたない版が入らないこと、ふつうのパッケージは入ること。subako のエージェントの worktree での npm install にも効くこと", done: false }
   - { text: "nix の構文の検査が通り、develop に commit している。darwin-rebuild switch は本人が流す(その前で止まって本人に頼む)。chibihamuntu にも当てるかは本人に確かめる", done: false }
+updated: 2026-10-13
+assignee: agent
 ---
 # Aikido Safe Chain を入れ、公開から3日たたないパッケージを入れない
 
