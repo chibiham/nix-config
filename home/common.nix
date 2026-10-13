@@ -576,8 +576,12 @@ in
       IN=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
       OUT=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0')
       COST=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
-      # 使用制限(Claude.ai の購読のとき渡される)。subako が読めるようにファイルにも書き出す
-      echo "$input" | jq -c '{at: now, rate_limits: (.rate_limits // null)}' > "$HOME/.claude/statusline-last.json" 2>/dev/null
+      # 使用制限(Claude.ai の購読のとき渡される)。subako が読めるようにファイルにも書き出す(rate_limits があるときだけ。無いときは前の値を残す)
+      if echo "$input" | jq -e '.rate_limits != null' >/dev/null 2>&1; then
+        _tmp=$(mktemp "$HOME/.claude/.statusline-last.XXXXXX" 2>/dev/null) &&
+          echo "$input" | jq -c '{at: now, rate_limits: .rate_limits}' > "$_tmp" 2>/dev/null &&
+          mv "$_tmp" "$HOME/.claude/statusline-last.json" || rm -f "$_tmp"
+      fi
       H5=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty' | cut -d. -f1)
       D7=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty' | cut -d. -f1)
       LIMITS=""
