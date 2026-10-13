@@ -2,11 +2,11 @@
 status: doing
 created: 2026-10-13
 related: [t-20261013-002]
-updated: 2026-10-13
+updated: 2026-10-14
 assignee: agent
 goal:
   - text: Aikido Safe Chain が nix-config の宣言で入り、npm・pnpm・yarn・bun・pip などの入れ口に挟まる(手で入れた設定に頼らない)
-    done: false
+    done: true
   - text: 公開から3日(72時間)たたない版を入れない設定が入っている。設定の書き方と、どの入れ口に効くかを issue に書く
     done: true
   - text: "確かめる: マルウェアとして知られた試しのパッケージ(Safe Chain の文書の確かめ方)が止まること、公開から3日たたない版が入らないこと、ふつうのパッケージは入ること。subako のエージェントの worktree での npm install にも効くこと"
@@ -47,3 +47,4 @@ goal:
 - 2026-10-14 00:40 [agent] 返事待ち: もう一度 `nix run ~/.subako/worktrees/nix-config/1#home-manager -- switch --flake ~/.subako/worktrees/nix-config/1#$USER@mac-mini` を流してもらえますか。流したら知らせてください。chibihamuntu には、develop に入って pull したあとに当てる、という流れでよいですか。
 - 2026-10-14 00:41 [agent] 返事待ち: 上のどちらかで Mac の switch を流して、結果を知らせてもらえますか。chibihamuntu には、develop に入って pull したあとに当てる流れでよいかも教えてください。
 - 2026-10-14 07:23 [agent] 返事待ち: 上のコマンドを流して、`ls -l ~/.zlogin` の結果か、エラーの出力を教えてください。chibihamuntu には、develop に入って pull したあとに当てる流れでよいかも教えてください。
+- 2026-10-14 07:24 [agent] 完了条件 0 を済みにした: 本人が 8338b86 を Mac に switch(~/.zlogin・~/.zshenv が 10/14 07:24 に作り直された)。zsh -c と zsh -lc で command -v npm / pip3 が .../safe-chain-shims/bin を指し、zsh -lic では npm・pip3 が関数。SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS=72。包む入れ口: npm/npx/pnpm/pnpx/yarn/bun/bunx/rush/rushx/pip/pip3/uv/uvx/poetry/pipx/pdm(home/common.nix)
