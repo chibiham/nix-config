@@ -112,3 +112,29 @@ bootstrapが `~/.local/share/mise/shims` をPATH先頭へ追加し、Safe Chain�
 作業ログに記録済み。コード変更・コミット・switchなし。
 
 REVIEW_NG
+
+## エージェントの結果(2026-10-14 09:16)
+
+実装レビュー(gpt-6.1-sol)
+
+修正が必要な不具合を1件確認した。
+
+### P1 — 固定パスのshimが再帰し、bootstrapが停止する
+
+対象: `home/common.nix:113-122,278`、`scripts/bootstrap.sh:130,140`、`scripts/bootstrap-ubuntu.sh:53,65`
+
+bootstrapは `~/.local/share/safe-chain-shims` をPATH先頭に置く。このディレクトリはstore内のshimへのsymlinkだが、再帰防止処理はstoreのパス文字列だけを除外する。そのため固定パスのshimを「本物のコマンド」と誤認して再実行し、Safe Chainとの再帰が続く。
+
+**起きる誤り:** bootstrapの `pnpm --version` が終了せず、pnpmの導入判定から先へ進まない。
+
+**再現:** 最新のNix評価が指す実shimへ一時symlinkを作り、bootstrapと同じくPATH先頭へ追加。
+- `pnpm --version`／`npm --version` → それぞれ8秒でタイムアウト。
+- storeのshimを直接PATH先頭に置いた比較条件 → pnpm本体不在で直ちに終了127。
+
+**修正方針:** 実体の探索時、storeパスだけでなく同じshimを指すsymlinkも除外する。固定パス経由の `pnpm --version` が、本体あり・なしの両条件で終了することを確認する。
+
+検証: `safe_npm safe-chain-verify`、mise経由を含む `npm run` 内の子の検証コマンド、Nix評価3構成、bootstrap2本の構文検査は成功。
+
+作業ログに記録済み。コード変更・コミット・switchなし。一時ファイルと検証プロセスは除去済み。
+
+REVIEW_NG
