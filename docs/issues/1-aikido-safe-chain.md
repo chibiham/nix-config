@@ -71,6 +71,7 @@ goal:
 - 2026-10-14 09:18 [agent] 再レビュー開始。develop..agent/1 の5コミット(db7aa30・b400fd5・2db4f55・3519bb7・3094973)を対象に、symlink除外と再帰深さ上限、bootstrap・子プロセスの保護を読むだけ・一時検証で確認する。コード変更・コミット・switchは行わない。
 - 2026-10-14 09:19 [agent] 最新Nix評価の実shim(s9r0ij...)へ一時symlinkを作り、固定パス先頭で npm --version が成功、pnpm本体不在は即127終了を確認。npm runの子のsafe-chain-verifyとbootstrap相当のmise exec経由も成功。前回のsymlink再帰は解消。引き続き世代切替後のPATHを確認する。試験ファイルは除去済み。
 - 2026-10-14 09:20 [agent] 実装レビュー(gpt-6.1-sol)が失敗した: 終了コード null
+- 2026-10-14 09:20 [agent] 返事待ち: TASK_DONE を受けたが、まだ develop に入れていない: 実装レビューを動かせなかった。環境を確かめる: 終了コード null
 
 ## エージェントの結果(2026-10-14 09:06)
 
