@@ -59,6 +59,7 @@ goal:
 - 2026-10-14 09:06 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合を2件確認した。
 - 2026-10-14 09:09 [agent] 実装レビューの指摘2件を a60fdd1 で直した。P1: shim が PATH を消さず、safe-chain が呼んだ実体の起動だけを $PPID と _SAFE_CHAIN_SHIM_PID で見分けて素通しする。npm run の子の npm も shim を通り、npm run 経由の safe-chain-test が止まった。再帰はない。P2: bootstrap の pnpm の有無の判定を pnpm --version に変えた。build した shims で確かめ、nix eval の3構成が通った。Mac には再 switch が要る
 - 2026-10-14 09:09 [agent] 再レビュー開始。develop..agent/1 の3コミット(6c9ebaa・e997370・a5a8e09)を確認。前回のPATH削除・pnpm導入判定の修正を含め、shimの親PID判定と72時間制限、シェル/子プロセスへの適用を読むだけ・一時検証で確認する。コード変更・コミット・switchは行わない。
+- 2026-10-14 09:10 [agent] a5a8e09の実ビルド済みshim(nsallhr...)をNix評価のsessionPathと照合し、一時package.jsonの npm run probe→子もshim・safe-chain-verify成功、pnpm実体なし→needs-installを確認。前回2件の修正はこの条件では有効。別の迂回を確認: bootstrap.sh:130/142・bootstrap-ubuntu.sh:53と同じmise/shims先頭PATHでは npm safe-chain-verify がUnknown commandで終了1となり、保護を通らない。
 
 ## エージェントの結果(2026-10-14 09:06)
 
