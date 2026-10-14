@@ -56,3 +56,25 @@ goal:
 - 2026-10-14 09:05 [agent] 不具合を再現: 実 pnpm が無い PATH(shims:/usr/bin:/bin)でも command -v pnpm が成功し、bootstrap の導入判定が pnpm 導入を飛ばす。その後 pnpm --version は「Is 'pnpm' installed...」で終了1。home/common.nix:102-127 の無条件shim追加と既存 bootstrap.sh:131 / bootstrap-ubuntu.sh:56 の組合せ。
 - 2026-10-14 09:06 [agent] 重大な迂回を再現: 一時package.jsonの npm run probe から npm safe-chain-verify を実行すると /opt/homebrew/bin/npm が選ばれ Unknown command で終了1。子のHTTP(S)_PROXY/npm_config_proxy/NODE_EXTRA_CA_CERTSも未設定。home/common.nix:113-119 がshimディレクトリを子へ渡すPATHから削除するため。Safe Chain 1.5.25 は run/test/start のプロキシを起動せず子のshim再捕捉に依存するので、npm scripts内のnpm installは保護を通らない。試験の一時ファイルは自動削除した。
 - 2026-10-14 09:06 [agent] レビュー結論 REVIEW_NG。P1: npm run/test等の子からshimが消え、プロキシも無いためスクリプト内のパッケージ取得が無保護。P2: pnpm本体未導入でもshimの存在でbootstrapが導入を飛ばし、途中失敗後の再実行等で導入できない。いずれもMac上の実shimで再現。通常のzsh -lcはage=72でshimを選択。既報のキャッシュ/venv迂回は再試験せず、コード変更・コミット・switchも行っていない。
+
+## エージェントの結果(2026-10-14 09:06)
+
+実装レビュー(gpt-6.1-sol)
+
+修正が必要な不具合を2件確認した。
+
+1. **P1 — npm scripts 内のインストールが保護を迂回する**  
+   `home/common.nix:113-119`  
+   ラッパーがshimディレクトリをPATHから削除し、そのPATHを子プロセスにも渡す。[Safe Chain 1.5.25](https://github.com/AikidoSec/safe-chain/blob/1.5.25/packages/safe-chain/src/packagemanager/npm/createPackageManager.js)は `run/test/start` 等ではプロキシを起動せず、子コマンドのshim再捕捉に依存するため、例えば `"setup": "npm install …"` を `npm run setup` で起動するとマルウェア・72時間制限の両方が効かない。  
+   **再現:** 一時package.jsonから `npm run probe` → 子のnpmは `/opt/homebrew/bin/npm`。`npm safe-chain-verify` は `Unknown command`、プロキシ環境変数も未設定だった。  
+   **修正:** 再帰防止のコマンド解決と、子へ渡すPATHを分離し、scripts内でもshimを残す。
+
+2. **P2 — 未導入のpnpmを導入済みと誤判定し、bootstrapが導入を飛ばす**  
+   `home/common.nix:102-127`  
+   pnpm本体が無くても同名shimが存在するため、既存の `scripts/bootstrap.sh:131`／`scripts/bootstrap-ubuntu.sh:56` の `command -v pnpm` が成功する。Home Manager反映後、本体導入前に失敗してbootstrapを再実行する場合など、pnpmを導入できない。  
+   **再現:** PATHを実shim＋`/usr/bin:/bin`にすると導入判定は成功するが、`pnpm --version` は本体不在のエラーで終了1。  
+   **修正:** bootstrapの導入判定をshimの存在ではなく、本体の利用可否で行う。
+
+作業ログに記録済み。コード変更・コミット・switchは行っていない。
+
+REVIEW_NG
