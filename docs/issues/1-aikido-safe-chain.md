@@ -73,6 +73,7 @@ goal:
 - 2026-10-14 09:20 [agent] 実装レビュー(gpt-6.1-sol)が失敗した: 終了コード null
 - 2026-10-14 09:20 [agent] 返事待ち: TASK_DONE を受けたが、まだ develop に入れていない: 実装レビューを動かせなかった。環境を確かめる: 終了コード null
 - 2026-10-14 09:22 [agent] 再レビュー開始。develop..agent/1 の5コミット(e1c280e・f824bbb・49cf079・75092a8・0d063c6)を対象に、最新shimのsymlink除外・親PID判定とbootstrap、世代切替後のPATHを読むだけ・一時検証で確認する。コード変更・コミット・switchは行わない。
+- 2026-10-14 09:24 [agent] 新しい不具合を再現: 最新shim(s9r0ij...)と旧shim(nsallhr...)をPATHにこの順で残し npm --version を実行すると25秒でタイムアウト。最新shimだけなら11.19.1で終了0。home/common.nix:99は自分の世代だけをPATHから除き、:119-126も別世代を実体と誤認するため、switch後に旧PATHを継承した子シェルでshim同士が再帰する。親PID一致の分岐では深さ上限も通らない。固定symlink単独・pnpm実体なし・npm runの子・bootstrap相当mise execは成功。試験プロセスと一時ファイルは除去済み。
 
 ## エージェントの結果(2026-10-14 09:06)
 
