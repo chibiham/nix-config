@@ -1,5 +1,5 @@
 ---
-status: todo
+status: doing
 created: 2026-10-14
 goal:
   - { text: "mise の precmd / chpwd のフックが Node.js の bin を PATH の先頭に足したあとも、Safe Chain の shim が実体の npm などより先に来る(フックのあとに並べ直す、など)。npm scripts の中の子の npm・npx・pnpm も Safe Chain を通る", done: false }
