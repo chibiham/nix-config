@@ -115,7 +115,11 @@ let
         set -f
         IFS=:
         for p in $PATH; do
+          [ -n "$p" ] || continue
           [ "$p" = "$shim_dir" ] && continue
+          # シンボリックリンク経由のshim（~/.local/share/safe-chain-shims等）も除外
+          [ "$(cd -P -- "$p" 2>/dev/null && pwd)" = "$shim_dir" ] && continue
+          [ "$p/${cmd}" -ef "$shim_dir/${cmd}" ] && continue
           if [ -x "$p/${cmd}" ] && [ ! -d "$p/${cmd}" ]; then
             unset IFS
             set +f
@@ -127,6 +131,13 @@ let
         echo "${cmd}: command not found (safe-chain shim)" >&2
         exit 127
       fi
+      # 想定外の再帰でハングしないよう、入れ子の深さに上限を設ける
+      _SAFE_CHAIN_SHIM_DEPTH=$((''${_SAFE_CHAIN_SHIM_DEPTH:-0} + 1))
+      if [ "$_SAFE_CHAIN_SHIM_DEPTH" -gt 32 ]; then
+        echo "${cmd}: safe-chain shim recursion detected" >&2
+        exit 126
+      fi
+      export _SAFE_CHAIN_SHIM_DEPTH
       export _SAFE_CHAIN_SHIM_PID=$$
       export SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS="''${SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS:-${safeChainMinAgeHours}}"
       # yao-pkg製バイナリが引数をスクリプトパスと誤認しないように
