@@ -77,6 +77,7 @@ goal:
 - 2026-10-14 09:24 [agent] 再レビュー結論 REVIEW_NG。P1: home/common.nix:98-100,113-138 は旧世代shimをPATHに残し、実体探索で別世代shimを選ぶ。新旧実shimの共存で npm --version が25秒タイムアウト（単独は終了0）、実際のzshのPATH並べ直し式でも旧世代が残ることを確認。旧世代の除去と探索時の全世代除外が必要。前回symlink再帰・pnpm未導入判定・npm runの子・bootstrap相当mise execは今回の単一世代条件で成功。Nix評価3構成、bootstrap2本のbash -n成功。コード変更・コミット・switchなし。既報のキャッシュ/venv迂回と年齢判定は再試験していない。
 - 2026-10-14 09:24 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合を1件確認した。
 - 2026-10-14 09:24 [agent] 返事待ち: TASK_DONE を受けたが、まだ develop に入れていない: 実装レビューで指摘があった。worktree /Users/chibiham/.subako/worktrees/nix-config/1 で直して commit し、TASK_DONE で返す: 修正が必要な不具合を1件確認した。 ### P1 — 新旧世代のshimがPATHに共存すると再帰し、コマンドが終了しない 対象: `home/common.nix:98-100,113-138` `safeChainPathFirst` は現在の世代だけを重複排除し、継承した旧世代のshimを残す。実体探索も自分と同じshimだけを除外するため、別世代のshimを本物のnpm等と誤認して起動する。親PID一致の分岐から別世代へ進む再帰では、追加された深さ上限も有効に働かない。 **具体的な入力・結果:** - PATHを最新の実shim（`s9r0ij.../bin`）→旧実shim…(自動の差し戻しが上限 3 回に達した)
+- 2026-10-14 09:28 [agent] 執事の差し戻し(新旧の世代のラッパーが PATH に並ぶと再帰する)を ea35359 で直した。実体を探すとき、どの世代でもラッパーと分かるもの(名前 *-safe-chain-shims、固定リンク、目印の行、旧世代にもある libexec/safe-chain の呼び出し)を飛ばす。PID が合うか、親が safe-chain 本体なら、本物を直接 exec する。新+旧3世代(wp4ld8/nsall/s9r)を両方の順に並べ、固定リンクも混ぜて試した。npm --version は約1秒で終わり、verify と npm run の子も OK、safe-chain-test は止まり、pnpm がないとき rc=127。旧世代だけが並ぶと今もループする(旧どうしなので直せない)
 
 ## エージェントの結果(2026-10-14 09:06)
 
