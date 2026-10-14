@@ -80,6 +80,7 @@ goal:
 - 2026-10-14 09:28 [agent] 執事の差し戻し(新旧の世代のラッパーが PATH に並ぶと再帰する)を ea35359 で直した。実体を探すとき、どの世代でもラッパーと分かるもの(名前 *-safe-chain-shims、固定リンク、目印の行、旧世代にもある libexec/safe-chain の呼び出し)を飛ばす。PID が合うか、親が safe-chain 本体なら、本物を直接 exec する。新+旧3世代(wp4ld8/nsall/s9r)を両方の順に並べ、固定リンクも混ぜて試した。npm --version は約1秒で終わり、verify と npm run の子も OK、safe-chain-test は止まり、pnpm がないとき rc=127。旧世代だけが並ぶと今もループする(旧どうしなので直せない)
 - 2026-10-14 09:29 [agent] 再レビュー開始。develop..agent/1 の6コミット(f188ce5〜5790939)を対象に、全世代shimの除外・親プロセス判定とbootstrap/子プロセスへの保護を読むだけ・一時検証で確認する。コード変更・コミット・switchは行わない。
 - 2026-10-14 09:30 [agent] 最新Nix評価の実shim(1y7hhw...)で、固定symlink＋旧3世代との共存時 npm --version が約1.2秒で終了0、pnpm本体不在は即127、npm run内の子とbootstrap相当mise exec経由のsafe-chain-verify成功を確認。前回の新旧世代再帰は最新shim先頭条件で解消。Nix評価3構成とbootstrap2本のbash -n成功。一時ファイルは除去済み。
+- 2026-10-14 09:31 [agent] 新しい迂回を実行で確認: common.nixと同じmise activate→npm関数→shim先頭の設定後、実際の_mise_hook_precmdを呼ぶとmiseのnode/binが先頭に戻る。一時package.jsonのnpm run probe内のnpmは ~/.local/share/mise/installs/node/24.18.0/bin/npm を選び、safe-chain-verifyはUnknown command/終了1。トップレベルの関数だけでは子のPATHを保護できない。初期化直後のshim先頭条件では同じprobeが成功。一時ファイルは除去済み。
 
 ## エージェントの結果(2026-10-14 09:06)
 
