@@ -94,7 +94,7 @@ let
   safeChainMinAgeHours = "72";
   # PATH先頭に置く同名ラッパー。非対話シェル（エージェント・スクリプト）でも効く。
   # PATHは変えずに `safe-chain <cmd>` を呼ぶ（npm run の子のnpm等も再捕捉する）。
-  # safe-chainが直接起動した呼び出し（$PPIDがshimのPID）だけshimを除いて実体をexecする。
+  # safe-chainが直接起動した呼び出しだけ、全世代のshimを除いて実体をexecする。
   safeChainPathFirst = ''
     path=(${safe-chain-shims}/bin ''${path:#${safe-chain-shims}/bin})
   '';
@@ -106,25 +106,34 @@ let
     + lib.concatMapStrings (cmd: ''
       cat > $out/bin/${cmd} <<'EOF'
       #!/bin/sh
-      shim_dir=@out@/bin
-      # safe-chain自身が本物の${cmd}を起動したとき（親がsafe-chain）だけ、
-      # shimを除いたPATHで実体を探してexecする（再帰防止）。
-      # PATHは変えないので、npm run等の子プロセスは再びshimを通る。
+      # safe-chain-shim-marker
+      # safe-chainが本物の${cmd}を起動したときだけ、shimを除いたPATHで実体を探してexecする。
+      # 判定: 自分が設定した_SAFE_CHAIN_SHIM_PIDが親PIDと一致する、または親プロセスが
+      # safe-chain本体（旧世代shim経由で起動された場合はPID変数が消えているため）。
+      # PATHは変えないので、npm run等の子プロセス（親はsh）は再びshimを通る。
+      from_safe_chain=
       if [ "''${_SAFE_CHAIN_SHIM_PID:-}" = "$PPID" ]; then
+        from_safe_chain=1
+      else
+        case "$(ps -o comm= -p "$PPID" 2>/dev/null)" in
+          safe-chain | */safe-chain) from_safe_chain=1 ;;
+        esac
+      fi
+      if [ -n "$from_safe_chain" ]; then
         unset _SAFE_CHAIN_SHIM_PID
         set -f
         IFS=:
         for p in $PATH; do
           [ -n "$p" ] || continue
-          [ "$p" = "$shim_dir" ] && continue
-          # シンボリックリンク経由のshim（~/.local/share/safe-chain-shims等）も除外
-          [ "$(cd -P -- "$p" 2>/dev/null && pwd)" = "$shim_dir" ] && continue
-          [ "$p/${cmd}" -ef "$shim_dir/${cmd}" ] && continue
-          if [ -x "$p/${cmd}" ] && [ ! -d "$p/${cmd}" ]; then
-            unset IFS
-            set +f
-            exec "$p/${cmd}" "$@"
-          fi
+          [ -x "$p/${cmd}" ] && [ ! -d "$p/${cmd}" ] || continue
+          # 全世代のshimを除外（ディレクトリ名・シンボリックリンク先・中身で判定。
+          # 旧世代はマーカーを持たないので名前とsafe-chain本体の参照で見分ける）
+          case "$p" in */safe-chain-shims | */*-safe-chain-shims/bin) continue ;; esac
+          case "$(cd -P -- "$p" 2>/dev/null && pwd)" in */*-safe-chain-shims/bin) continue ;; esac
+          grep -q -e 'safe-chain-shim-marker' -e '/libexec/safe-chain/safe-chain ' "$p/${cmd}" 2>/dev/null && continue
+          unset IFS
+          set +f
+          exec "$p/${cmd}" "$@"
         done
         unset IFS
         set +f
@@ -144,7 +153,6 @@ let
       unset PKG_EXECPATH
       exec ${safe-chain}/libexec/safe-chain/safe-chain ${cmd} "$@"
       EOF
-      substituteInPlace $out/bin/${cmd} --replace-fail @out@ $out
       chmod +x $out/bin/${cmd}
     '') safeChainCommands
   );
