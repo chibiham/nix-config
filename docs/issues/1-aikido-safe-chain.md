@@ -64,6 +64,7 @@ goal:
 - 2026-10-14 09:11 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合を1件確認した。前回の2件は改訂shimで解消を確認した。
 - 2026-10-14 09:13 [agent] 実装レビューの指摘(bootstrap の npm 導入が Safe Chain をすり抜ける)を c290170 で直した。HM が ~/.local/share/safe-chain-shims に固定パスを置き、bootstrap 2本は PATH を safe-chain shim → mise shims の順にし、shim がなければエラーで止まる。npm 導入は safe_npm(mise exec -- shim の絶対パス)を通す。bash で safe_npm safe-chain-verify が OK、bash -n と nix eval の3構成が通った
 - 2026-10-14 09:13 [agent] 再レビュー開始。develop..agent/1 の4コミット(a141c55・4061325・c2d1cea・4ff8d37)を対象に、固定shim経由へ変更したbootstrapとラッパーのコマンド解決を読むだけ・一時検証で確認する。コード変更・コミット・switchは行わない。
+- 2026-10-14 09:15 [agent] 不具合を再現: 最新のNix評価が指す実shim(nsallhr...)へ一時symlinkを作りbootstrapと同じPATH先頭に置くと、pnpm --version / npm --version が各8秒でタイムアウト。storeのbin直指定ではpnpm本体不在で即終了127。home/common.nix:118はstore文字列だけを除外し、新設固定パスのsymlinkを実体と誤認して再帰するため、bootstrapのpnpm導入判定で停止する。一時symlinkと起動プロセスは除去済み。
 
 ## エージェントの結果(2026-10-14 09:06)
 
