@@ -1,13 +1,16 @@
 ---
 status: doing
 created: 2026-10-14
-goal:
-  - { text: "mise の precmd / chpwd のフックが Node.js の bin を PATH の先頭に足したあとも、Safe Chain の shim が実体の npm などより先に来る(フックのあとに並べ直す、など)。npm scripts の中の子の npm・npx・pnpm も Safe Chain を通る", done: false }
-  - { text: "テストで、実際の _mise_hook_precmd を呼んだあとに npm run の中から safe-chain-test を入れようとすると止まり、npm --version はすぐ終わることを確かめる。nix の評価が通る", done: false }
-  - { text: "develop に commit している。switch は本人が流す", done: false }
 related: ["#1"]
 updated: 2026-10-14
 assignee: agent
+goal:
+  - text: mise の precmd / chpwd のフックが Node.js の bin を PATH の先頭に足したあとも、Safe Chain の shim が実体の npm などより先に来る(フックのあとに並べ直す、など)。npm scripts の中の子の npm・npx・pnpm も Safe Chain を通る
+    done: true
+  - text: テストで、実際の _mise_hook_precmd を呼んだあとに npm run の中から safe-chain-test を入れようとすると止まり、npm --version はすぐ終わることを確かめる。nix の評価が通る
+    done: false
+  - text: develop に commit している。switch は本人が流す
+    done: false
 ---
 # mise のフックのあとに、npm scripts の中で Safe Chain が迂回される
 
@@ -20,3 +23,7 @@ assignee: agent
 ## 執事の解釈
 
 - 守りの穴なので、完了条件を置いて次に進める
+
+## 作業ログ
+
+- 2026-10-14 15:50 [agent] 完了条件 0 を済みにした: home/common.nix に _safe_chain_path_first を追加し precmd_functions/chpwd_functions の末尾(mise・direnv のフックより後)に登録。ビルドした .zshrc で順序 _direnv_hook _mise_hook_precmd … _safe_chain_path_first を確認。npm run の子の npm install safe-chain-test が Safe-chain に止められた(dcd8d93)
