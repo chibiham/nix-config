@@ -53,7 +53,8 @@ mise install --yes
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 
 step "pnpm"
-if ! command -v pnpm >/dev/null; then
+# safe-chainのshimでcommand -vは常に成功するため、実体が動くかで判定
+if ! pnpm --version >/dev/null 2>&1; then
   mise exec -- npm install -g pnpm@latest
   mise reshim
 fi

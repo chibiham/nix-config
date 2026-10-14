@@ -93,8 +93,8 @@ let
   # 公開から72時間経っていない版は入れない（Safe Chainの既定は48時間）
   safeChainMinAgeHours = "72";
   # PATH先頭に置く同名ラッパー。非対話シェル（エージェント・スクリプト）でも効く。
-  # 自分のディレクトリをPATHから外してから `safe-chain <cmd>` を呼ぶので、
-  # safe-chainが本物のnpm等を探すときに再びラッパーへ戻らない。
+  # PATHは変えずに `safe-chain <cmd>` を呼ぶ（npm run の子のnpm等も再捕捉する）。
+  # safe-chainが直接起動した呼び出し（$PPIDがshimのPID）だけshimを除いて実体をexecする。
   safeChainPathFirst = ''
     path=(${safe-chain-shims}/bin ''${path:#${safe-chain-shims}/bin})
   '';
@@ -107,16 +107,27 @@ let
       cat > $out/bin/${cmd} <<'EOF'
       #!/bin/sh
       shim_dir=@out@/bin
-      new_path=
-      set -f
-      IFS=:
-      for p in $PATH; do
-        [ "$p" = "$shim_dir" ] && continue
-        new_path="''${new_path:+$new_path:}$p"
-      done
-      unset IFS
-      set +f
-      export PATH="$new_path"
+      # safe-chain自身が本物の${cmd}を起動したとき（親がsafe-chain）だけ、
+      # shimを除いたPATHで実体を探してexecする（再帰防止）。
+      # PATHは変えないので、npm run等の子プロセスは再びshimを通る。
+      if [ "''${_SAFE_CHAIN_SHIM_PID:-}" = "$PPID" ]; then
+        unset _SAFE_CHAIN_SHIM_PID
+        set -f
+        IFS=:
+        for p in $PATH; do
+          [ "$p" = "$shim_dir" ] && continue
+          if [ -x "$p/${cmd}" ] && [ ! -d "$p/${cmd}" ]; then
+            unset IFS
+            set +f
+            exec "$p/${cmd}" "$@"
+          fi
+        done
+        unset IFS
+        set +f
+        echo "${cmd}: command not found (safe-chain shim)" >&2
+        exit 127
+      fi
+      export _SAFE_CHAIN_SHIM_PID=$$
       export SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS="''${SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS:-${safeChainMinAgeHours}}"
       # yao-pkg製バイナリが引数をスクリプトパスと誤認しないように
       unset PKG_EXECPATH

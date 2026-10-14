@@ -128,7 +128,8 @@ mise install --yes || warn "miseランタイムのインストールに失敗（
 
 # pnpmはmise/Aqua経由だと配布assetの変更で壊れやすいため、npmから導入
 export PATH="$HOME/.local/share/mise/shims:$PATH"
-if ! command -v pnpm &>/dev/null; then
+# safe-chainのshimでcommand -vは常に成功するため、実体が動くかで判定
+if ! pnpm --version &>/dev/null; then
   mise exec -- npm install -g pnpm@latest
   mise reshim
 fi
@@ -140,7 +141,7 @@ step "pnpm グローバルパッケージ"
 export PNPM_HOME="$HOME/.local/share/pnpm"
 export PATH="$HOME/.local/share/mise/shims:$PNPM_HOME:$PATH"
 mkdir -p "$PNPM_HOME"
-if command -v pnpm &>/dev/null; then
+if pnpm --version &>/dev/null; then
   if [ ! -e "$PNPM_HOME/clawdbot" ]; then
     pnpm add -g clawdbot@latest && ok "clawdbot をインストールしました"
   else

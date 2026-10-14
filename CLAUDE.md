@@ -147,7 +147,7 @@ macOSのセキュリティ制約により自動化できないもの:
   `~/.omp/agent/models.yml`（Nix管理）でchibihamuntuを宣言（Macのローカルllama.cppはメモリ不足になるので無効）。Claude/ChatGPTは `/login` で各自認証
 - Aikido Safe Chain: 公式リリースのバイナリをNixでハッシュ固定導入（common.nix）。
   npm/npx/pnpm/pnpx/yarn/bun/bunx/rush/rushx/pip/pip3/uv/uvx/poetry/pipx/pdm を
-  PATH先頭のラッパー（非対話シェルにも効く）と対話zshの関数で包み、マルウェアと公開72時間未満の版を拒否
+  PATH先頭のラッパー（非対話シェルや `npm run` の子プロセスにも効く）と対話zshの関数で包み、マルウェアと公開72時間未満の版を拒否
   （`SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS=72`）。`python -m pip` と絶対パス呼び出しは対象外。
   証明書等は `~/.safe-chain/` に初回実行時に作られる。確認は `npm safe-chain-verify`
 - シークレット管理: 1password-cli + update-secretsコマンド
