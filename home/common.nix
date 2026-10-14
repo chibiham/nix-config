@@ -274,6 +274,9 @@ in
   };
 
   # SSH署名の検証用 allowed_signers
+  # bootstrap（bash）がsafe-chainのshimを参照する固定パス
+  home.file.".local/share/safe-chain-shims".source = "${safe-chain-shims}/bin";
+
   home.file.".config/git/allowed_signers".text = ''
     ${gitEmail} ${machinePubKey}
   '';

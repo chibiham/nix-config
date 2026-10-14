@@ -50,24 +50,32 @@ update-secrets
 
 step "miseランタイム"
 mise install --yes
-export PATH="$HOME/.local/share/mise/shims:$PATH"
+export PATH="$HOME/.local/share/safe-chain-shims:$HOME/.local/share/mise/shims:$PATH"
+# npm/pnpmは必ずAikido Safe Chainのshim経由にする（HM switch済みが前提）。
+# mise execはnodeのbinをPATH先頭に足すので、shimを絶対パスで呼ぶ。
+SAFE_CHAIN_SHIMS="$HOME/.local/share/safe-chain-shims"
+if [ ! -x "$SAFE_CHAIN_SHIMS/npm" ]; then
+  printf 'safe-chainのshimがありません: %s（home-manager switchを先に実行）\n' "$SAFE_CHAIN_SHIMS" >&2
+  exit 1
+fi
+safe_npm() { mise exec -- "$SAFE_CHAIN_SHIMS/npm" "$@"; }
 
 step "pnpm"
 # safe-chainのshimでcommand -vは常に成功するため、実体が動くかで判定
 if ! pnpm --version >/dev/null 2>&1; then
-  mise exec -- npm install -g pnpm@latest
+  safe_npm install -g pnpm@latest
   mise reshim
 fi
 
 step "Qwen Code"
 if ! command -v qwen >/dev/null; then
-  mise exec -- npm install -g @qwen-code/qwen-code@latest
+  safe_npm install -g @qwen-code/qwen-code@latest
   mise reshim
 fi
 
 step "Pi"
 if ! command -v pi >/dev/null; then
-  mise exec -- npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest
+  safe_npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest
   mise reshim
 fi
 
