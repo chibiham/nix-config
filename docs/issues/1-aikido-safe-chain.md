@@ -52,3 +52,4 @@ goal:
 - 2026-10-14 07:25 [agent] 返事待ち: chibihamuntu にも当てますか。当てるならこのまま閉じて、develop に入ったあと chibihamuntu で pull して switch してもらいます。当てないなら、common.nix から Mac 用の設定に移します。
 - 2026-10-14 07:25 [agent] 完了条件 3 を済みにした: nix fmt と nix eval の3構成(mac-mini/macbook/ubuntu-server)が通り、mac-mini は nix build まで通った。f4e8df6・8338b86 を agent/1 に commit した。develop へは TASK_DONE のあと subako が早送りで入れる。Mac の switch は本人が流した(10/14 07:24)。chibihamuntu には当てると本人が返事した(develop に入れたあと pull して ubuntu-server を switch)
 - 2026-10-14 07:25 [agent] 返事待ち: TASK_DONE を受けたが、まだ develop に入れていない: 実装レビューを動かせなかった。環境を確かめる: 実装レビューを始められない: omp が subako の MCP を読めない: /Users/chibiham/.subako/worktrees/nix-config/1 の .mcp.json か ~/.omp/agent/mcp.json に subako を足す
+- 2026-10-14 09:04 [agent] 実装レビュー開始。develop..agent/1 の2コミット(4e7320a・f3341f0)、home/common.nix と CLAUDE.md の変更を読み、ラッパーのコマンド解決・72時間制限・非対話シェルへの適用を実行で確認する。コード変更・コミット・switch は行わない。
