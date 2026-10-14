@@ -6,6 +6,8 @@ goal:
   - { text: "テストで、実際の _mise_hook_precmd を呼んだあとに npm run の中から safe-chain-test を入れようとすると止まり、npm --version はすぐ終わることを確かめる。nix の評価が通る", done: false }
   - { text: "develop に commit している。switch は本人が流す", done: false }
 related: ["#1"]
+updated: 2026-10-14
+assignee: agent
 ---
 # mise のフックのあとに、npm scripts の中で Safe Chain が迂回される
 
