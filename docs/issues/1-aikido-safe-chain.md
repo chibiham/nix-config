@@ -66,6 +66,7 @@ goal:
 - 2026-10-14 09:13 [agent] 再レビュー開始。develop..agent/1 の4コミット(a141c55・4061325・c2d1cea・4ff8d37)を対象に、固定shim経由へ変更したbootstrapとラッパーのコマンド解決を読むだけ・一時検証で確認する。コード変更・コミット・switchは行わない。
 - 2026-10-14 09:15 [agent] 不具合を再現: 最新のNix評価が指す実shim(nsallhr...)へ一時symlinkを作りbootstrapと同じPATH先頭に置くと、pnpm --version / npm --version が各8秒でタイムアウト。storeのbin直指定ではpnpm本体不在で即終了127。home/common.nix:118はstore文字列だけを除外し、新設固定パスのsymlinkを実体と誤認して再帰するため、bootstrapのpnpm導入判定で停止する。一時symlinkと起動プロセスは除去済み。
 - 2026-10-14 09:16 [agent] 再レビュー結論 REVIEW_NG。P1: home/common.nix:113-122 の再帰防止が固定symlinkを除外せず、bootstrap.sh:130/140・bootstrap-ubuntu.sh:53/65のpnpm --versionが終了しない。実shimで固定パス相当symlink先頭→npm/pnpm --version各8秒タイムアウトを再現。safe_npm safe-chain-verifyとstore直指定のnpm run→子のsafe-chain-verifyは成功（mise shim経由も成功）、Nix評価3構成とbash -nも成功。コード変更・コミット・switchなし。一時ファイル・プロセスは除去済み。
+- 2026-10-14 09:16 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合を1件確認した。
 
 ## エージェントの結果(2026-10-14 09:06)
 
