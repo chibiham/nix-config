@@ -407,7 +407,14 @@ in
       ${lib.concatMapStrings (cmd: ''
         ${cmd}() { ${safe-chain-shims}/bin/${cmd} "$@"; }
       '') safeChainCommands}
-      ${safeChainPathFirst}'';
+      ${safeChainPathFirst}
+      # miseのprecmd/chpwdフックが毎回node等をPATH先頭へ戻すため、その後で並べ直す。
+      # これがないと npm run の子（npm/npx/pnpm等）が実体を直接起動してSafe Chainを迂回する。
+      # miseは自分のフックを配列の先頭へ入れるので、こちらは末尾に置けば必ず後に走る。
+      _safe_chain_path_first() { ${lib.trim safeChainPathFirst}; }
+      typeset -ag precmd_functions chpwd_functions
+      precmd_functions=(''${precmd_functions:#_safe_chain_path_first} _safe_chain_path_first)
+      chpwd_functions=(''${chpwd_functions:#_safe_chain_path_first} _safe_chain_path_first)'';
   };
 
   # ===================
