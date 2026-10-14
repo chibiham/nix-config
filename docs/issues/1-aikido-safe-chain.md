@@ -181,3 +181,30 @@ REVIEW_NG
 作業ログに記録済み。コード変更・コミット・switchなし。一時ファイル・試験プロセスは除去済み。
 
 REVIEW_NG
+
+## エージェントの結果(2026-10-14 09:32)
+
+実装レビュー(gpt-6.1-sol)
+
+修正が必要な不具合を1件確認した。
+
+### P1 — miseのプロンプトフック後、npm scripts内の取得が保護を迂回する
+
+対象: `home/common.nix:400-410`
+
+`mise activate zsh` が登録する `precmd`／`chpwd` フックは、Node.jsのbinをPATH先頭へ追加する。今回のPATH並べ直しはシェル初期化時だけなので、次のプロンプトでSafe Chain shimより実npmが優先される。トップレベルのnpm関数は保護されても、scripts内の子コマンドには関数が引き継がれない。
+
+**再現:** 実装と同じ初期化を行い、実際の `_mise_hook_precmd` を呼んだ後、一時package.jsonの `npm run probe` を実行した。
+- 子のnpm → `~/.local/share/mise/installs/node/24.18.0/bin/npm`
+- 子の `npm safe-chain-verify` → `Unknown command`、終了1
+- `HTTPS_PROXY`／`NODE_EXTRA_CA_CERTS`／`npm_config_proxy` → 全て未設定
+
+[Safe Chain 1.5.25はrun/test等でプロキシを起動せず、子のshim再捕捉に依存する](https://github.com/AikidoSec/safe-chain/blob/1.5.25/packages/safe-chain/src/packagemanager/npm/createPackageManager.js)。したがって、例えば `"setup": "npm install …"` をこの状態で実行すると、マルウェア判定と72時間制限を迂回する。
+
+**修正方針:** miseのフック適用後も、子へ渡すPATHでshimが最優先になるようにする。初期化直後だけでなく、プロンプト表示・ディレクトリ移動後の子コマンドを検証する。
+
+検証済み: 最新shim先頭での新旧世代共存・固定symlink・pnpm本体不在判定・bootstrap相当経路は成功。Nix評価3構成とbootstrap2本の構文検査も成功。
+
+作業ログに記録済み。コード変更・コミット・switchなし。一時ファイルは除去済み。
+
+REVIEW_NG
