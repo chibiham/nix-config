@@ -49,3 +49,23 @@ goal:
 作業ログ記録済み。コード変更・コミット・switch は未実施。
 
 REVIEW_OK
+
+## エージェントの結果(2026-10-14 15:52)
+
+直しを入れ、テストは通りました。ただし、そのテストが元の不具合を捕まえられるかは確かめていません(下に書きます)。commit は agent/2 の `dcd8d93` です。push と switch はしていません。
+
+**直したこと**(`home/common.nix`)
+- Safe Chain の shim を PATH の先頭へ戻す関数 `_safe_chain_path_first` を足しました。
+- この関数を、プロンプトのたびとディレクトリ移動のたびに動くフックの列(`precmd_functions` / `chpwd_functions`)の末尾に置きました。mise と direnv のフックより後に動くので、mise が Node.js の bin を先頭に足しても shim が先頭に戻ります。
+- 設定を2回読んでも、関数が2回入ることはありません。#1 で直した「npm が終わらない」点はそのままです。
+
+**確かめたこと**
+- 新しいテスト `tests/test_safe_chain_mise_hook.py`: switch はせず mac-mini の設定をビルドし、その設定で実際の `_mise_hook_precmd` を呼んだあとに試しました。
+  - `npm run` の中の `npm install safe-chain-test` は Safe-chain に止められました。
+  - `npm --version` はすぐ 11.16.0 を返しました。
+  - 2件とも通りました。
+- mac-mini・macbook・ubuntu-server の3つとも nix の評価が通りました。
+
+**残る点:** `/tmp` で実際の `_mise_hook_precmd` を呼んでも、直す前の状態で shim が先頭のままでした。直す前のコードでこのテストが落ちることは試していません。なので、このテストは直したあとが動くことは示しますが、元の不具合を確実に捕まえられるかは未確認です。必要なら、Node.js の版を指定した一時ディレクトリで、直す前の commit に対して落ちることを確かめる次の作業を足せます。
+
+**お願い:** develop に入ったら、switch をお願いします。
