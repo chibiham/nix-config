@@ -10,7 +10,7 @@ goal:
   - text: テストで、実際の _mise_hook_precmd を呼んだあとに npm run の中から safe-chain-test を入れようとすると止まり、npm --version はすぐ終わることを確かめる。nix の評価が通る
     done: true
   - text: develop に commit している。switch は本人が流す
-    done: false
+    done: true
 ---
 # mise のフックのあとに、npm scripts の中で Safe Chain が迂回される
 
@@ -28,3 +28,4 @@ goal:
 
 - 2026-10-14 15:50 [agent] 完了条件 0 を済みにした: home/common.nix に _safe_chain_path_first を追加し precmd_functions/chpwd_functions の末尾(mise・direnv のフックより後)に登録。ビルドした .zshrc で順序 _direnv_hook _mise_hook_precmd … _safe_chain_path_first を確認。npm run の子の npm install safe-chain-test が Safe-chain に止められた(dcd8d93)
 - 2026-10-14 15:50 [agent] 完了条件 1 を済みにした: nix build で mac-mini の activationPackage を作り HM_GENERATION=… python3 -m unittest -v tests/test_safe_chain_mise_hook.py → 2 tests OK(実際の _mise_hook_precmd 実行後、npm run 内の safe-chain-test を阻止、npm --version 11.16.0 が即終了)。nix eval で mac-mini/macbook/ubuntu-server の drvPath すべて成功
+- 2026-10-14 15:50 [agent] 完了条件 2 を済みにした: agent/2 に dcd8d93 を commit(home/common.nix と tests/test_safe_chain_mise_hook.py)。develop へは TASK_DONE 後に subako が早送りで入れる。switch は本人が流す
