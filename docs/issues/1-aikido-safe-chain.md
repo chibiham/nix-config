@@ -61,6 +61,7 @@ goal:
 - 2026-10-14 09:09 [agent] 再レビュー開始。develop..agent/1 の3コミット(6c9ebaa・e997370・a5a8e09)を確認。前回のPATH削除・pnpm導入判定の修正を含め、shimの親PID判定と72時間制限、シェル/子プロセスへの適用を読むだけ・一時検証で確認する。コード変更・コミット・switchは行わない。
 - 2026-10-14 09:10 [agent] a5a8e09の実ビルド済みshim(nsallhr...)をNix評価のsessionPathと照合し、一時package.jsonの npm run probe→子もshim・safe-chain-verify成功、pnpm実体なし→needs-installを確認。前回2件の修正はこの条件では有効。別の迂回を確認: bootstrap.sh:130/142・bootstrap-ubuntu.sh:53と同じmise/shims先頭PATHでは npm safe-chain-verify がUnknown commandで終了1となり、保護を通らない。
 - 2026-10-14 09:11 [agent] 再レビュー結論 REVIEW_NG。P1: scripts/bootstrap.sh:130-133/142-146、bootstrap-ubuntu.sh:53-58がmise/shimsをSafe Chain shimより前へ置く。Macで同じPATHを構成して mise exec -- npm safe-chain-verify→Unknown command/終了1を確認。初期構築のpnpm/Qwen Code/Pi等のnpm取得がマルウェア判定・72時間制限を通らない。前回2件は改訂shimで解消を確認し、Nix評価3構成も成功。コード変更・コミット・switchなし、一時package.jsonは削除済み。
+- 2026-10-14 09:11 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合を1件確認した。前回の2件は改訂shimで解消を確認した。
 
 ## エージェントの結果(2026-10-14 09:06)
 
