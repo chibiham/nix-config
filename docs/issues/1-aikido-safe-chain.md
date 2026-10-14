@@ -83,3 +83,27 @@ goal:
 作業ログに記録済み。コード変更・コミット・switchは行っていない。
 
 REVIEW_NG
+
+## エージェントの結果(2026-10-14 09:11)
+
+実装レビュー(gpt-6.1-sol)
+
+修正が必要な不具合を1件確認した。前回の2件は改訂shimで解消を確認した。
+
+### P1 — bootstrapのパッケージ取得がSafe Chainを迂回する
+
+対象: `scripts/bootstrap.sh:130-133,142-146`、`scripts/bootstrap-ubuntu.sh:53-58`
+
+bootstrapが `~/.local/share/mise/shims` をPATH先頭へ追加し、Safe Chainのshimより優先させる。Bashでは対話zshのラッパー関数も使えないため、初期構築時のnpmによるpnpm・Qwen Code・Pi等の導入が、マルウェア判定と72時間制限を通らない。
+
+**再現:** 改訂Safe Chain shimを含むPATHに、bootstrapと同じmise/shimsの先頭追加を行った。
+- `command -v npm` → `~/.local/share/mise/shims/npm`
+- `mise exec -- npm safe-chain-verify` → `Unknown command: "safe-chain-verify"`、終了1
+
+**修正方針:** bootstrap内でもSafe Chain shimを優先させ、`mise exec`経由の取得コマンドが保護を通ることを確認する。
+
+検証: 改訂shim経由の`npm run`では子の検証コマンドが成功。pnpm実体なしでは導入必要と判定。Nix評価3構成とbootstrapの構文検査は成功。
+
+作業ログに記録済み。コード変更・コミット・switchなし。
+
+REVIEW_NG
