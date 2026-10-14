@@ -58,6 +58,7 @@ goal:
 - 2026-10-14 09:06 [agent] レビュー結論 REVIEW_NG。P1: npm run/test等の子からshimが消え、プロキシも無いためスクリプト内のパッケージ取得が無保護。P2: pnpm本体未導入でもshimの存在でbootstrapが導入を飛ばし、途中失敗後の再実行等で導入できない。いずれもMac上の実shimで再現。通常のzsh -lcはage=72でshimを選択。既報のキャッシュ/venv迂回は再試験せず、コード変更・コミット・switchも行っていない。
 - 2026-10-14 09:06 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合を2件確認した。
 - 2026-10-14 09:09 [agent] 実装レビューの指摘2件を a60fdd1 で直した。P1: shim が PATH を消さず、safe-chain が呼んだ実体の起動だけを $PPID と _SAFE_CHAIN_SHIM_PID で見分けて素通しする。npm run の子の npm も shim を通り、npm run 経由の safe-chain-test が止まった。再帰はない。P2: bootstrap の pnpm の有無の判定を pnpm --version に変えた。build した shims で確かめ、nix eval の3構成が通った。Mac には再 switch が要る
+- 2026-10-14 09:09 [agent] 再レビュー開始。develop..agent/1 の3コミット(6c9ebaa・e997370・a5a8e09)を確認。前回のPATH削除・pnpm導入判定の修正を含め、shimの親PID判定と72時間制限、シェル/子プロセスへの適用を読むだけ・一時検証で確認する。コード変更・コミット・switchは行わない。
 
 ## エージェントの結果(2026-10-14 09:06)
 
