@@ -67,6 +67,7 @@ goal:
 - 2026-10-14 09:15 [agent] 不具合を再現: 最新のNix評価が指す実shim(nsallhr...)へ一時symlinkを作りbootstrapと同じPATH先頭に置くと、pnpm --version / npm --version が各8秒でタイムアウト。storeのbin直指定ではpnpm本体不在で即終了127。home/common.nix:118はstore文字列だけを除外し、新設固定パスのsymlinkを実体と誤認して再帰するため、bootstrapのpnpm導入判定で停止する。一時symlinkと起動プロセスは除去済み。
 - 2026-10-14 09:16 [agent] 再レビュー結論 REVIEW_NG。P1: home/common.nix:113-122 の再帰防止が固定symlinkを除外せず、bootstrap.sh:130/140・bootstrap-ubuntu.sh:53/65のpnpm --versionが終了しない。実shimで固定パス相当symlink先頭→npm/pnpm --version各8秒タイムアウトを再現。safe_npm safe-chain-verifyとstore直指定のnpm run→子のsafe-chain-verifyは成功（mise shim経由も成功）、Nix評価3構成とbash -nも成功。コード変更・コミット・switchなし。一時ファイル・プロセスは除去済み。
 - 2026-10-14 09:16 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合を1件確認した。
+- 2026-10-14 09:17 [agent] 実装レビューの指摘(固定パス ~/.local/share/safe-chain-shims 経由でラッパーが自分を呼び続け、bootstrap が止まる)を 30806a9 で直した。実体を探すとき、リンク先と同じ実体(cd -P と -ef)のラッパーも飛ばす。入れ子の深さが32を超えたら exit 126 で止まる。固定パスを先頭にして試し、pnpm がないとき rc=127 ですぐ終わった。pnpm・npm の --version、verify、npm run の子、safe_npm も動き、npm run 経由の safe-chain-test は止まった。bash -n と nix eval の3構成も通った
 
 ## エージェントの結果(2026-10-14 09:06)
 
