@@ -81,6 +81,7 @@ goal:
 - 2026-10-14 09:29 [agent] 再レビュー開始。develop..agent/1 の6コミット(f188ce5〜5790939)を対象に、全世代shimの除外・親プロセス判定とbootstrap/子プロセスへの保護を読むだけ・一時検証で確認する。コード変更・コミット・switchは行わない。
 - 2026-10-14 09:30 [agent] 最新Nix評価の実shim(1y7hhw...)で、固定symlink＋旧3世代との共存時 npm --version が約1.2秒で終了0、pnpm本体不在は即127、npm run内の子とbootstrap相当mise exec経由のsafe-chain-verify成功を確認。前回の新旧世代再帰は最新shim先頭条件で解消。Nix評価3構成とbootstrap2本のbash -n成功。一時ファイルは除去済み。
 - 2026-10-14 09:31 [agent] 新しい迂回を実行で確認: common.nixと同じmise activate→npm関数→shim先頭の設定後、実際の_mise_hook_precmdを呼ぶとmiseのnode/binが先頭に戻る。一時package.jsonのnpm run probe内のnpmは ~/.local/share/mise/installs/node/24.18.0/bin/npm を選び、safe-chain-verifyはUnknown command/終了1。トップレベルの関数だけでは子のPATHを保護できない。初期化直後のshim先頭条件では同じprobeが成功。一時ファイルは除去済み。
+- 2026-10-14 09:32 [agent] 再レビュー結論 REVIEW_NG。P1: home/common.nix:400-410でmiseのprecmd/chpwdフックより前にしかPATHを並べ直しておらず、次のプロンプトでnode/binがshimより前へ戻る。実miseフック後 npm run probe --prefix 一時dir→子npmはmiseの実体、safe-chain-verifyはUnknown command/終了1、HTTPS_PROXY・NODE_EXTRA_CA_CERTS・npm_config_proxyは全てunset。npm scripts内の取得はマルウェア判定と72時間制限を迂回する。最新shim先頭での新旧世代再帰・固定リンク・pnpm本体不在・bootstrap相当経路は成功。Nix評価3構成とbash -n成功。コード変更・コミット・switchなし、一時ファイルは除去済み。
 
 ## エージェントの結果(2026-10-14 09:06)
 
