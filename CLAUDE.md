@@ -1,5 +1,7 @@
 # Nix Configuration
 
+method: subako@1eff551
+
 Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 複数のMacとUbuntu Serverで同じ開発環境を再現可能にする。
 
