@@ -111,5 +111,4 @@ vscode "ms-vscode.vscode-typescript-next"
 vscode "prisma.prisma"
 vscode "zaaack.markdown-editor"
 uv "trafilatura"
-npm "corepack"
 

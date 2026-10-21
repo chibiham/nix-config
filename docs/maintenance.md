@@ -113,6 +113,8 @@ brew bundle cleanup         # Brewfileにないもの（ドライラン。--forc
 - アプリを足す・消すときは、`Brewfile` を手で編集するか、
   入れた後に `brew bundle dump --force` で今の状態を書き出し直す（`--describe` は現行brewでは無効）。
   dumpはそのMacの状態で丸ごと上書きするので、`git diff` で意図しない増減がないか確かめる
+  （dumpは `npm "..."` 行も書き出すが、npmのグローバルはmiseのNode.jsとbootstrapで管理するので消す。
+  Brewfileに残すと `npm install -g` が直接入れたpnpm等と衝突し `EEXIST` で失敗する）
 - `brew bundle cleanup` に出たものは、Brewfileへ足すか `brew uninstall` するかを決めて差分をなくす。
   確認せずに `--force` を付けない
 - Homebrewには脆弱性スキャナがないので、`brew outdated` を古さの目安にする
