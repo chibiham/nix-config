@@ -22,3 +22,4 @@ related: [t-20261021-003]
 - Homebrew: 入っているものを棚卸しし、nix(home-manager のパッケージ)へ移せるもの・nix-darwin の `homebrew` の設定で宣言にするもの・要らないものに分ける案を出す。`brew upgrade` で上げる
 - 目指す形: 端末の依存とセキュリティの更新を nix-config の手順ひとつ(例: flake update → switch → mise upgrade → brew の宣言の反映)で回せるようにする。手順は README か docs に書く
 - 消す・外す操作(mise prune、brew の uninstall)と切り替えは、実行の前に本人に確かめる
+- 本人(2026-10-21)「中身はhomebrew管理でいいに同意。内容の棚卸しだけしてくれるんだよね。」: Homebrew の中身は Homebrew が入れる・上げる。nix に移すのは本人が選んだものだけ。この issue でやるのは棚卸し(何が入っていて、何に使うか・要るか)と、残すものを nix-darwin の `homebrew` の設定に一覧として書く案まで。宣言にするときも `onActivation.cleanup` は "none"(一覧にないものを勝手に消さない)にする
