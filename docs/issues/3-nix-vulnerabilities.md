@@ -82,3 +82,26 @@ goal:
 検証：3ホストの Nix 評価、`bootstrap.sh` の構文確認は成功。コード変更・コミットなし。作業ログへ記録済み。
 
 REVIEW_NG
+
+## エージェントの結果(2026-10-22 01:19)
+
+実装レビュー(gpt-6.1-sol)
+
+要修正1件。前回の2指摘には修正が入っています。
+
+### [P2] Corepack が直接導入した pnpm と衝突する
+対象：`Brewfile:114`
+
+追加された `npm "corepack"` は、`pnpm`・`pnpx` の実行ファイルも配置します。一方、`scripts/bootstrap.sh:140-142` と保守手順は、先に `npm install -g pnpm@latest` で同じ場所へ pnpm を導入します。
+
+この順序で初期構築すると、後続の `brew bundle` による Corepack 導入が `EEXIST` で失敗します。既存環境でも Corepack の更新時に衝突します。
+
+現機の npm 本体が使う読取専用の実行ファイル事前検査で、次を確認しました。
+```text
+EEXIST /Users/chibiham/.local/share/mise/installs/node/24.22.1/bin/pnpm
+```
+Homebrew Bundle は `--force` なしの `npm install -g corepack` を実行します。pnpm を npm で直接管理する現方針なら、Brewfile の Corepack 宣言を外すなど、実行ファイルの管理元を一本化してください。
+
+検証：3ホストの Nix 評価、bootstrap の構文確認、`brew bundle check --no-upgrade` は成功。修正後の環境変数再読込も子 zsh で確認しました。コード変更・コミット・switch・パッケージ更新／削除なし。作業ログへ記録済み。
+
+REVIEW_NG
