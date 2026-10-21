@@ -197,8 +197,8 @@
   # macOS固有の環境変数
   home.sessionVariables = {
     BROWSER = "open";
-    # Homebrew設定
-    HOMEBREW_BREWFILE = "$HOME/.config/nix-config/Brewfile";
+    # Homebrew設定: 引数なしの `brew bundle` がリポジトリのBrewfile（両Mac共通）を使う
+    HOMEBREW_BUNDLE_FILE = "$HOME/.config/nix-config/Brewfile";
     HOMEBREW_NO_AUTO_UPDATE = "1";  # 自動更新を無効化
   };
 

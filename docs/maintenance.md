@@ -7,7 +7,7 @@ flake update → ビルド/評価 →（vulnix）→ switch → mise upgrade →
 
 ```bash
 cd ~/.config/nix-config
-H=mac-mini
+H=mac-mini   # MacBookなら H=macbook（以降の手順は同じ）
 ```
 
 ## 1. flake inputsの更新
@@ -87,12 +87,32 @@ mise prune                  # 確認してから実行
 方針: Homebrewの中身はHomebrew自身が管理し、`Brewfile` はその一覧として扱う（nix-darwinは使わない）。
 Nixが提供するツール（gh, gnupg, tmux, pinentry-mac など）はbrewで重複して入れない。
 
+- `Brewfile` は mac-mini / macbook 共通。マシン固有のものは `Brewfile.<host>`（例: `Brewfile.macbook`）に書き、
+  共通Brewfileの末尾から読み込まれる（無ければ何もしない）
+- `HOMEBREW_BUNDLE_FILE`（darwin.nix）と `HOMEBREW_BUNDLE_HOST`（flake.nixの `mkDarwinHome`）がswitchで設定されるので、
+  どちらのMacでも引数なしの `brew bundle` で同じ手順になる
+
 ```bash
 brew update && brew upgrade
-brew bundle cleanup --file=Brewfile           # Brewfileとの差分（ドライラン。--forceは付けない）
+brew bundle                 # Brewfile（+ Brewfile.<host>）で足りないものを入れる
+brew bundle cleanup         # Brewfileにないもの（ドライラン。--forceは付けない）
 ```
 
-- アプリを足す・消すときは、`Brewfile` を手で編集するか、
-  入れた後に `brew bundle dump --force --file=Brewfile` で今の状態を書き出し直す（`--describe` は現行brewでは無効）
-- `brew bundle cleanup` に出たものは、Brewfileへ足すか `brew uninstall` するかを決めて差分をなくす
+- アプリを足す・消すときは `Brewfile`（両Mac）か `Brewfile.<host>`（そのMacだけ）を手で編集する。
+  `brew bundle dump --force` は今のMacの状態で共通Brewfileを丸ごと上書きし、ホスト別の分け方が崩れるので、
+  使ったら `git diff` で他のMac用の行が消えていないか、ホスト固有のものが紛れていないかを確かめる（`--describe` は現行brewでは無効）
+- `brew bundle cleanup` に出たものは、Brewfile / `Brewfile.<host>` へ足すか `brew uninstall` するかを決めて差分をなくす
 - Homebrewには脆弱性スキャナがないので、`brew outdated` を古さの目安にする
+
+### 別のMacで初めて共通Brewfileを使うとき（例: macbook）
+
+```bash
+cd ~/.config/nix-config && git pull
+nix run .#home-manager -- switch --flake ".#$USER@macbook"
+exec zsh                    # HOMEBREW_BUNDLE_FILE / HOMEBREW_BUNDLE_HOST を読み込む
+brew bundle                 # 共通Brewfileで足りないものを入れる
+brew bundle cleanup         # macbookにだけあるもの（ドライラン）
+```
+
+cleanupに出たものごとに、macbookで使い続けるなら `Brewfile.macbook` に足す（両Macで使うなら `Brewfile`）、
+不要なら `brew uninstall` する。cleanupが空になったらコミットする。

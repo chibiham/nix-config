@@ -26,6 +26,7 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 │   ├── darwin.nix     # macOS共通設定
 │   ├── linux.nix      # Linux固有設定
 │   └── hosts/         # Macごとの固有設定（macbook.nix / mac-mini.nix）
+├── Brewfile           # Homebrew一覧（両Mac共通）+ Brewfile.<host> でマシン固有分
 ├── udev/             # Ubuntuへ配るudevルール（RAPL読み取り権限）
 ├── claude/skills/     # Nixで ~/.claude/skills に配るClaude Code skill（civitai-download）
 └── scripts/
@@ -165,7 +166,7 @@ macOSのセキュリティ制約により自動化できないもの:
 - **Spotlight統合**: mac-app-util（トランポリンアプリ作成、switch時に自動実行）
 - **Karabiner-Elements**: karabiner.jsonをNix管理（GUI変更はswitchで上書きされる）
 - **Ghostty**: 設定（`~/.config/ghostty/config`）をNix管理。アプリ本体はHomebrew cask
-- **Homebrew**: Brewfileが一覧（`brew bundle dump --force` で現状から再生成、bootstrap.shで `brew bundle` 実行。Nix提供ツールはbrewで入れない）
+- **Homebrew**: `Brewfile` が両Mac共通の一覧、マシン固有は `Brewfile.<host>`（末尾で読み込み）。`HOMEBREW_BUNDLE_FILE` / `HOMEBREW_BUNDLE_HOST` がswitchで設定され、引数なしの `brew bundle` で使える（bootstrap.shも同じ）。Nix提供ツールはbrewで入れない
 - **Nix GC**: 週次で30日超の世代を自動削除（`nix.gc`、launchd）
 
 ### シェル設定

@@ -1,3 +1,6 @@
+# 両Mac（mac-mini / macbook）共通のBrewfile。
+# マシン固有のものは Brewfile.<host> に書くと、末尾でここに読み込まれる。
+# <host> は HOMEBREW_BUNDLE_HOST（flake.nix の mkDarwinHome が設定、bootstrap.sh も渡す）。
 tap "argon/mas"
 tap "satococoa/tap"
 tap "stripe/stripe-cli"
@@ -111,3 +114,10 @@ vscode "prisma.prisma"
 vscode "zaaack.markdown-editor"
 uv "trafilatura"
 npm "corepack"
+
+# マシン固有の追加分（ファイルが無ければ何もしない）
+host = ENV.fetch("HOMEBREW_BUNDLE_HOST", "")
+unless host.empty?
+  host_brewfile = File.join(File.dirname(File.expand_path(__FILE__)), "Brewfile.#{host}")
+  instance_eval(File.read(host_brewfile), host_brewfile) if File.exist?(host_brewfile)
+end

@@ -191,11 +191,14 @@ fi
 if ! command -v brew &>/dev/null && [ -x /opt/homebrew/bin/brew ]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
+# 共通Brewfile + Brewfile.<host>（あれば）。switch直後のシェルにはsessionVariablesが未反映なので明示する
+export HOMEBREW_BUNDLE_FILE="$REPO_DIR/Brewfile"
+export HOMEBREW_BUNDLE_HOST="$HOST_PROFILE"
 if command -v brew &>/dev/null; then
-  brew bundle --file="$REPO_DIR/Brewfile" || warn "brew bundle が一部失敗しました（後で再実行してください）"
+  brew bundle || warn "brew bundle が一部失敗しました（後で再実行してください）"
   ok "Brewfile を適用しました"
 else
-  warn "Homebrewが見つかりません。手動でインストール後、'brew bundle --file=$REPO_DIR/Brewfile' を実行してください"
+  warn "Homebrewが見つかりません。手動でインストール後、新しいシェルで 'brew bundle' を実行してください"
 fi
 
 # -------------------------------------------------
