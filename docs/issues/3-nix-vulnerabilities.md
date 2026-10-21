@@ -151,3 +151,19 @@ REVIEW_NG
 コード変更・コミット・switch・パッケージ更新／削除なし。作業ログへ記録済み。
 
 REVIEW_OK
+
+## エージェントの結果(2026-10-22 01:27)
+
+実装レビューの指摘を直し、commit しました(`b637847`)。
+
+- **直したこと:** `docs/maintenance.md` の「Homebrew には脆弱性スキャナがない」という誤った記述を消し、`brew upgrade` のあとに `brew vulns` で確かめる手順にしました。
+  - `brew vulns` は OSV.dev のデータで、入っている formula(Homebrew の Ruby など)に既知の脆弱性がないかを調べます。
+  - 上げれば直るものだけを見る `brew vulns --fix-available` も書き添えました。
+- **対象外のものの書き方:** cask と、mise・npm・uv など別の管理系で入れたものは `brew vulns` で調べられないことを書きました。それぞれの確かめ方も並べています。
+  - cask は `brew upgrade --cask` かアプリの自動更新で上げる。
+  - mise と npm の分は `mise outdated` と `npm outdated -g` で見る。
+  - Nix の分は vulnix で見る。
+- **macbook の手順:** そのまま打つコマンドの並びにも `brew vulns` を足しました。
+- **確かめていないこと:** 手順書を直しただけで、`brew vulns` 自体はこの Mac で実行していません。
+
+完了条件の印は6つとも付いたままです。worktree に commit していない変更はなく、agent/3 は push していません。
