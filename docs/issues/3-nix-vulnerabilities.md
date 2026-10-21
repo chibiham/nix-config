@@ -68,6 +68,7 @@ goal:
 - 2026-10-22 01:20 [agent] 再レビュー開始。develop..agent/3 の9コミット・7ファイルを対象に、corepack宣言削除を含む差分と保守手順を確認する。コード変更・コミット・switch・パッケージ更新/削除は行わない。
 - 2026-10-22 01:21 [agent] 差分で npm corepack 宣言の削除と dump 後の除外手順を確認。3ホストの activationPackage 評価・bootstrap の bash -n・修正後 Brewfile の brew bundle check --no-upgrade は成功。追加の起動/依存衝突は確認されていない。docs の『Homebrewには脆弱性スキャナがない』は現行 brew vulns --help と不一致のため、影響を評価中。
 - 2026-10-22 01:22 [agent] 再レビュー結論 REVIEW_NG、要修正1件: docs/maintenance.md:120 は『Homebrewには脆弱性スキャナがない』として brew outdated のみを案内するが、現行 brew vulns --help は OSV.dev による導入済み formula の既知脆弱性チェックを提供している。Ruby等Homebrew管理の処理系を更新後も検査できる手順が欠ける。brew vulns と未検査範囲(cask等)の説明が必要。corepack衝突の修正は確認済み。3ホスト評価・bash構文確認・brew bundle check --no-upgrade は成功。コード変更・コミット・switch・更新/削除なし。
+- 2026-10-22 01:22 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 要修正1件。前回の Corepack と pnpm の衝突は、Corepack 宣言の削除で解消されています。
 
 ## エージェントの結果(2026-10-22 01:16)
 
