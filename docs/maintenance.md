@@ -1,7 +1,7 @@
 # 定期メンテナンス（更新と脆弱性確認）
 
 月に1回程度、または `update-flake-lock.yml` の自動PRが来たときに行う。
-flake update → ビルド/評価 →（vulnix）→ switch → mise upgrade → mise prune → Homebrew の順に上げる。どの段階も途中で止めてよい。
+flake update → ビルド/評価 →（vulnix）→ switch → mise upgrade → 不要な版の削除 → Homebrew の順に上げる。どの段階も途中で止めてよい。
 
 以下、`H` は対象ホスト（`mac-mini` / `macbook` / `ubuntu-server`）。
 
@@ -56,14 +56,29 @@ nix run .#home-manager -- switch --flake ".#chibiham@$H"
 git add flake.lock && git commit -m "chore: flake.lockを更新"
 ```
 
+switch後に新しいHM環境変数を読むには、新しいターミナルを開く（推奨）か
+`unset __HM_SESS_VARS_SOURCED; exec zsh -l` を実行する（単なる `exec zsh` は
+`__HM_SESS_VARS_SOURCED=1` を引き継ぐので読み込まれない）。`echo $HOMEBREW_BUNDLE_FILE` で確認する。
+
 ## 5. mise
 
 ```bash
 mise outdated               # 設定の範囲（node = "24" など）で新しい版があるか
 mise upgrade                # 範囲内の最新を入れ、置き換えた旧版はアンインストールする
-mise prune --dry-run        # どの設定からも使われていない版の一覧
-mise prune                  # 確認してから実行
+mise prune --dry-run        # どの設定からも使われていない版の一覧（候補）
 ```
+
+- **plistが `mise/installs/<tool>/<版>` を参照している間は、一括の `mise prune` を実行しない**。
+  launchdが絶対パスで使っている版（例: node@24.18.0, python@3.12.12）も「未使用」として候補に出て消される。
+  候補から launchd 参照中の版を除き、確認したものだけ個別に消す
+
+  ```bash
+  grep -ho 'mise/installs/[^/<"]*/[^/<"]*' ~/Library/LaunchAgents/*.plist | sort -u   # launchdが参照中の版
+  mise prune --dry-run                                                               # 候補
+  mise uninstall <tool>@<版>                                                         # 参照されていない候補だけ
+  ```
+
+  一括の `mise prune` は、plistを版に依存しないパス（`installs/node/24` のsymlinkなど）へ移した後にだけ使う
 
 - `mise upgrade` の前に、launchd などが版の絶対パス（`~/.local/share/mise/installs/node/24.18.0` など）を指していないか確かめる。
   `grep -l mise/installs ~/Library/LaunchAgents/*.plist`。指していれば版を消さない（`mise upgrade` も旧版を消す）か、
@@ -110,9 +125,17 @@ flake.lockの更新とコミットはmac-miniで済ませ、macbookではpullし
 cd ~/.config/nix-config
 git pull
 
-# 4. 反映（新しいシェルでHOMEBREW_BUNDLE_FILEなどを読み込む）
+# 4. 反映
 nix run .#home-manager -- switch --flake ".#$USER@macbook"
-exec zsh
+```
+
+新しいHM環境変数（`HOMEBREW_BUNDLE_FILE` など）は、`exec zsh` では読み込まれない
+（`__HM_SESS_VARS_SOURCED=1` が引き継がれ、hm-session-vars.sh が読み込みを飛ばすため）。
+新しいターミナルを開く（推奨）か、次を実行してから確認する。
+
+```bash
+unset __HM_SESS_VARS_SOURCED; exec zsh -l
+echo $HOMEBREW_BUNDLE_FILE   # リポジトリのBrewfileを指していること
 ```
 
 ```bash
@@ -131,8 +154,11 @@ npm install -g pnpm@latest @qwen-code/qwen-code@latest
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest
 mise reshim
 
-mise prune --dry-run        # 一覧を確認してから
-mise prune
+# 不要な版の削除: plistがmise/installs/<tool>/<版>を参照している間は一括のmise pruneを使わない
+grep -ho 'mise/installs/[^/<"]*/[^/<"]*' ~/Library/LaunchAgents/*.plist | sort -u   # launchdが参照中の版
+mise prune --dry-run        # 候補。上で出た版を除いたものだけ消す
+# mise uninstall <tool>@<版>   # 確認した候補ごとに実行
+# （plistを installs/node/24 などのsymlinkへ移し終えた後なら mise prune で一括削除してよい）
 ```
 
 ```bash
