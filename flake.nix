@@ -79,7 +79,6 @@
       mkDarwinHome =
         {
           username,
-          host, # macbook / mac-mini（Brewfile.<host> の選択に使う）
           hostModule,
           system ? "aarch64-darwin",
         }:
@@ -94,8 +93,6 @@
             {
               home.username = username;
               home.homeDirectory = "/Users/${username}";
-              # Brewfileが Brewfile.<host> を追加で読む（brewは HOMEBREW_* 以外の環境変数を落とす）
-              home.sessionVariables.HOMEBREW_BUNDLE_HOST = host;
             }
           ];
         };
@@ -124,12 +121,10 @@
       homeConfigurations = {
         "chibiham@macbook" = mkDarwinHome {
           username = "chibiham";
-          host = "macbook";
           hostModule = ./home/hosts/macbook.nix;
         };
         "chibiham@mac-mini" = mkDarwinHome {
           username = "chibiham";
-          host = "mac-mini";
           hostModule = ./home/hosts/mac-mini.nix;
         };
         "chibiham@ubuntu-server" = mkLinuxHome { username = "chibiham"; };

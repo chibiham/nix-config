@@ -191,9 +191,8 @@ fi
 if ! command -v brew &>/dev/null && [ -x /opt/homebrew/bin/brew ]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
-# 共通Brewfile + Brewfile.<host>（あれば）。switch直後のシェルにはsessionVariablesが未反映なので明示する
+# 両Mac共通のBrewfile。switch直後のシェルにはsessionVariablesが未反映なので明示する
 export HOMEBREW_BUNDLE_FILE="$REPO_DIR/Brewfile"
-export HOMEBREW_BUNDLE_HOST="$HOST_PROFILE"
 if command -v brew &>/dev/null; then
   brew bundle || warn "brew bundle が一部失敗しました（後で再実行してください）"
   ok "Brewfile を適用しました"

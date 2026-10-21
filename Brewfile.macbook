@@ -1,3 +1,0 @@
-# MacBookだけで使うHomebrewパッケージ（Brewfileの末尾から読み込まれる）。
-# 両Macで使うものは共通の Brewfile に書く。
-# 初回は `brew bundle cleanup` の出力を見て、MacBookに残すものだけここへ足す。

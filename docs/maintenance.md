@@ -7,7 +7,7 @@ flake update → ビルド/評価 →（vulnix）→ switch → mise upgrade →
 
 ```bash
 cd ~/.config/nix-config
-H=mac-mini   # MacBookなら H=macbook（以降の手順は同じ）
+H=mac-mini   # macbookは末尾の「macbook で行う手順」
 ```
 
 ## 1. flake inputsの更新
@@ -85,34 +85,62 @@ mise prune                  # 確認してから実行
 ## 6. Homebrew
 
 方針: Homebrewの中身はHomebrew自身が管理し、`Brewfile` はその一覧として扱う（nix-darwinは使わない）。
+`Brewfile` は mac-mini / macbook 共通で、両Macで同じ内容にする（マシン別の分割はしない）。
 Nixが提供するツール（gh, gnupg, tmux, pinentry-mac など）はbrewで重複して入れない。
-
-- `Brewfile` は mac-mini / macbook 共通。マシン固有のものは `Brewfile.<host>`（例: `Brewfile.macbook`）に書き、
-  共通Brewfileの末尾から読み込まれる（無ければ何もしない）
-- `HOMEBREW_BUNDLE_FILE`（darwin.nix）と `HOMEBREW_BUNDLE_HOST`（flake.nixの `mkDarwinHome`）がswitchで設定されるので、
-  どちらのMacでも引数なしの `brew bundle` で同じ手順になる
+`HOMEBREW_BUNDLE_FILE`（darwin.nix）がswitchで設定されるので、どちらのMacでも引数なしの `brew bundle` がリポジトリのBrewfileを使う。
 
 ```bash
 brew update && brew upgrade
-brew bundle                 # Brewfile（+ Brewfile.<host>）で足りないものを入れる
+brew bundle                 # Brewfileにあって入っていないものを入れる
 brew bundle cleanup         # Brewfileにないもの（ドライラン。--forceは付けない）
 ```
 
-- アプリを足す・消すときは `Brewfile`（両Mac）か `Brewfile.<host>`（そのMacだけ）を手で編集する。
-  `brew bundle dump --force` は今のMacの状態で共通Brewfileを丸ごと上書きし、ホスト別の分け方が崩れるので、
-  使ったら `git diff` で他のMac用の行が消えていないか、ホスト固有のものが紛れていないかを確かめる（`--describe` は現行brewでは無効）
-- `brew bundle cleanup` に出たものは、Brewfile / `Brewfile.<host>` へ足すか `brew uninstall` するかを決めて差分をなくす
+- アプリを足す・消すときは、`Brewfile` を手で編集するか、
+  入れた後に `brew bundle dump --force` で今の状態を書き出し直す（`--describe` は現行brewでは無効）。
+  dumpはそのMacの状態で丸ごと上書きするので、`git diff` で意図しない増減がないか確かめる
+- `brew bundle cleanup` に出たものは、Brewfileへ足すか `brew uninstall` するかを決めて差分をなくす。
+  確認せずに `--force` を付けない
 - Homebrewには脆弱性スキャナがないので、`brew outdated` を古さの目安にする
 
-### 別のMacで初めて共通Brewfileを使うとき（例: macbook）
+## macbook で行う手順
+
+flake.lockの更新とコミットはmac-miniで済ませ、macbookではpullして反映する。上から順に貼り付けて実行する。
 
 ```bash
-cd ~/.config/nix-config && git pull
+cd ~/.config/nix-config
+git pull
+
+# 4. 反映（新しいシェルでHOMEBREW_BUNDLE_FILEなどを読み込む）
 nix run .#home-manager -- switch --flake ".#$USER@macbook"
-exec zsh                    # HOMEBREW_BUNDLE_FILE / HOMEBREW_BUNDLE_HOST を読み込む
-brew bundle                 # 共通Brewfileで足りないものを入れる
-brew bundle cleanup         # macbookにだけあるもの（ドライラン）
+exec zsh
 ```
 
-cleanupに出たものごとに、macbookで使い続けるなら `Brewfile.macbook` に足す（両Macで使うなら `Brewfile`）、
-不要なら `brew uninstall` する。cleanupが空になったらコミットする。
+```bash
+# 5. mise: upgradeの前に、launchdが版の絶対パスを指していないか確かめる
+cd ~/.config/nix-config
+grep -l mise/installs ~/Library/LaunchAgents/*.plist
+# 何か出たら、upgradeで旧版が消えるので、後でその版を入れ直す（mise install node@<版>）か、
+# plistの参照を installs/node/24 のようなsymlinkに直してから進む
+
+npm ls -g --depth=0 > /tmp/npm-global-before.txt   # 入れ直す対象を控える
+mise outdated
+mise upgrade
+
+# 旧版に入れていたnpmグローバルを入れ直す（Safe Chain経由）
+npm install -g pnpm@latest @qwen-code/qwen-code@latest
+npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest
+mise reshim
+
+mise prune --dry-run        # 一覧を確認してから
+mise prune
+```
+
+```bash
+# 6. Homebrew
+brew update && brew upgrade
+brew bundle                 # Brewfileにあって入っていないものを入れる
+brew bundle cleanup         # Brewfileにないもの（ドライラン）
+```
+
+`brew bundle cleanup` に出たものごとに、両Macで使うなら `Brewfile` に足してコミットし（mac-miniでも `brew bundle` で入る）、
+不要なら `brew uninstall` する。確認せずに `brew bundle cleanup --force` を実行しない。
