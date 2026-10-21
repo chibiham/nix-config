@@ -2,6 +2,20 @@
 status: todo
 created: 2026-10-21
 related: [t-20261021-003]
+updated: 2026-10-21
+goal:
+  - text: flake の入力、mise の処理系、Homebrew の中身の版の一覧と、それぞれが何で管理されているかが issue にある
+    done: false
+  - text: vulnix などで出した既知の脆弱性と、直したもの・残したもの(理由つき)が issue にある
+    done: false
+  - text: flake を上げた構成がビルドでき、本人に確かめて切り替えたあと、よく使う道具(git・node・python・ruby・claude・codex・omp)が動く
+    done: false
+  - text: mise の処理系が範囲の中の最新に上がり、使っていない版を本人に確かめて片付けている
+    done: false
+  - text: Homebrew の棚卸し(nix へ移す・nix-darwin で宣言にする・要らない)の案が issue にあり、本人が選んだ分を反映している
+    done: false
+  - text: 端末の依存とセキュリティの更新を回す手順が nix-config の README か docs に書かれ、変更が commit されている(push は本人に確かめる)
+    done: false
 ---
 # nix で入れているもの(Python・Ruby ほか)の脆弱性を直す
 
@@ -23,3 +37,7 @@ related: [t-20261021-003]
 - 目指す形: 端末の依存とセキュリティの更新を nix-config の手順ひとつ(例: flake update → switch → mise upgrade → brew の宣言の反映)で回せるようにする。手順は README か docs に書く
 - 消す・外す操作(mise prune、brew の uninstall)と切り替えは、実行の前に本人に確かめる
 - 本人(2026-10-21)「中身はhomebrew管理でいいに同意。内容の棚卸しだけしてくれるんだよね。」: Homebrew の中身は Homebrew が入れる・上げる。nix に移すのは本人が選んだものだけ。この issue でやるのは棚卸し(何が入っていて、何に使うか・要るか)と、残すものを nix-darwin の `homebrew` の設定に一覧として書く案まで。宣言にするときも `onActivation.cleanup` は "none"(一覧にないものを勝手に消さない)にする
+
+## 作業ログ
+
+- 2026-10-21 23:59 [me] 完了条件の案を有効にした(ゴールのタスクにした)
