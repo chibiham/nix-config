@@ -109,3 +109,22 @@ Homebrew Bundle は `--force` なしの `npm install -g corepack` を実行し�
 検証：3ホストの Nix 評価、bootstrap の構文確認、`brew bundle check --no-upgrade` は成功。修正後の環境変数再読込も子 zsh で確認しました。コード変更・コミット・switch・パッケージ更新／削除なし。作業ログへ記録済み。
 
 REVIEW_NG
+
+## エージェントの結果(2026-10-22 01:22)
+
+実装レビュー(gpt-6.1-sol)
+
+要修正1件。前回の Corepack と pnpm の衝突は、Corepack 宣言の削除で解消されています。
+
+### [P2] Homebrew の脆弱性確認を「古さの確認」で代用している
+対象：`docs/maintenance.md:120`
+
+「Homebrewには脆弱性スキャナがない」とありますが、現行の `brew vulns --help` は、OSV.dev を使って導入済み formula の既知脆弱性を検査する機能を案内します。
+
+`brew outdated` は新しい版の有無しか確認しません。最新版にも既知脆弱性が残る場合、この手順では検出できず、今回対象の Homebrew 管理の Ruby 等が脆弱性確認から漏れます。
+
+`brew vulns` を確認手順へ追加し、cask や他のパッケージ管理系は対象外であること、未検査パッケージも確認することを記載してください。
+
+検証：3ホストの Nix 評価、bootstrap の `bash -n`、`brew bundle check --no-upgrade` は成功。コード変更・コミット・switch・パッケージ更新／削除なし。作業ログへ記録済み。
+
+REVIEW_NG
