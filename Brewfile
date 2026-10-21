@@ -19,6 +19,9 @@ brew "supabase"
 brew "xcodegen"
 # Command-line tool to install and switch between multiple versions of Xcode
 brew "xcodes"
+brew "mpdecimal" # gcloud-cli などの依存(cask の依存は bundle が数えないので明示)
+brew "openssl@3"
+brew "sqlite"
 # Password manager that keeps all passwords secure behind one password
 cask "1password"
 # Enable Windows-like alt-tab
