@@ -16,6 +16,7 @@ goal:
     done: false
   - text: 端末の依存とセキュリティの更新を回す手順が nix-config の README か docs に書かれ、変更が commit されている(push は本人に確かめる)
     done: false
+assignee: agent
 ---
 # nix で入れているもの(Python・Ruby ほか)の脆弱性を直す
 
