@@ -61,6 +61,7 @@ goal:
 - 2026-10-22 01:15 [agent] 要修正2件: (1) docs/maintenance.md の macbook 手順は絶対パス依存の旧版を後から再インストールする選択肢を示す一方、その後に一括 mise prune を実行するため再削除される。現機の dry-run でも launchd が参照する node 24.18.0/python 3.12.12 が候補。(2) switch 後の exec zsh は継承された __HM_SESS_VARS_SOURCED に阻まれ、新 HOMEBREW_BUNDLE_FILE を読み込まない。候補の生成済み hm-session-vars.sh で、ガード継承時 UNSET・ガードなし時は正しいパスになることを確認。
 - 2026-10-22 01:15 [agent] レビュー完了、REVIEW_NG。旧ランタイム保護と一括 prune の矛盾、および exec zsh で新環境変数が反映されない2件を報告する。後者は生成済み設定を読み込んで /tmp から brew bundle check --no-upgrade を実行し Error: No Brewfile found まで確認。3構成評価・bash構文確認は成功。コード変更・コミットなし。補足調査では brew vulns --json も実行可能だった(26件検査・findings空・未検査あり)。
 - 2026-10-22 01:16 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 要修正2件。
+- 2026-10-22 01:17 [agent] 再レビュー開始。develop..agent/3 は8コミット・7ファイルで、前回の2指摘を修正する b80991c を含む。現差分と保守手順を読み取り、コード変更・コミット・switch・更新/削除操作なしで具体的な不具合を検証する。
 
 ## エージェントの結果(2026-10-22 01:16)
 
