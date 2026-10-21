@@ -1,7 +1,7 @@
 # 定期メンテナンス（更新と脆弱性確認）
 
 月に1回程度、または `update-flake-lock.yml` の自動PRが来たときに行う。
-Nix（flake）→ mise → Homebrew の順に上げる。どの段階も途中で止めてよい。
+flake update → ビルド/評価 →（vulnix）→ switch → mise upgrade → mise prune → Homebrew の順に上げる。どの段階も途中で止めてよい。
 
 以下、`H` は対象ホスト（`mac-mini` / `macbook` / `ubuntu-server`）。
 
@@ -19,7 +19,7 @@ git diff flake.lock
 ```
 
 - `omp` はflake.nixでコミット固定なので `nix flake update` では動かない。上げるときはflake.nixのrevを書き換える
-- `nixpkgs-mac-app-util` はmac-app-util（SBCL）がビルドできる旧nixpkgsに固定している（理由はflake.nixのコメント）
+- mac-app-util（SBCL）は `nixpkgs-unstable` でビルドしている（理由はflake.nixのコメント）
 - `nixpkgs` は `nixos-25.11` などのリリースブランチ。サポート終了後は更新が止まるので、新リリースへの移行を別途検討する
 
 ## 2. ビルドと評価（switchの前に）
@@ -84,14 +84,15 @@ mise prune                  # 確認してから実行
 
 ## 6. Homebrew
 
+方針: Homebrewの中身はHomebrew自身が管理し、`Brewfile` はその一覧として扱う（nix-darwinは使わない）。
+Nixが提供するツール（gh, gnupg, tmux, pinentry-mac など）はbrewで重複して入れない。
+
 ```bash
-brew update
-brew outdated
-brew bundle check --file=Brewfile --verbose   # Brewfileとの差分（未導入）
-brew bundle cleanup --file=Brewfile           # Brewfile外の一覧（表示のみ。--forceで削除）
-brew upgrade                                  # 確認してから
-brew autoremove --dry-run                     # 不要になった依存
+brew update && brew upgrade
+brew bundle cleanup --file=Brewfile           # Brewfileとの差分（ドライラン。--forceは付けない）
 ```
 
-Homebrewには脆弱性スキャナがないので、`brew outdated` を古さの目安にする。
-CLIツールは原則Nixで管理し、Homebrewに入っているものはBrewfileに書く。
+- アプリを足す・消すときは、`Brewfile` を手で編集するか、
+  入れた後に `brew bundle dump --force --file=Brewfile` で今の状態を書き出し直す（`--describe` は現行brewでは無効）
+- `brew bundle cleanup` に出たものは、Brewfileへ足すか `brew uninstall` するかを決めて差分をなくす
+- Homebrewには脆弱性スキャナがないので、`brew outdated` を古さの目安にする

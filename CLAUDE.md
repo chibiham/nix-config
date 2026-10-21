@@ -165,7 +165,7 @@ macOSのセキュリティ制約により自動化できないもの:
 - **Spotlight統合**: mac-app-util（トランポリンアプリ作成、switch時に自動実行）
 - **Karabiner-Elements**: karabiner.jsonをNix管理（GUI変更はswitchで上書きされる）
 - **Ghostty**: 設定（`~/.config/ghostty/config`）をNix管理。アプリ本体はHomebrew cask
-- **GUIアプリ**: Brewfile（bootstrap.shで `brew bundle` 実行）
+- **Homebrew**: Brewfileが一覧（`brew bundle dump --force` で現状から再生成、bootstrap.shで `brew bundle` 実行。Nix提供ツールはbrewで入れない）
 - **Nix GC**: 週次で30日超の世代を自動削除（`nix.gc`、launchd）
 
 ### シェル設定
