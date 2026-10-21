@@ -65,6 +65,9 @@ mise prune --dry-run        # どの設定からも使われていない版の�
 mise prune                  # 確認してから実行
 ```
 
+- `mise upgrade` の前に、launchd などが版の絶対パス（`~/.local/share/mise/installs/node/24.18.0` など）を指していないか確かめる。
+  `grep -l mise/installs ~/Library/LaunchAgents/*.plist`。指していれば版を消さない（`mise upgrade` も旧版を消す）か、
+  参照を `installs/node/24` のような symlink に直してから上げる
 - `mise upgrade` は旧版を消すので、**旧版のNode.jsに `npm install -g` していたコマンドも消える**
   （pnpm、Qwen Code、Pi、agent-browser、neonctlなど）。upgrade前に一覧を控えておき、後で入れ直す
 
