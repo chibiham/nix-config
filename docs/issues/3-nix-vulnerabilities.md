@@ -42,3 +42,4 @@ assignee: agent
 ## 作業ログ
 
 - 2026-10-21 23:59 [me] 完了条件の案を有効にした(ゴールのタスクにした)
+- 2026-10-22 00:48 [agent] 実際に変えたこと(Mac mini): flake.lock 更新 nixpkgs 078d69f(01-22)→b6018f8(06-30, nixos-25.11 は 06-30 で更新停止)・nixpkgs-unstable d54020a→5adc508・home-manager 75ed713→3ee51fb、omp は固定のまま。mac-app-util は SBCL 2.5.10 が macOS 27 で落ちるため nixpkgs-mac-app-util で旧 nixpkgs に固定(commit da56808、build のみで switch は未実行)。mise upgrade で node 24.18.0→24.22.1・python 3.12.12→3.12.15 に上げ、そのとき旧版が消えた(想定外)。npm グローバルの pnpm/agent-browser/neonctl を入れ直し、qwen・pi を bootstrap 手順で導入。node 24.18.0 は執事が、python 3.12.12 はエージェントが mise install で戻した。brew は何も変えていない(update/upgrade/uninstall なし)。
