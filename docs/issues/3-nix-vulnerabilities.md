@@ -15,3 +15,10 @@ related: [t-20261021-003]
 - `nix flake update`(または nixpkgs だけ)で上げ、ビルドして切り替えられることを確かめる。上がらない・壊れるものは理由つきで残す
 - 寿命の切れた処理系(例: 古い Python・Ruby の版)が残っていれば、上げるか外すかの案を出す(外すかは本人が決める)
 - 切り替え(switch)は手元の作業機に効くので、実行の前に本人に確かめる。push も本人に確かめる
+
+追記(本人 2026-10-21「おお、そうしようか。端末の依存とかセキュリティアップデートはnix-configでできると楽だよね」):
+- 今の分担(執事が読んだ): nix は mise 本体と mise の全体設定(node 24・python 3.12・macOS は rust stable)を置くだけで、言語の本体は mise が入れる。Ruby は Homebrew(`/opt/homebrew/bin/ruby`)。Homebrew の 61 個は nix の設定に出てこない
+- mise: `mise upgrade` で範囲の中の最新パッチに上げ、`mise prune` で使っていない版(node 22・26、古い pnpm など)を消す。どの版が残るかを issue に書く
+- Homebrew: 入っているものを棚卸しし、nix(home-manager のパッケージ)へ移せるもの・nix-darwin の `homebrew` の設定で宣言にするもの・要らないものに分ける案を出す。`brew upgrade` で上げる
+- 目指す形: 端末の依存とセキュリティの更新を nix-config の手順ひとつ(例: flake update → switch → mise upgrade → brew の宣言の反映)で回せるようにする。手順は README か docs に書く
+- 消す・外す操作(mise prune、brew の uninstall)と切り替えは、実行の前に本人に確かめる
