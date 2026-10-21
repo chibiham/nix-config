@@ -62,6 +62,7 @@ goal:
 - 2026-10-22 01:15 [agent] レビュー完了、REVIEW_NG。旧ランタイム保護と一括 prune の矛盾、および exec zsh で新環境変数が反映されない2件を報告する。後者は生成済み設定を読み込んで /tmp から brew bundle check --no-upgrade を実行し Error: No Brewfile found まで確認。3構成評価・bash構文確認は成功。コード変更・コミットなし。補足調査では brew vulns --json も実行可能だった(26件検査・findings空・未検査あり)。
 - 2026-10-22 01:16 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 要修正2件。
 - 2026-10-22 01:17 [agent] 再レビュー開始。develop..agent/3 は8コミット・7ファイルで、前回の2指摘を修正する b80991c を含む。現差分と保守手順を読み取り、コード変更・コミット・switch・更新/削除操作なしで具体的な不具合を検証する。
+- 2026-10-22 01:18 [agent] 3ホストの activationPackage 評価・bootstrap の bash -n は成功。前回の一括 prune と HM 変数再読込の指摘は手順に修正あり。追加の不整合を確認: Brewfile の npm corepack は bootstrap/保守手順が npm -g で入れる pnpm と bin/pnpm を共有し、現機の npm 本体の読取専用 bin preflight でも EEXIST (.../node/24.22.1/bin/pnpm)。Homebrew bundle の導入実装は --force なしの npm install -g corepack を呼ぶ。
 
 ## エージェントの結果(2026-10-22 01:16)
 
