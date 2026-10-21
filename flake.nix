@@ -19,13 +19,11 @@
     omp.url = "github:chibiham/oh-my-pi/d874579702a0a21e800312b520fe94a5d33c58da";
 
     # macOS Spotlight統合
-    # mac-app-utilはSBCLでビルドされる。nixpkgs b6018f8（2026-06）のSBCL 2.5.10は
-    # macOS 27でヒープ確保に失敗する（failed to allocate ... at 0x300100000）ため、
-    # ビルド済みの旧nixpkgsに固定している。新しいnixpkgsでSBCLが動くようになったら外す。
-    nixpkgs-mac-app-util.url = "github:NixOS/nixpkgs/078d69f03934859a181e81ba987c2bb033eebfc5";
+    # mac-app-utilはSBCLでビルドされる。SBCL 2.5.10はmacOS 27でヒープ確保に失敗する
+    # （failed to allocate ... at 0x300100000）。2.6.8では動くため、nixpkgs-unstableに追従させる。
     mac-app-util = {
       url = "github:hraban/mac-app-util";
-      inputs.nixpkgs.follows = "nixpkgs-mac-app-util";
+      inputs.nixpkgs.follows = "nixpkgs-unstable";
     };
   };
 
