@@ -1,0 +1,94 @@
+# 定期メンテナンス（更新と脆弱性確認）
+
+月に1回程度、または `update-flake-lock.yml` の自動PRが来たときに行う。
+Nix（flake）→ mise → Homebrew の順に上げる。どの段階も途中で止めてよい。
+
+以下、`H` は対象ホスト（`mac-mini` / `macbook` / `ubuntu-server`）。
+
+```bash
+cd ~/.config/nix-config
+H=mac-mini
+```
+
+## 1. flake inputsの更新
+
+```bash
+nix flake update            # すべて上げる
+# 一部だけ上げるなら: nix flake update nixpkgs nixpkgs-unstable home-manager
+git diff flake.lock
+```
+
+- `omp` はflake.nixでコミット固定なので `nix flake update` では動かない。上げるときはflake.nixのrevを書き換える
+- `nixpkgs-mac-app-util` はmac-app-util（SBCL）がビルドできる旧nixpkgsに固定している（理由はflake.nixのコメント）
+- `nixpkgs` は `nixos-25.11` などのリリースブランチ。サポート終了後は更新が止まるので、新リリースへの移行を別途検討する
+
+## 2. ビルドと評価（switchの前に）
+
+```bash
+# 今のホストはビルドまで
+nix build --out-link /tmp/hm-new ".#homeConfigurations.\"chibiham@$H\".activationPackage"
+# 他のホストは評価だけ（CIでも実行される）
+nix eval --raw '.#homeConfigurations."chibiham@macbook".activationPackage.drvPath'
+nix eval --raw '.#homeConfigurations."chibiham@ubuntu-server".activationPackage.drvPath'
+```
+
+壊れたら、原因のinputだけ戻して他を上げる（`git checkout flake.lock` → `nix flake update <input>...`）。
+
+## 3. 脆弱性確認（vulnix）
+
+```bash
+# 今の世代
+nix run nixpkgs#vulnix -- -C ~/.local/state/nix/profiles/home-manager
+# 新しいビルド
+nix run nixpkgs#vulnix -- -C /tmp/hm-new
+```
+
+- 新しいビルドで減っていれば更新する価値がある。残ったものはCVSSと内容を見て判断する
+- NVDのデータ（直近6年分＋modified）を `~/.cache/vulnix` に取り込む。nvd.nist.govが遅くて
+  タイムアウトするときは、`curl -C -` でフィードを手元に落として `python3 -m http.server` で配り、
+  `--mirror http://127.0.0.1:8000/` を指定する
+- バージョン文字列だけで照合するため、誤検知（別製品の同名CVE、パッチ済み）も多い
+
+## 4. 反映
+
+```bash
+nix run .#home-manager -- switch --flake ".#chibiham@$H"
+git add flake.lock && git commit -m "chore: flake.lockを更新"
+```
+
+## 5. mise
+
+```bash
+mise outdated               # 設定の範囲（node = "24" など）で新しい版があるか
+mise upgrade                # 範囲内の最新を入れ、置き換えた旧版はアンインストールする
+mise prune --dry-run        # どの設定からも使われていない版の一覧
+mise prune                  # 確認してから実行
+```
+
+- `mise upgrade` は旧版を消すので、**旧版のNode.jsに `npm install -g` していたコマンドも消える**
+  （pnpm、Qwen Code、Pi、agent-browser、neonctlなど）。upgrade前に一覧を控えておき、後で入れ直す
+
+  ```bash
+  npm ls -g --depth=0 > /tmp/npm-global-before.txt   # upgrade前
+  # upgrade後（Safe Chain経由で入れ直す）
+  npm install -g pnpm@latest @qwen-code/qwen-code@latest
+  npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest
+  mise reshim
+  ```
+
+- プロジェクトの `.node-version` 等で使っている版も、そのディレクトリの外では「未使用」に見える。
+  prune前に一覧を確認する
+
+## 6. Homebrew
+
+```bash
+brew update
+brew outdated
+brew bundle check --file=Brewfile --verbose   # Brewfileとの差分（未導入）
+brew bundle cleanup --file=Brewfile           # Brewfile外の一覧（表示のみ。--forceで削除）
+brew upgrade                                  # 確認してから
+brew autoremove --dry-run                     # 不要になった依存
+```
+
+Homebrewには脆弱性スキャナがないので、`brew outdated` を古さの目安にする。
+CLIツールは原則Nixで管理し、Homebrewに入っているものはBrewfileに書く。

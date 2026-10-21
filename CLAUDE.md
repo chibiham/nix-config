@@ -83,6 +83,8 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 
 Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@ubuntu-server` にする。
 
+定期的な更新（flake update → ビルド → vulnix → switch → mise → Homebrew）は `docs/maintenance.md` の手順で行う。
+
 **注意**: `$USER` のflake.nix該当エントリが必要（`mkDarwinHome` で追加）。
 
 ### 変更時の検証
