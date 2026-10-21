@@ -8,7 +8,7 @@ goal:
   - text: flake の入力、mise の処理系、Homebrew の中身の版の一覧と、それぞれが何で管理されているかが issue にある
     done: true
   - text: vulnix などで出した既知の脆弱性と、直したもの・残したもの(理由つき)が issue にある
-    done: false
+    done: true
   - text: flake を上げた構成がビルドでき、本人に確かめて切り替えたあと、よく使う道具(git・node・python・ruby・claude・codex・omp)が動く
     done: false
   - text: mise の処理系が範囲の中の最新に上がり、使っていない版を本人に確かめて片付けている
@@ -46,3 +46,4 @@ goal:
 - 2026-10-22 00:48 [agent] mise の版を絶対パスで指す launchd: subako-{server,digest,news,daylog,alerts,heartbeat,market-report} → node/24.18.0。melomemo.{venue,enricher,dashboard,fetcher} → node/22.22.0 と python/3.12.12/bin(3.12.12 は upgrade で消えていたので戻した。melomemo の venv が旧 python に依存していれば確認が要る)。案: plist は版を書かず mise の symlink(installs/node/24、installs/python/3.12)を指す、または `~/.local/share/mise/shims` を PATH に置き cwd の mise 設定で版を決める。symlink 案が一番小さい変更(patch 更新で自動追従、メジャーは明示)。subako の plist は subako の issue へ。以降、mise の版を消す操作(upgrade・prune・uninstall)は本人の確認まで止める。
 - 2026-10-22 00:48 [agent] 棚卸しと脆弱性の詳細は spec docs/specs/3/inventory.html。要旨: 管理の分担は flake 入力=flake.lock、node/python/rust=mise(版の範囲は nix の mise 全体設定)、ruby 4.0.7=Homebrew(cocoapods の依存)、非対話シェルの python3 は /usr/bin 3.9.6。Homebrew formula 61(leaf 16)・cask 27、nix-darwin は未導入。vulnix(NVD 6年分): 更新前 279件/31パッケージ(Critical 29・High 100)→更新後 269件/28(Critical 28・High 104)。解消: inetutils の Critical、gnupg、libtasn1、ngtcp2、nix、curl 43→26、unbound 42→32。残す: openssl 3.6.0/zlib/rsync は mac-app-util の旧 nixpkgs 固定のため、curl/openssl 3.6.2/perl/cargo/unbound は 25.11 更新停止のため(26.05 移行で解消見込み、別作業)、git・terraform・swift・gcc の一部は名前一致の誤検知か上流未対応。Homebrew 分類案: 残す23・nix へ移す候補13(ffmpeg, git-lfs, libpq, supabase, xcodegen, codex, フォント類)・不要の可能性7(gh/gnupg/tmux は nix と重複、pinentry-mac、mpdecimal/openssl@3/sqlite は依存の残り)。Brewfile にあって未導入の cask 13、Brewfile にない導入済み codex・cyberduck・formula 13。
 - 2026-10-22 00:49 [agent] 完了条件 0 を済みにした: flake.lock・mise ls・which -a・brew list/leaves の結果を作業ログ(00:48)と spec inventory.html に載せた
+- 2026-10-22 00:49 [agent] 完了条件 1 を済みにした: vulnix を更新前の home-manager-71 と更新後のビルド結果に対して実行(NVD mirror 経由)。件数、解消したもの、残したものと理由を作業ログ(00:48)に書いた
