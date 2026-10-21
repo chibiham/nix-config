@@ -1,5 +1,5 @@
 ---
-status: todo
+status: doing
 created: 2026-10-21
 related: [t-20261021-003]
 updated: 2026-10-21
