@@ -10,7 +10,7 @@ goal:
   - text: vulnix などで出した既知の脆弱性と、直したもの・残したもの(理由つき)が issue にある
     done: true
   - text: flake を上げた構成がビルドでき、本人に確かめて切り替えたあと、よく使う道具(git・node・python・ruby・claude・codex・omp)が動く
-    done: false
+    done: true
   - text: mise の処理系が範囲の中の最新に上がり、使っていない版を本人に確かめて片付けている
     done: false
   - text: Homebrew の棚卸し(nix へ移す・nix-darwin で宣言にする・要らない)の案が issue にあり、本人が選んだ分を反映している
@@ -49,3 +49,4 @@ goal:
 - 2026-10-22 00:49 [agent] 完了条件 1 を済みにした: vulnix を更新前の home-manager-71 と更新後のビルド結果に対して実行(NVD mirror 経由)。件数、解消したもの、残したものと理由を作業ログ(00:48)に書いた
 - 2026-10-22 00:49 [agent] 返事待ち: switch・mise prune(上の候補のみ)・Homebrew で移す/消すもの・brew upgrade・push のそれぞれ、実行してよいか教えてください
 - 2026-10-22 01:06 [agent] gh・gnupg・tmux・pinentry-mac の brew uninstall は、方針変更の連絡が届く前にエージェントが実行していた(依存の gmp・libgpg-error・gettext・libunistring も外れた)。本人の「No such keg」はそのため。nix の版が PATH で先に来ることを which -a で確認済み。ほか: mac-mini で switch(trampolineApps の SBCL クラッシュは mac-app-util を nixpkgs-unstable の SBCL 2.6.8 に追従させて解消、5f20a25)。mise から bun 1.4.2・npm:pnpm 11.23.0・pnpm 10.28.1/10.28.2/10.29.1/10.30.1/10.30.3/10.33.2 を uninstall。残る版は node 22.22.0・24.18.0・24.22.1・26.7.0、python 3.12.12・3.12.15、npm:pnpm 11.24.0。Brewfile は brew bundle dump で作り直し(b82c697)、cask の依存で要る mpdecimal・openssl@3・sqlite を書き足した(77e98a9)。brew bundle cleanup の空打ちは formula の差が 0(キャッシュの brew cleanup だけ)。
+- 2026-10-22 01:06 [agent] 完了条件 2 を済みにした: 本人の了承後に nix run .#home-manager -- switch --flake .#chibiham@mac-mini がエラーなしで完了。git 2.51.2・node v24.22.1・Python 3.12.15・ruby 4.0.7・claude 2.1.306・codex-cli 0.163.0・omp 18.8.4 の --version が出た。launchd が参照する node 24.18.0・22.22.0、python 3.12.12 が残っていることを ls で確認
