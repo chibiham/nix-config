@@ -65,6 +65,7 @@ goal:
 - 2026-10-22 01:18 [agent] 3ホストの activationPackage 評価・bootstrap の bash -n は成功。前回の一括 prune と HM 変数再読込の指摘は手順に修正あり。追加の不整合を確認: Brewfile の npm corepack は bootstrap/保守手順が npm -g で入れる pnpm と bin/pnpm を共有し、現機の npm 本体の読取専用 bin preflight でも EEXIST (.../node/24.22.1/bin/pnpm)。Homebrew bundle の導入実装は --force なしの npm install -g corepack を呼ぶ。
 - 2026-10-22 01:19 [agent] 再レビュー結論 REVIEW_NG、追加の要修正1件(P2: Brewfile:114 の npm corepack と npm -g pnpm の実行ファイル衝突)。初期構築は pnpm 導入→brew bundle の順なので corepack 導入が EEXIST で失敗し、既存環境でも corepack 更新時に同じ衝突がある。pnpm を npm で直接管理する現方針なら corepack の宣言を外す等、所有元の一本化が必要。前回の prune 修正は確認済み、HM 変数は生成済み設定を子 zsh でガード解除後に読み込み正しい Brewfile パスを確認。3構成評価・bash構文確認・brew bundle check --no-upgrade は成功。コード変更・コミット・switch・パッケージ更新/削除なし。
 - 2026-10-22 01:19 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 要修正1件。前回の2指摘には修正が入っています。
+- 2026-10-22 01:20 [agent] 再レビュー開始。develop..agent/3 の9コミット・7ファイルを対象に、corepack宣言削除を含む差分と保守手順を確認する。コード変更・コミット・switch・パッケージ更新/削除は行わない。
 
 ## エージェントの結果(2026-10-22 01:16)
 
