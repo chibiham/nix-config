@@ -57,3 +57,4 @@ goal:
 - 2026-10-22 01:10 [agent] macbook 対応: Brewfile は両 Mac 共通の1つ(機械ごとの分割なし)。darwin.nix の HOMEBREW_BREWFILE(brew が読まない名前)を HOMEBREW_BUNDLE_FILE に直し、bootstrap も同じファイルを使う。macbook・mac-mini の activationPackage をビルド、ubuntu-server を評価して通った。docs/maintenance.md に「macbook で行う手順」(pull→switch→launchd の mise 参照確認→mise upgrade→prune 空打ち→brew update/upgrade→brew bundle→cleanup 空打ち)を追加(deac01a, e76a516)。macbook はオフラインのため実行は本人。
 - 2026-10-22 01:11 [agent] 返事待ち: agent/3 の commit 7つを push してよいですか(または subako の develop への取り込みに任せてよいですか)
 - 2026-10-22 01:12 [agent] 実装レビュー開始。develop..agent/3 の7コミット・7ファイルを対象に、設定差分と更新手順の正しさを読み取り・非破壊検証する。コード変更・コミット・switch・更新操作は行わない。
+- 2026-10-22 01:14 [agent] 3ホストの activationPackage 評価と bootstrap の bash -n は成功。brew bundle check は既存アプリ8件と corepack 更新待ちを報告、cleanup はキャッシュのみ。mise prune --dry-run は launchd が参照中の node 24.18.0 と python 3.12.12 を削除候補に出すため、保守手順の一括 prune と参照保護の整合性を確認中。
