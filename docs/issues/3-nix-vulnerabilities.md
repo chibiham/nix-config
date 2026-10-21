@@ -66,6 +66,7 @@ goal:
 - 2026-10-22 01:19 [agent] 再レビュー結論 REVIEW_NG、追加の要修正1件(P2: Brewfile:114 の npm corepack と npm -g pnpm の実行ファイル衝突)。初期構築は pnpm 導入→brew bundle の順なので corepack 導入が EEXIST で失敗し、既存環境でも corepack 更新時に同じ衝突がある。pnpm を npm で直接管理する現方針なら corepack の宣言を外す等、所有元の一本化が必要。前回の prune 修正は確認済み、HM 変数は生成済み設定を子 zsh でガード解除後に読み込み正しい Brewfile パスを確認。3構成評価・bash構文確認・brew bundle check --no-upgrade は成功。コード変更・コミット・switch・パッケージ更新/削除なし。
 - 2026-10-22 01:19 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 要修正1件。前回の2指摘には修正が入っています。
 - 2026-10-22 01:20 [agent] 再レビュー開始。develop..agent/3 の9コミット・7ファイルを対象に、corepack宣言削除を含む差分と保守手順を確認する。コード変更・コミット・switch・パッケージ更新/削除は行わない。
+- 2026-10-22 01:21 [agent] 差分で npm corepack 宣言の削除と dump 後の除外手順を確認。3ホストの activationPackage 評価・bootstrap の bash -n・修正後 Brewfile の brew bundle check --no-upgrade は成功。追加の起動/依存衝突は確認されていない。docs の『Homebrewには脆弱性スキャナがない』は現行 brew vulns --help と不一致のため、影響を評価中。
 
 ## エージェントの結果(2026-10-22 01:16)
 
