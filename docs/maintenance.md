@@ -117,7 +117,15 @@ brew bundle cleanup         # Brewfileにないもの（ドライラン。--forc
   Brewfileに残すと `npm install -g` が直接入れたpnpm等と衝突し `EEXIST` で失敗する）
 - `brew bundle cleanup` に出たものは、Brewfileへ足すか `brew uninstall` するかを決めて差分をなくす。
   確認せずに `--force` を付けない
-- Homebrewには脆弱性スキャナがないので、`brew outdated` を古さの目安にする
+- 脆弱性は `brew upgrade` の後に `brew vulns`（OSV.devで導入済みformulaを検査）で確かめる。
+  `brew outdated` は新しい版の有無しか見ないので、最新版に残る既知の脆弱性はこちらでしか出ない。
+  ```bash
+  brew vulns                   # 導入済みのformula全部（Ruby・ffmpegなど）
+  brew vulns --fix-available   # 上げれば直るものだけ
+  ```
+  caskと、他の管理系（mise・npm・uvなど）で入れたものは対象外。caskはアプリ側の自動更新か
+  `brew upgrade --cask` で上げ、mise・npmの分は `mise outdated`・`npm outdated -g`、
+  Nixの分はvulnixで確かめる。検査されないものが残ることを前提に、それぞれ版を見る
 
 ## macbook で行う手順
 
@@ -166,6 +174,7 @@ mise prune --dry-run        # 候補。上で出た版を除いたものだけ�
 ```bash
 # 6. Homebrew
 brew update && brew upgrade
+brew vulns                       # 既知の脆弱性（formulaのみ。caskは対象外）
 brew bundle                 # Brewfileにあって入っていないものを入れる
 brew bundle cleanup         # Brewfileにないもの（ドライラン）
 ```
