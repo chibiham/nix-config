@@ -127,6 +127,25 @@ brew bundle cleanup         # Brewfileにないもの（ドライラン。--forc
   `brew upgrade --cask` で上げ、mise・npmの分は `mise outdated`・`npm outdated -g`、
   Nixの分はvulnixで確かめる。検査されないものが残ることを前提に、それぞれ版を見る
 
+## 7. 画面共有（mac-mini）
+
+mac-mini は MacBook から画面共有（VNC）で操作する。設定は「システム設定 → 一般 → 共有 → 画面共有」で一度オンにすれば再起動後も残る。
+システム全体の launchd の設定なので home-manager では宣言しない。消えていないかだけ確かめる。
+
+```bash
+nc -z localhost 5900 && echo "画面共有: 有効" || echo "画面共有: 無効"
+```
+
+無効になっていたら、システム設定でオンに戻す。ターミナルから戻すなら:
+
+```bash
+sudo launchctl enable system/com.apple.screensharing
+sudo launchctl bootstrap system /System/Library/LaunchDaemons/com.apple.screensharing.plist
+```
+
+MacBook からは Finder で ⌘K → `vnc://chibihammac-mini`（Tailscale の名前。出先からも届く）。
+5900 番は外に開けない（Tailscale の tailnet の中だけで使う）。
+
 ## macbook で行う手順
 
 flake.lockの更新とコミットはmac-miniで済ませ、macbookではpullして反映する。上から順に貼り付けて実行する。
