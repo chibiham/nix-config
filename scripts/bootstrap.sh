@@ -127,9 +127,18 @@ step "mise ランタイムのインストール"
 mise install --yes || warn "miseランタイムのインストールに失敗（後で 'mise install' を実行してください）"
 
 # pnpmはmise/Aqua経由だと配布assetの変更で壊れやすいため、npmから導入
-export PATH="$HOME/.local/share/mise/shims:$PATH"
-if ! command -v pnpm &>/dev/null; then
-  mise exec -- npm install -g pnpm@latest
+export PATH="$HOME/.local/share/safe-chain-shims:$HOME/.local/share/mise/shims:$PATH"
+# npm/pnpmは必ずAikido Safe Chainのshim経由にする（HM switch済みが前提）。
+# mise execはnodeのbinをPATH先頭に足すので、shimを絶対パスで呼ぶ。
+SAFE_CHAIN_SHIMS="$HOME/.local/share/safe-chain-shims"
+if [ ! -x "$SAFE_CHAIN_SHIMS/npm" ]; then
+  printf 'safe-chainのshimがありません: %s（home-manager switchを先に実行）\n' "$SAFE_CHAIN_SHIMS" >&2
+  exit 1
+fi
+safe_npm() { mise exec -- "$SAFE_CHAIN_SHIMS/npm" "$@"; }
+# safe-chainのshimでcommand -vは常に成功するため、実体が動くかで判定
+if ! pnpm --version &>/dev/null; then
+  safe_npm install -g pnpm@latest
   mise reshim
 fi
 
@@ -138,9 +147,9 @@ fi
 # -------------------------------------------------
 step "pnpm グローバルパッケージ"
 export PNPM_HOME="$HOME/.local/share/pnpm"
-export PATH="$HOME/.local/share/mise/shims:$PNPM_HOME:$PATH"
+export PATH="$SAFE_CHAIN_SHIMS:$HOME/.local/share/mise/shims:$PNPM_HOME:$PATH"
 mkdir -p "$PNPM_HOME"
-if command -v pnpm &>/dev/null; then
+if pnpm --version &>/dev/null; then
   if [ ! -e "$PNPM_HOME/clawdbot" ]; then
     pnpm add -g clawdbot@latest && ok "clawdbot をインストールしました"
   else
@@ -153,7 +162,7 @@ fi
 # Qwen CodeはNode.js 22以上が必要。mise管理のNode.jsへ導入し、
 # 実行ファイルをmiseのshimから利用できるようにする。
 if ! command -v qwen &>/dev/null; then
-  mise exec -- npm install -g @qwen-code/qwen-code@latest \
+  safe_npm install -g @qwen-code/qwen-code@latest \
     && mise reshim \
     && ok "Qwen Code をインストールしました"
 else
@@ -163,7 +172,7 @@ fi
 # Pi（pi.dev）。公式手順どおり--ignore-scriptsで導入する。
 # 接続先（chibihamuntuのQwen）はHome Managerの~/.pi/agent/models.jsonで設定済み。
 if ! command -v pi &>/dev/null; then
-  mise exec -- npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest \
+  safe_npm install -g --ignore-scripts @earendil-works/pi-coding-agent@latest \
     && mise reshim \
     && ok "Pi をインストールしました"
 else
@@ -182,11 +191,13 @@ fi
 if ! command -v brew &>/dev/null && [ -x /opt/homebrew/bin/brew ]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
+# 両Mac共通のBrewfile。switch直後のシェルにはsessionVariablesが未反映なので明示する
+export HOMEBREW_BUNDLE_FILE="$REPO_DIR/Brewfile"
 if command -v brew &>/dev/null; then
-  brew bundle --file="$REPO_DIR/Brewfile" || warn "brew bundle が一部失敗しました（後で再実行してください）"
+  brew bundle || warn "brew bundle が一部失敗しました（後で再実行してください）"
   ok "Brewfile を適用しました"
 else
-  warn "Homebrewが見つかりません。手動でインストール後、'brew bundle --file=$REPO_DIR/Brewfile' を実行してください"
+  warn "Homebrewが見つかりません。手動でインストール後、新しいシェルで 'brew bundle' を実行してください"
 fi
 
 # -------------------------------------------------

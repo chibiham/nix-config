@@ -1,5 +1,7 @@
 # Nix Configuration
 
+method: subako@1eff551
+
 Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 複数のMacとUbuntu Serverで同じ開発環境を再現可能にする。
 
@@ -24,6 +26,7 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 │   ├── darwin.nix     # macOS共通設定
 │   ├── linux.nix      # Linux固有設定
 │   └── hosts/         # Macごとの固有設定（macbook.nix / mac-mini.nix）
+├── Brewfile           # Homebrew一覧（両Mac共通・同じ内容）
 ├── udev/             # Ubuntuへ配るudevルール（RAPL読み取り権限）
 ├── claude/skills/     # Nixで ~/.claude/skills に配るClaude Code skill（civitai-download）
 └── scripts/
@@ -80,6 +83,8 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 ```
 
 Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@ubuntu-server` にする。
+
+定期的な更新（flake update → ビルド → vulnix → switch → mise → Homebrew）は `docs/maintenance.md` の手順で行う。
 
 **注意**: `$USER` のflake.nix該当エントリが必要（`mkDarwinHome` で追加）。
 
@@ -142,6 +147,14 @@ macOSのセキュリティ制約により自動化できないもの:
 - pnpm グローバルパッケージ: clawdbot（bootstrap.shで導入）
 - コーディングエージェント: Qwen Code, Pi（pi.dev）をmise管理のNode.jsへnpmで導入（bootstrap）。
   Piは `~/.pi/agent/models.json`（Nix管理）でchibihamuntuのQwen3.8（tailnet経由）を既定モデルにする
+- Oh My Pi（omp）: flake input `omp`（fork `chibiham/oh-my-pi` の honest-oauth をコミット固定）のHome Managerモジュールで導入。
+  Anthropic OAuthはClaude Codeを装わない（偽装は `PI_ANTHROPIC_OAUTH_CLAUDE_CODE_FINGERPRINT=1` のときだけ）。
+  `~/.omp/agent/models.yml`（Nix管理）でchibihamuntuを宣言（Macのローカルllama.cppはメモリ不足になるので無効）。Claude/ChatGPTは `/login` で各自認証
+- Aikido Safe Chain: 公式リリースのバイナリをNixでハッシュ固定導入（common.nix）。
+  npm/npx/pnpm/pnpx/yarn/bun/bunx/rush/rushx/pip/pip3/uv/uvx/poetry/pipx/pdm を
+  PATH先頭のラッパー（非対話シェルや `npm run` の子プロセスにも効く）と対話zshの関数で包み、マルウェアと公開72時間未満の版を拒否
+  （`SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS=72`）。`python -m pip` と絶対パス呼び出しは対象外。
+  証明書等は `~/.safe-chain/` に初回実行時に作られる。確認は `npm safe-chain-verify`
 - シークレット管理: 1password-cli + update-secretsコマンド
 - その他: htop, tree, curl, wget, awscli, terraform, flyctl, cloudflared
 - Linux AI推論: CUDA対応llama.cpp + ai-mode（モデル取得は明示スクリプト）
@@ -153,7 +166,7 @@ macOSのセキュリティ制約により自動化できないもの:
 - **Spotlight統合**: mac-app-util（トランポリンアプリ作成、switch時に自動実行）
 - **Karabiner-Elements**: karabiner.jsonをNix管理（GUI変更はswitchで上書きされる）
 - **Ghostty**: 設定（`~/.config/ghostty/config`）をNix管理。アプリ本体はHomebrew cask
-- **GUIアプリ**: Brewfile（bootstrap.shで `brew bundle` 実行）
+- **Homebrew**: `Brewfile` が両Mac共通の一覧（マシン別の分割はしない）。`HOMEBREW_BUNDLE_FILE`（darwin.nix）で引数なしの `brew bundle` がこれを使う（bootstrap.shも同じ）。macbookでの更新手順は `docs/maintenance.md`。Nix提供ツールはbrewで入れない
 - **Nix GC**: 週次で30日超の世代を自動削除（`nix.gc`、launchd）
 
 ### シェル設定

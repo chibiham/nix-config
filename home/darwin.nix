@@ -13,6 +13,11 @@
     mergetool.vscode.cmd = "code --wait $MERGED";
   };
 
+  # ompのcomputer use（Evalの `computer` プレリュード）。Macだけで有効にする。
+  # 初回はompを起動するターミナル（Ghostty）に画面収録とアクセシビリティを許可して再起動する。
+  # 承認は既定のyoloのまま（入力も確認なしで走る）。止めたいときは物理Escか `/computer off`
+  programs.omp.settings.computer.enabled = true;
+
   # op inject用テンプレート（update-secretsコマンドで展開）
   # Mac用Service Accountが読める "MyMachine" Vault を参照する
   home.file.".secrets/env.tpl" = {
@@ -192,8 +197,8 @@
   # macOS固有の環境変数
   home.sessionVariables = {
     BROWSER = "open";
-    # Homebrew設定
-    HOMEBREW_BREWFILE = "$HOME/.config/nix-config/Brewfile";
+    # Homebrew設定: 引数なしの `brew bundle` がリポジトリのBrewfile（両Mac共通）を使う
+    HOMEBREW_BUNDLE_FILE = "$HOME/.config/nix-config/Brewfile";
     HOMEBREW_NO_AUTO_UPDATE = "1";  # 自動更新を無効化
   };
 
