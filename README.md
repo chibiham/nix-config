@@ -14,9 +14,11 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
 │   ├── common.nix         # 共通設定（パッケージ、Git、Zsh、シークレット等）
 │   ├── darwin.nix         # macOS共通（Karabiner、1Password SSH Agent等）
 │   ├── linux.nix          # Linux固有（genericLinux、headless設定）
-│   └── hosts/             # Macごとの固有設定
+│   └── hosts/             # ホストごとの固有設定
 │       ├── macbook.nix
-│       └── mac-mini.nix
+│       ├── mac-mini.nix
+│       └── dekahamuntu.nix
+├── hosts/ubuntu/          # Ubuntu機ごとのスクリプトの設定（chibihamuntu.env / dekahamuntu.env）
 └── scripts/
     ├── bootstrap.sh       # 新しいMacの初期セットアップ
     ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
@@ -24,8 +26,9 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
     ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
     ├── configure-ubuntu-hardware.sh # HWEとGPU起動時消灯を反映（再起動なし）
     ├── install-hwe-kernel-ubuntu.sh # HWE・対応NVIDIAモジュール
+    ├── check-nvidia-kernel-modules-ubuntu.sh # カーネル更新の前にNVIDIAモジュールを確かめる
     ├── install-gpu-led-off-ubuntu.sh # OpenRGBと消灯サービスの導入
-    ├── turn-off-gpu-led.sh # Gigabyte RTX 3090だけを消灯
+    ├── turn-off-gpu-led.sh # ホストの設定で決めたGPUだけを消灯
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
     ├── install-diffusion-pipe-ubuntu.sh # Anima LoRA学習環境
     ├── install-applio-ubuntu.sh # Applio（RVC学習・リアルタイム音声変換）
@@ -44,7 +47,7 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
 | やりたいこと | やること |
 |---|---|
 | 新しいMacをセットアップ | [→ 初回セットアップ](#初回セットアップ新しいmac) |
-| Ubuntu Serverをセットアップ | [→ Ubuntu Server手順](docs/ubuntu-server.md) |
+| Ubuntu Serverをセットアップ | [→ Ubuntu Server手順](docs/ubuntu-server.md)（dekahamuntuは [→ dekahamuntu手順](docs/dekahamuntu-setup.md)） |
 | `.nix` ファイルを変更した | `hms`（下記の適用コマンド） |
 | GUIアプリを追加したい | `Brewfile` に追記 → `brew bundle` |
 | CLIツールを追加したい | `home/common.nix` の `home.packages` に追記 → 適用 |

@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# RTX 3090向けAnima LoRA学習環境を専用uv環境へ導入する。
+# NVIDIA GPU向けAnima LoRA学習環境を専用uv環境へ導入する。
+# 使うGPUは hosts/ubuntu/<ホスト名>.env の TRAIN_CUDA_DEVICES（空なら1枚目だけ）。
 set -euo pipefail
+
+# shellcheck source=lib/ubuntu-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/ubuntu-host.sh"
 
 DIFFUSION_PIPE_DIR="${DIFFUSION_PIPE_DIR:-$HOME/diffusion-pipe}"
 DIFFUSION_PIPE_REPO="https://github.com/bluvoll/diffusion-pipe.git"
@@ -59,6 +63,7 @@ if [[ ! -x "$DIFFUSION_PIPE_DIR/.venv/bin/python" ]]; then
   uv venv --python 3.12 "$DIFFUSION_PIPE_DIR/.venv"
 fi
 
+# cu128はBlackwell（sm_120）に対応する最初のCUDA。3090（sm_86）も同じwheelで動く。
 step "PyTorch（CUDA 12.8）"
 uv pip install \
   --python "$DIFFUSION_PIPE_DIR/.venv/bin/python" \
@@ -168,33 +173,49 @@ enable_wandb = false
 PATCH
 fi
 
-install -Dm755 /dev/stdin "$DIFFUSION_PIPE_DIR/train-anima-lora.sh" <<'SH'
+# GPUを選ぶときだけ CUDA_VISIBLE_DEVICES を書き、枚数を --num_gpus に渡す（chibihamuntuでは書かない）。
+# 2枚で学習するとデータ並列になる（NVLinkなし。勾配の同期はPCIe越し）。
+train_gpus=1
+train_cuda_lines=""
+if [[ -n "$TRAIN_CUDA_DEVICES" ]]; then
+  train_gpus="$(cuda_device_count "$TRAIN_CUDA_DEVICES")"
+  train_cuda_lines="export CUDA_DEVICE_ORDER=PCI_BUS_ID
+export CUDA_VISIBLE_DEVICES=\"\${CUDA_VISIBLE_DEVICES:-$TRAIN_CUDA_DEVICES}\"
+"
+fi
+install -Dm755 /dev/stdin "$DIFFUSION_PIPE_DIR/train-anima-lora.sh" <<SH
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "\$(dirname "\$0")"
 
 export PYTORCH_ALLOC_CONF=expandable_segments:True
 export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
-
-exec .venv/bin/deepspeed \
-  --num_gpus=1 \
-  train.py \
-  --deepspeed \
-  --config "$PWD/configs/local/anima-lora.toml"
+${train_cuda_lines}
+exec .venv/bin/deepspeed \\
+  --num_gpus=$train_gpus \\
+  train.py \\
+  --deepspeed \\
+  --config "\$PWD/configs/local/anima-lora.toml"
 SH
 
 step "CUDA動作確認"
-"$DIFFUSION_PIPE_DIR/.venv/bin/python" - <<'PY'
+cuda_env=()
+if [[ -n "$TRAIN_CUDA_DEVICES" ]]; then
+  cuda_env=(CUDA_DEVICE_ORDER=PCI_BUS_ID "CUDA_VISIBLE_DEVICES=$TRAIN_CUDA_DEVICES")
+fi
+env "${cuda_env[@]}" "$DIFFUSION_PIPE_DIR/.venv/bin/python" - <<'PY'
 import torch
 
 if not torch.cuda.is_available():
     raise SystemExit("PyTorchからCUDAを利用できません")
 print(f"PyTorch: {torch.__version__}")
 print(f"CUDA runtime: {torch.version.cuda}")
-print(f"GPU: {torch.cuda.get_device_name(0)}")
-print(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GiB")
+for i in range(torch.cuda.device_count()):
+    props = torch.cuda.get_device_properties(i)
+    print(f"GPU {i}: {props.name} sm_{props.major}{props.minor}")
+    print(f"VRAM: {props.total_memory / 1024**3:.1f} GiB")
 PY
 
 echo

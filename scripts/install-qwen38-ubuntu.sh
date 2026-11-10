@@ -2,6 +2,10 @@
 # Qwen3.8-27Bの通常版・Uncensored版とQwen3.8-Flash-Nextを取得し、切替可能なuser serviceを構成する。
 set -euo pipefail
 
+# ホストごとの設定（GPUの割り当て、束ねるunit、取得するモデル、n-cpu-moe）
+# shellcheck source=lib/ubuntu-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/ubuntu-host.sh"
+
 MODEL_REPO="unsloth/Qwen3.8-27B-GGUF"
 MODEL_REVISION="4ca720788d1e01f1bff70c033e0d0028fd02e502"
 MODEL_FILE="Qwen3.8-27B-UD-Q4_K_M.gguf"
@@ -37,12 +41,19 @@ FLASH_UNCENSORED_N_CPU_MOE="${QWEN_FLASH_UNCENSORED_N_CPU_MOE:-35}"
 # VRAM 24GBに収まる実測値。ubatchを512から上げるとprompt処理が約100→480 tok/sになる（生成は約21 tok/s）。
 FLASH_N_CPU_MOE="${QWEN_FLASH_N_CPU_MOE:-38}"
 FLASH_UBATCH_SIZE="${QWEN_FLASH_UBATCH_SIZE:-2048}"
+# 2枚を束ねるqwen38-dual.service用（LLM_DUAL_CUDA_DEVICESがあるときだけ使う）。VRAMが増えるぶんGPUへ多く置く
+DUAL_FLASH_N_CPU_MOE="${QWEN_DUAL_FLASH_N_CPU_MOE:-$FLASH_N_CPU_MOE}"
+DUAL_FLASH_UNCENSORED_N_CPU_MOE="${QWEN_DUAL_FLASH_UNCENSORED_N_CPU_MOE:-$FLASH_UNCENSORED_N_CPU_MOE}"
+# Qwen3.8-27B（dense）を取得するか。1枚16GBのGPUには載らない（束ねれば載る）
+INSTALL_27B="${QWEN_INSTALL_27B:-1}"
 MODEL_DIR="${QWEN_MODEL_DIR:-$HOME/models/qwen3.8-27b}"
 FLASH_MODEL_DIR="${QWEN_FLASH_MODEL_DIR:-$HOME/models/qwen3.8-flash-next}"
 SERVICE_DIR="$HOME/.config/systemd/user"
 SERVICE_FILE="$SERVICE_DIR/qwen38.service"
+DUAL_SERVICE_FILE="$SERVICE_DIR/qwen38-dual.service"
 PRESET_DIR="$HOME/.config/llama.cpp"
 PRESET_FILE="$PRESET_DIR/qwen38-models.ini"
+DUAL_PRESET_FILE="$PRESET_DIR/qwen38-dual-models.ini"
 CHAT_TEMPLATE_FILE="$PRESET_DIR/qwen38-chat-template.jinja"
 FLASH_CHAT_TEMPLATE_FILE="$PRESET_DIR/qwen38-flash-chat-template.jinja"
 PORT="${QWEN_PORT:-8080}"
@@ -86,19 +97,29 @@ download_model() {
   ok "$path を取得しました"
 }
 
-step "ComfyUIとQwenを停止"
-systemctl --user stop comfyui.service 2>/dev/null || true
+if [[ "$QWEN_STOP_COMFY_ON_INSTALL" == 1 ]]; then
+  step "ComfyUIとQwenを停止"
+  systemctl --user stop comfyui.service 2>/dev/null || true
+else
+  # ComfyUIは別のGPUで動いているので止めない
+  step "Qwenを停止"
+fi
 systemctl --user stop qwen38.service 2>/dev/null || true
+systemctl --user stop qwen38-dual.service 2>/dev/null || true
 
-step "通常版Q4_K_M・Q4_K_XL、Uncensored 2種とVision Projectorを取得"
-mkdir -p "$MODEL_DIR"
-download_model "$MODEL_REPO" "$MODEL_REVISION" "$MODEL_FILE"
-download_model "$MODEL_REPO" "$MODEL_REVISION" "$MODEL_XL_FILE"
-download_model "$MODEL_REPO" "$MODEL_REVISION" "$MODEL_VISION_FILE"
-download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORED_MODEL_FILE"
-download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORED_MODEL_VISION_FILE"
-download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_FILE"
-download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_VISION_REMOTE_FILE" "$HERETIC_MODEL_VISION_FILE"
+if [[ "$INSTALL_27B" == 1 ]]; then
+  step "通常版Q4_K_M・Q4_K_XL、Uncensored 2種とVision Projectorを取得"
+  mkdir -p "$MODEL_DIR"
+  download_model "$MODEL_REPO" "$MODEL_REVISION" "$MODEL_FILE"
+  download_model "$MODEL_REPO" "$MODEL_REVISION" "$MODEL_XL_FILE"
+  download_model "$MODEL_REPO" "$MODEL_REVISION" "$MODEL_VISION_FILE"
+  download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORED_MODEL_FILE"
+  download_model "$UNCENSORED_MODEL_REPO" "$UNCENSORED_MODEL_REVISION" "$UNCENSORED_MODEL_VISION_FILE"
+  download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_FILE"
+  download_model "$HERETIC_MODEL_REPO" "$HERETIC_MODEL_REVISION" "$HERETIC_MODEL_VISION_REMOTE_FILE" "$HERETIC_MODEL_VISION_FILE"
+else
+  step "Qwen3.8-27B（dense）は取得しません（QWEN_INSTALL_27B=0）"
+fi
 
 step "Qwen3.8-Flash-Next $FLASH_MODEL_QUANT、Uncensored i1-IQ3_MとVision Projectorを取得"
 mkdir -p "$FLASH_MODEL_DIR"
@@ -127,12 +148,18 @@ sys.stdout.write(bytes(field.parts[-1]).decode("utf-8"))
 ' "$gguf" > "$output.tmp"
   mv "$output.tmp" "$output"
 }
-extract_chat_template "$MODEL_DIR/$MODEL_FILE" "$CHAT_TEMPLATE_FILE"
+if [[ "$INSTALL_27B" == 1 ]]; then
+  extract_chat_template "$MODEL_DIR/$MODEL_FILE" "$CHAT_TEMPLATE_FILE"
+fi
 extract_chat_template "$FLASH_MODEL_DIR/$(flash_shard 1)" "$FLASH_CHAT_TEMPLATE_FILE"
 
-cat > "$PRESET_FILE" <<EOF
-version = 1
-
+# write_presets <出力> <Flash-Nextのn-cpu-moe> <Flash-Next-Uncensoredのn-cpu-moe>
+write_presets() {
+  local output="$1" flash_n_cpu_moe="$2" flash_uncensored_n_cpu_moe="$3"
+  {
+    printf 'version = 1\n\n'
+    if [[ "$INSTALL_27B" == 1 ]]; then
+      cat <<EOF
 [Qwen3.8-27B-UD-Q4_K_M]
 model = $MODEL_DIR/$MODEL_FILE
 mmproj = $MODEL_DIR/$MODEL_VISION_FILE
@@ -150,10 +177,13 @@ chat-template-file = $CHAT_TEMPLATE_FILE
 model = $MODEL_DIR/$HERETIC_MODEL_FILE
 mmproj = $MODEL_DIR/$HERETIC_MODEL_VISION_FILE
 
+EOF
+    fi
+    cat <<EOF
 [Qwen3.8-Flash-Next-$FLASH_MODEL_QUANT]
 model = $FLASH_MODEL_DIR/$(flash_shard 1)
 mmproj = $FLASH_MODEL_DIR/$FLASH_MODEL_VISION_FILE
-n-cpu-moe = $FLASH_N_CPU_MOE
+n-cpu-moe = $flash_n_cpu_moe
 batch-size = $FLASH_UBATCH_SIZE
 ubatch-size = $FLASH_UBATCH_SIZE
 
@@ -161,15 +191,28 @@ ubatch-size = $FLASH_UBATCH_SIZE
 model = $FLASH_MODEL_DIR/$FLASH_UNCENSORED_MODEL_FILE
 mmproj = $FLASH_MODEL_DIR/$FLASH_UNCENSORED_VISION_FILE
 chat-template-file = $FLASH_CHAT_TEMPLATE_FILE
-n-cpu-moe = $FLASH_UNCENSORED_N_CPU_MOE
+n-cpu-moe = $flash_uncensored_n_cpu_moe
 batch-size = $FLASH_UBATCH_SIZE
 ubatch-size = $FLASH_UBATCH_SIZE
 EOF
+  } > "$output"
+}
+write_presets "$PRESET_FILE" "$FLASH_N_CPU_MOE" "$FLASH_UNCENSORED_N_CPU_MOE"
+if [[ -n "$LLM_DUAL_CUDA_DEVICES" ]]; then
+  write_presets "$DUAL_PRESET_FILE" "$DUAL_FLASH_N_CPU_MOE" "$DUAL_FLASH_UNCENSORED_N_CPU_MOE"
+fi
 
 step "systemd user service"
 # --agentはWeb UIの組み込みツール（シェル実行・ファイル編集を含む）を有効にする。
 # 公開はtailnet内のみなので許容する。
 mkdir -p "$SERVICE_DIR"
+# GPUが複数あるホストでは、qwen38.serviceに見せるGPUを絞る（chibihamuntuでは書かない）
+llm_cuda_lines=""
+if [[ -n "$LLM_CUDA_DEVICES" ]]; then
+  llm_cuda_lines="Environment=CUDA_DEVICE_ORDER=PCI_BUS_ID
+Environment=CUDA_VISIBLE_DEVICES=$LLM_CUDA_DEVICES
+"
+fi
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Qwen3.8 model router (llama.cpp)
@@ -179,7 +222,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 Environment=LD_LIBRARY_PATH=$HOME/.local/lib/nvidia
-ExecStart=$HOME/.nix-profile/bin/llama-server \\
+${llm_cuda_lines}ExecStart=$HOME/.nix-profile/bin/llama-server \\
   --models-preset $PRESET_FILE \\
   --models-max 1 \\
   --host 127.0.0.1 \\
@@ -196,8 +239,47 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=comfyui.service
+WantedBy=$QWEN_WANTED_BY
 EOF
+
+if [[ -n "$LLM_DUAL_CUDA_DEVICES" ]]; then
+  # 2枚以上を束ねて1つのモデルを載せる。同じGPUを使うComfyUI・qwen38とは排他（ai-mode llm-dual）。
+  # NVLinkがなくPCIe越しなので、層ごとの分割（--split-mode layer）を既定にする。
+  # 自動では起動しない（enableしない）。同じポートで待ち受けるので、Tailscale Serveの公開もそのまま使える。
+  dual_split_args="--split-mode $LLM_DUAL_SPLIT_MODE"
+  if [[ -n "$LLM_DUAL_TENSOR_SPLIT" ]]; then
+    dual_split_args="$dual_split_args --tensor-split $LLM_DUAL_TENSOR_SPLIT"
+  fi
+  cat > "$DUAL_SERVICE_FILE" <<EOF
+[Unit]
+Description=Qwen3.8 model router across GPUs $LLM_DUAL_CUDA_DEVICES (llama.cpp)
+After=network-online.target
+Wants=network-online.target
+Conflicts=qwen38.service comfyui.service
+
+[Service]
+Type=simple
+Environment=LD_LIBRARY_PATH=$HOME/.local/lib/nvidia
+Environment=CUDA_DEVICE_ORDER=PCI_BUS_ID
+Environment=CUDA_VISIBLE_DEVICES=$LLM_DUAL_CUDA_DEVICES
+ExecStart=$HOME/.nix-profile/bin/llama-server \\
+  --models-preset $DUAL_PRESET_FILE \\
+  --models-max 1 \\
+  --host 127.0.0.1 \\
+  --port $PORT \\
+  --ctx-size $CONTEXT_SIZE \\
+  --n-gpu-layers 99 \\
+  $dual_split_args \\
+  --flash-attn on \\
+  --cache-type-k q8_0 \\
+  --cache-type-v q8_0 \\
+  --parallel 1 \\
+  --jinja \\
+  --agent
+Restart=on-failure
+RestartSec=5
+EOF
+fi
 
 systemctl --user daemon-reload
 # Router本体はモデル未ロードならVRAMを使わないので、ComfyUIと同時に動かしてよい。

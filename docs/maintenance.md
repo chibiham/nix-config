@@ -3,7 +3,7 @@
 月に1回程度、または `update-flake-lock.yml` の自動PRが来たときに行う。
 flake update → ビルド/評価 →（vulnix）→ switch → mise upgrade → 不要な版の削除 → Homebrew の順に上げる。どの段階も途中で止めてよい。
 
-以下、`H` は対象ホスト（`mac-mini` / `macbook` / `ubuntu-server`）。
+以下、`H` は対象ホスト（`mac-mini` / `macbook` / `ubuntu-server`（chibihamuntu） / `dekahamuntu`）。
 
 ```bash
 cd ~/.config/nix-config
@@ -30,7 +30,10 @@ nix build --out-link /tmp/hm-new ".#homeConfigurations.\"chibiham@$H\".activatio
 # 他のホストは評価だけ（CIでも実行される）
 nix eval --raw '.#homeConfigurations."chibiham@macbook".activationPackage.drvPath'
 nix eval --raw '.#homeConfigurations."chibiham@ubuntu-server".activationPackage.drvPath'
+nix eval --raw '.#homeConfigurations."chibiham@dekahamuntu".activationPackage.drvPath'
 ```
+
+Ubuntu機でカーネルを含む `apt full-upgrade` をするときは、再起動の前に `scripts/check-nvidia-kernel-modules-ubuntu.sh`（[ubuntu-server.md の「カーネル更新の前に」](ubuntu-server.md#カーネル更新の前に)）。
 
 壊れたら、原因のinputだけ戻して他を上げる（`git checkout flake.lock` → `nix flake update <input>...`）。
 

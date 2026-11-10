@@ -16,6 +16,10 @@ if [[ $EUID -ne 0 ]]; then
   exec sudo /bin/bash "$(realpath "$0")" "$@"
 fi
 
+# ホストごとの対象のGPU（GPU_LED_MATCH・GPU_LED_COUNT）
+# shellcheck source=lib/ubuntu-host.sh
+source "$REPO_DIR/scripts/lib/ubuntu-host.sh"
+
 work_dir="$(mktemp -d)"
 trap 'rm -rf -- "$work_dir"' EXIT
 
@@ -46,6 +50,14 @@ fi
 QT_QPA_PLATFORM=offscreen "$OPENRGB_DIR/AppRun" --version
 install -m 0755 "$REPO_DIR/scripts/turn-off-gpu-led.sh" /usr/local/sbin/turn-off-gpu-led
 install -m 0644 "$REPO_DIR/systemd/gpu-led-off.service" /etc/systemd/system/gpu-led-off.service
+# systemdのEnvironmentFileは単一引用符の中をそのまま読む（正規表現に ' は使わない）
+if [[ "$GPU_LED_MATCH" == *"'"* || ! "$GPU_LED_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+  echo "GPU_LED_MATCH・GPU_LED_COUNTの値が使えません: $GPU_LED_MATCH / $GPU_LED_COUNT" >&2
+  exit 1
+fi
+printf "# install-gpu-led-off-ubuntu.sh が hosts/ubuntu/%s.env から書く\nGPU_LED_MATCH='%s'\nGPU_LED_COUNT=%s\n" \
+  "$UBUNTU_HOST" "$GPU_LED_MATCH" "$GPU_LED_COUNT" > /etc/default/gpu-led-off
+chmod 0644 /etc/default/gpu-led-off
 systemctl daemon-reload
 systemctl enable gpu-led-off.service
 # 再実行時も即座にOffを反映する。OSやNVIDIAドライバは再起動しない。

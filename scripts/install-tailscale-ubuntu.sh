@@ -2,6 +2,10 @@
 # Tailscaleはsystemdサービスを使うため、Home ManagerではなくUbuntu側へ導入する。
 set -euo pipefail
 
+# ホストごとの設定（TAILSCALE_HOSTNAME）
+# shellcheck source=lib/ubuntu-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/ubuntu-host.sh"
+
 if [[ "$(uname -s)" != "Linux" ]] || ! command -v apt-get >/dev/null; then
   echo "このスクリプトはUbuntu/Debian系Linux専用です" >&2
   exit 1
@@ -13,7 +17,12 @@ if ! command -v tailscale >/dev/null; then
 fi
 
 sudo systemctl enable --now tailscaled
-sudo tailscale up
+# 認証はURLを表示してブラウザで行う（認証キーはスクリプトに書かない）
+up_args=()
+if [[ -n "$TAILSCALE_HOSTNAME" ]]; then
+  up_args+=("--hostname=$TAILSCALE_HOSTNAME")
+fi
+sudo tailscale up "${up_args[@]}"
 
 echo "Tailscale IP: $(tailscale ip -4)"
 echo "SSH接続を確認してから、必要に応じてUFWを設定してください"

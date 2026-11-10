@@ -3,6 +3,17 @@
 ComfyUI専用機では、CLI環境をNix/Home Manager、OSサービスをapt/systemdで管理する。
 NVIDIAドライバ、CUDA、ComfyUIはGPU装着後に追加する。
 
+## ホスト
+
+| ホスト | 構成 | Home Manager | スクリプトの設定 |
+|---|---|---|---|
+| chibihamuntu | Intel / RTX 3090 24GB ×1 / DDR4 64GB | `$USER@ubuntu-server` | `hosts/ubuntu/chibihamuntu.env` |
+| dekahamuntu | AMD Ryzen / RTX 5060 Ti 16GB ×2 / DDR5 64GB | `$USER@dekahamuntu` | `hosts/ubuntu/dekahamuntu.env` |
+
+`scripts/*-ubuntu.sh` はホスト名（`hostname -s`）から `hosts/ubuntu/<ホスト名>.env` を読み、GPUの割り当て・ドライバの条件・LEDの対象などを決める（変数は `hosts/ubuntu/README.md`、決定は [ADR 0002](adr/0002-ubuntu機ごとの設定.md)）。
+ファイルのないホストでは chibihamuntu と同じ既定で動く。ただし `bootstrap-ubuntu.sh` はファイルがないと止まる。
+以下の手順は chibihamuntu を例に書いている。dekahamuntu は最初から [dekahamuntu-setup.md](dekahamuntu-setup.md) に従う（第1段・第2段の順と、Blackwell・AMD・2枚のGPUの違い）。
+
 ## 初回セットアップ
 
 Ubuntuへログインし、HTTPSでこのリポジトリを取得する。
@@ -19,7 +30,7 @@ Nixを導入して一度ログインし直す。
 curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
 ```
 
-その後、Ubuntu用bootstrapを実行する。
+その後、Ubuntu用bootstrapを実行する。Home Managerの対象（`$USER@ubuntu-server` など）とVaultはホストの設定から決まる。
 
 ```bash
 ~/.config/nix-config/scripts/bootstrap-ubuntu.sh
@@ -92,6 +103,23 @@ LEDはその場で消灯し、カーネルの切り替えは次回の手動再�
 カーネル・OSサービスはこのリポジトリのスクリプトからapt/systemdで管理し、
 `home-manager switch`のactivationには含めない。
 
+### カーネル更新の前に
+
+カーネルが上がっても、同じ版の `linux-modules-nvidia-<世代>-open` が入らないと、再起動後にGPUが見えなくなる
+（2026-10-23のchibihamuntu。メタパッケージ `linux-modules-nvidia-595-open-generic-hwe-24.04` が古い版のまま止まっていた）。
+`apt full-upgrade` の前と、再起動の前に確かめる。読むだけで、何も変えない:
+
+```bash
+sudo apt-get update
+~/.config/nix-config/scripts/check-nvidia-kernel-modules-ubuntu.sh
+```
+
+導入済みの各カーネル、メタパッケージ（`linux-image-generic-hwe-24.04` と `linux-modules-nvidia-<世代>-generic-hwe-24.04` の版）、
+`full-upgrade` で入る予定のカーネルについて、同じ版のNVIDIAモジュールがあるかを出す。✗ があれば非0で終わる。
+そのときは、モジュールが届くまで更新・再起動を待つか、足りないモジュールを入れる
+（`sudo apt-get install linux-modules-nvidia-<世代>-<カーネル>`）。稼働中より古いカーネルに欠けているものは ⚠ で知らせるだけ（GRUBで選ばない限り起動しない）。
+unattended-upgradesがカーネルを入れることもあるので、再起動の前には毎回流す。
+
 ### HWEカーネル
 
 2026-09-10のクラッシュは、RTL8852BEの`rtw89_pci`で送信完了報告の番号を配列範囲外参照し、
@@ -137,6 +165,11 @@ journalctl -u gpu-led-off.service -b --no-pager
 `Off`を設定し、機器番号・I2Cバス番号は固定しない。GPUが未検出・複数一致なら変更せず失敗し、
 初期化遅延に備えてサービス側で再試行する。
 
+対象はホストの設定の `GPU_LED_MATCH`（OpenRGBの一覧の行に当てる正規表現）と `GPU_LED_COUNT`（台数）で、
+インストーラが `/etc/default/gpu-led-off` に書く（ないときはGigabyte RTX 3090 1台）。
+同じ名前のカードが複数あるときは、一覧の番号で全部を一度に消す。`GPU_LED_OFF=0` のホストでは
+`configure-ubuntu-hardware.sh` が消灯を入れない（dekahamuntuはカードのメーカーを確かめるまで0）。
+
 root所有のsystem serviceとして動くため、SSHログインやユーザー領域の実行ファイルに依存しない。
 I2Cデバイスを全ユーザーへ開放する設定も不要。OpenRGBの設定は`/var/lib/gpu-led-off`に分離する。
 電源投入直後からサービス実行までの間は、GPU本体の既定の点灯状態になる場合がある。
@@ -159,6 +192,9 @@ systemグループ`power`を作って実行ユーザー（sudo元、または引
 インストール時は`udevadm trigger --action=add`で既存デバイスにも即座に反映する。
 グループ所属は新しいログインから有効（SSHは毎回新しいログインなのでMacからはすぐ読める）。
 
+AMD（Zen）でも `intel_rapl_msr` が同じ `intel-rapl:0` に積算エネルギーを出す（Zen 5はカーネル6.12以降。HWEなら入っている）。
+ゾーンが1つもないCPU・カーネルでは、スクリプトは何も変えずに警告だけ出して終わる。読めないホストはホストの設定で `CPU_POWER_READ=0` にする。
+
 ## ComfyUI
 
 NVIDIAドライバの再起動後、専用uv環境へComfyUIを導入する。
@@ -172,7 +208,8 @@ NVIDIAドライバの再起動後、専用uv環境へComfyUIを導入する。
 - `~/ComfyUI`へ公式リポジトリをclone
 - Python 3.12の`.venv`を作成
 - NVIDIA向けPyTorchとComfyUI依存を導入
-- PyTorchからRTX 3090とVRAMを確認
+- PyTorchからGPUの名前・世代（sm_86 / sm_120）とVRAMを確認
+- ホストの設定に `COMFY_CUDA_DEVICES` があれば、unitに `CUDA_VISIBLE_DEVICES` を書いてそのGPUだけを使う（chibihamuntuでは書かない）
 - `comfyui.service`をsystemd user serviceとして登録・起動
 - lingerを有効にし、ログイン前から自動起動
 
@@ -243,7 +280,8 @@ Qwen3.8-Flash-Next-Uncensoredのmradermacher i1-IQ3_M（`n-cpu-moe`は35）も�
 128K context、Q8 KV cache、単一モデルだけをVRAMへロードするRouterモードの
 `qwen38.service`を作成する。`--agent`でWeb UIの組み込みツール（シェル実行・ファイル編集を含む）とMCPプロキシを有効にしている（tailnet内のみ公開）。内蔵Web UIでモデルを切り替えられ、再実行しても取得済みファイルは再取得しない。
 
-RTX 3090を共有するため、`applio.service`はComfyUI・Qwenとunitの`Conflicts=`で排他的に起動する。
+GPUが1枚のchibihamuntuでは、RTX 3090を共有するため、`applio.service`はComfyUI・Qwenとunitの`Conflicts=`で排他的に起動する
+（GPUが2枚のdekahamuntuの割り当てと `ai-mode` は [dekahamuntu-setup.md](dekahamuntu-setup.md) の「GPU」の節）。
 LoRA学習も private repo（`~/ai`）の`lora-train`が同じ`Conflicts=`を持つ一時unitとして起動し、
 学習中は`ai-mode`での切替を拒否する。
 
@@ -282,7 +320,8 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 | Python、Node.js | mise |
 | sshd、Tailscale daemon | apt / systemd |
 | NVIDIAドライバ | Ubuntuの推奨ドライバ |
-| HWEカーネル・対応NVIDIAモジュール | `scripts/install-hwe-kernel-ubuntu.sh` / apt |
+| HWEカーネル・対応NVIDIAモジュール | `scripts/install-hwe-kernel-ubuntu.sh` / apt。更新前の確認は `scripts/check-nvidia-kernel-modules-ubuntu.sh` |
+| ホストごとの差（GPUの割り当て・ドライバの条件・LED・電力） | `hosts/ubuntu/<ホスト名>.env`（スクリプト）、`home/hosts/<ホスト名>.nix`（Home Manager） |
 | GPU LED消灯 | 固定版OpenRGB / systemd system service |
 | RAPL読み取り権限 | `power`グループ / udevルール（`scripts/install-rapl-power-access-ubuntu.sh`） |
 | ComfyUIとPython依存 | ComfyUI専用venvまたはuv環境 |

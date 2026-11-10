@@ -1,11 +1,19 @@
 # Linux固有のHome Manager設定
 # OSサービス（sshd、Tailscale、GPUドライバ）はNixではなくUbuntu側で管理する。
-{ config, pkgs, ... }:
+# 既定はchibihamuntu。ホストごとの差は chibiham.ubuntu.* を home/hosts/<ホスト>.nix で変える。
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   # RTX搭載LinuxではCUDA版llama.cppを使う。モデル本体は巨大かつ更新が
   # ネットワーク依存なので、scripts/install-qwen38-ubuntu.shで取得する。
   llama-cpp-cuda = pkgs.llama-cpp.override { cudaSupport = true; };
+
+  cfg = config.chibiham.ubuntu;
 
   # 3090の24GBを取り合うサービス（Qwen/ComfyUI/Applio）を排他で切り替える。
   # Applio・LoRA学習の排他はunit側のConflicts=で担保する。
@@ -82,54 +90,70 @@ let
 in
 
 {
-  targets.genericLinux.enable = true;
-
-  home.packages = [
-    llama-cpp-cuda
-    pkgs.cudaPackages.cuda_nvcc
-    pkgs.aria2
-    pkgs.rclone
-    ai-mode
-    civitai-download
-  ];
-
-  # op inject用テンプレート（update-secretsコマンドで展開）
-  # Mac用の MyMachine Vault は読ませず、このマシン専用の Service Account が
-  # 読める "chibihamuntu" Vault だけを参照する
-  home.file.".secrets/env.tpl" = {
-    force = true;
-    text = ''
-      export CIVITAI_TOKEN="op://chibihamuntu/CIVITAI_TOKEN/credential"
-      export RCLONE_CONFIG_R2_ACCESS_KEY_ID="op://chibihamuntu/R2_CHIBIHAM_AI/access_key_id"
-      export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="op://chibihamuntu/R2_CHIBIHAM_AI/secret_access_key"
-      export RCLONE_CONFIG_R2_ENDPOINT="op://chibihamuntu/R2_CHIBIHAM_AI/endpoint"
-    '';
+  options.chibiham.ubuntu = {
+    opVault = lib.mkOption {
+      type = lib.types.str;
+      default = "chibihamuntu";
+      description = "env.tpl が参照する、このマシン専用の1Password Vault（hosts/ubuntu/<ホスト>.env の OP_VAULT と揃える）";
+    };
+    aiMode = lib.mkOption {
+      type = lib.types.package;
+      default = ai-mode;
+      defaultText = lib.literalMD "GPU 1枚を排他で切り替える ai-mode（chibihamuntu）";
+      description = "GPUを使うサービスを切り替える ai-mode コマンド";
+    };
   };
 
-  # AI作業の方針・資産は private repo（chibiham/chibiham-ai を ~/ai にclone）で管理する。
-  # どのディレクトリで起動しても読まれるよう、Claude Code / Codex のグローバル指示として配る。
-  # clone前はリンク切れになるだけで、switchは失敗しない。
-  home.file.".claude/CLAUDE.md".source =
-    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/ai/AGENTS.md";
-  home.file.".codex/AGENTS.md".source =
-    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/ai/AGENTS.md";
+  config = {
+    targets.genericLinux.enable = true;
 
-  # Claude Code skill（~/.claude/skills はマシン横断のskills repoと共存するため
-  # ディレクトリ単位で置く）
-  home.file.".claude/skills/civitai-download".source = ../claude/skills/civitai-download;
+    home.packages = [
+      llama-cpp-cuda
+      pkgs.cudaPackages.cuda_nvcc
+      pkgs.aria2
+      pkgs.rclone
+      cfg.aiMode
+      civitai-download
+    ];
 
-  # generic Linux上のNix製CUDAアプリから、Ubuntu/apt管理のNVIDIA driverだけを
-  # 参照する。LD_LIBRARY_PATHへ/usr/lib全体を入れるとglibcが衝突するため、
-  # libcudaだけをユーザー領域へ公開する。
-  home.file.".local/lib/nvidia/libcuda.so.1".source =
-    config.lib.file.mkOutOfStoreSymlink "/usr/lib/x86_64-linux-gnu/libcuda.so.1";
-  home.file.".local/lib/nvidia/libcuda.so".source =
-    config.lib.file.mkOutOfStoreSymlink "/usr/lib/x86_64-linux-gnu/libcuda.so.1";
+    # op inject用テンプレート（update-secretsコマンドで展開）
+    # Mac用の MyMachine Vault は読ませず、このマシン専用の Service Account が
+    # 読める "chibihamuntu" Vault だけを参照する（ホストごとに cfg.opVault）
+    home.file.".secrets/env.tpl" = {
+      force = true;
+      text = ''
+        export CIVITAI_TOKEN="op://${cfg.opVault}/CIVITAI_TOKEN/credential"
+        export RCLONE_CONFIG_R2_ACCESS_KEY_ID="op://${cfg.opVault}/R2_CHIBIHAM_AI/access_key_id"
+        export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="op://${cfg.opVault}/R2_CHIBIHAM_AI/secret_access_key"
+        export RCLONE_CONFIG_R2_ENDPOINT="op://${cfg.opVault}/R2_CHIBIHAM_AI/endpoint"
+      '';
+    };
 
-  # GUIなしのサーバーではURLを表示するだけにする。
-  home.sessionVariables.BROWSER = "echo";
+    # AI作業の方針・資産は private repo（chibiham/chibiham-ai を ~/ai にclone）で管理する。
+    # どのディレクトリで起動しても読まれるよう、Claude Code / Codex のグローバル指示として配る。
+    # clone前はリンク切れになるだけで、switchは失敗しない。
+    home.file.".claude/CLAUDE.md".source =
+      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/ai/AGENTS.md";
+    home.file.".codex/AGENTS.md".source =
+      config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/ai/AGENTS.md";
 
-  programs.ssh.matchBlocks."*" = {
-    forwardAgent = false;
+    # Claude Code skill（~/.claude/skills はマシン横断のskills repoと共存するため
+    # ディレクトリ単位で置く）
+    home.file.".claude/skills/civitai-download".source = ../claude/skills/civitai-download;
+
+    # generic Linux上のNix製CUDAアプリから、Ubuntu/apt管理のNVIDIA driverだけを
+    # 参照する。LD_LIBRARY_PATHへ/usr/lib全体を入れるとglibcが衝突するため、
+    # libcudaだけをユーザー領域へ公開する。
+    home.file.".local/lib/nvidia/libcuda.so.1".source =
+      config.lib.file.mkOutOfStoreSymlink "/usr/lib/x86_64-linux-gnu/libcuda.so.1";
+    home.file.".local/lib/nvidia/libcuda.so".source =
+      config.lib.file.mkOutOfStoreSymlink "/usr/lib/x86_64-linux-gnu/libcuda.so.1";
+
+    # GUIなしのサーバーではURLを表示するだけにする。
+    home.sessionVariables.BROWSER = "echo";
+
+    programs.ssh.matchBlocks."*" = {
+      forwardAgent = false;
+    };
   };
 }
