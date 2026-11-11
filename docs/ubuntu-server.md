@@ -309,13 +309,15 @@ Home Managerだけを再適用する場合:
 nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@ubuntu-server
 ```
 
+bashの設定（[ADR 0003](adr/0003-ubuntuのbashにもpathを通す.md)）を含む世代へ初めて上げるときは、Ubuntu標準の`~/.bashrc`・`~/.profile`とぶつかるので`-b backup`を付ける（元のファイルは`~/.bashrc.backup`・`~/.profile.backup`に残る）。上げたらログインし直し、`which pnpm node`と`ssh <ホスト> 'command -v pnpm node'`で両方が出ることを確かめる。
+
 `bootstrap-ubuntu.sh`はsshdを有効化するが、UFWは自動で有効化しない。先にLANまたはTailscale経由のSSH接続を別端末から確認する。ファイアウォールを使う場合は、現在の接続経路を許可してから有効化する。
 
 ## 管理境界
 
 | 対象 | 管理方法 |
 |---|---|
-| CLI、Zsh、Neovim、mise、llama.cpp | Nix / Home Manager |
+| CLI、Zsh・Bashの設定、Neovim、mise、llama.cpp | Nix / Home Manager |
 | Codex CLI、Claude Code | Ubuntu用bootstrap / 公式インストーラ |
 | Python、Node.js | mise |
 | sshd、Tailscale daemon | apt / systemd |

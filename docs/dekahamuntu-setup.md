@@ -100,8 +100,19 @@ ssh chibiham@dekahamuntu
 
 ### 6. ログインし直して、エージェントにログインする
 
+ログインシェルは bash のまま。Home Manager が `~/.bashrc`・`~/.profile`・`~/.bash_profile` を持ち、bash でも zsh と同じ PATH が通る（[ADR 0003](adr/0003-ubuntuのbashにもpathを通す.md)。元の Ubuntu 標準のファイルは bootstrap の `-b backup` で `~/.bashrc.backup` などに退避される）。ログインし直して、まず PATH を確かめる。
+
 ```bash
 exit
+ssh chibiham@dekahamuntu
+which pnpm node              # 両方とも出ること
+type -a pnpm | head -2       # 先頭が関数か …-safe-chain-shims/bin/pnpm（Safe Chain 経由）
+bash -lc 'command -v pnpm'   # エージェントの経路。…-safe-chain-shims/bin/pnpm
+exit
+ssh chibiham@dekahamuntu 'command -v pnpm node'   # ssh の非対話。shim と mise の shim が出ること
+```
+
+```bash
 ssh chibiham@dekahamuntu
 claude --version && codex --version && node --version
 echo "$CIVITAI_TOKEN" | head -c 4; echo   # シークレットが読めていれば先頭だけ出る
