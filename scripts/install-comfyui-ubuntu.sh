@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# RTX 3090向けComfyUIを専用uv環境へ導入し、localhost限定で自動起動する。
+# NVIDIA GPU（chibihamuntu: RTX 3090、dekahamuntu: RTX 5060 Ti ×2）向けComfyUIを専用uv環境へ導入し、
+# localhost限定で自動起動する。使うGPUは hosts/ubuntu/<ホスト名>.env の COMFY_CUDA_DEVICES。
 set -euo pipefail
+
+# shellcheck source=lib/ubuntu-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/ubuntu-host.sh"
 
 COMFY_DIR="${COMFY_DIR:-$HOME/ComfyUI}"
 COMFY_REPO="https://github.com/comfy-org/ComfyUI.git"
@@ -56,6 +60,7 @@ if [[ ! -x "$COMFY_DIR/.venv/bin/python" ]]; then
   uv venv --python 3.12 "$COMFY_DIR/.venv"
 fi
 
+# cu130のwheelはsm_86（3090）とsm_120（Blackwell、RTX 50）の両方を含む。
 step "PyTorch（NVIDIA CUDA 13.0）"
 uv pip install \
   --python "$COMFY_DIR/.venv/bin/python" \
@@ -73,21 +78,37 @@ if [[ -f "$COMFY_DIR/manager_requirements.txt" ]]; then
 fi
 
 step "CUDA動作確認"
-"$COMFY_DIR/.venv/bin/python" - <<'PY'
+cuda_env=()
+if [[ -n "$COMFY_CUDA_DEVICES" ]]; then
+  cuda_env=(CUDA_DEVICE_ORDER=PCI_BUS_ID "CUDA_VISIBLE_DEVICES=$COMFY_CUDA_DEVICES")
+  echo "ComfyUIに見せるGPU: $COMFY_CUDA_DEVICES"
+fi
+env "${cuda_env[@]}" "$COMFY_DIR/.venv/bin/python" - <<'PY'
 import torch
 
 if not torch.cuda.is_available():
     raise SystemExit("PyTorchからCUDAを利用できません")
 print(f"PyTorch: {torch.__version__}")
 print(f"CUDA runtime: {torch.version.cuda}")
-print(f"GPU: {torch.cuda.get_device_name(0)}")
-print(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GiB")
+for i in range(torch.cuda.device_count()):
+    props = torch.cuda.get_device_properties(i)
+    print(f"GPU {i}: {props.name} sm_{props.major}{props.minor}")
+    print(f"VRAM: {props.total_memory / 1024**3:.1f} GiB")
 PY
+
+# 同じGPUを別のサービスと分けるときだけ書く（chibihamuntuでは書かない）
+cuda_unit_lines=""
+if [[ -n "$COMFY_CUDA_DEVICES" ]]; then
+  cuda_unit_lines="Environment=CUDA_DEVICE_ORDER=PCI_BUS_ID
+Environment=CUDA_VISIBLE_DEVICES=$COMFY_CUDA_DEVICES
+"
+fi
 
 step "systemd user service"
 mkdir -p "$SERVICE_DIR"
-# --fast fp16_accumulation: fp16の行列積・畳み込みをfp16で累積する（RTX 3090では約2倍のスループット）。
-# 対応するVAE/モデルが高速化される。
+# 起動オプションの追加は hosts/ubuntu/<ホスト名>.env の COMFY_EXTRA_ARGS（既定は空）。
+# 例: --fast fp16_accumulation（fp16の行列積・畳み込みをfp16で累積する。RTX 3090では約2倍のスループット、
+# Blackwellでは未計測。絵がわずかに変わることがあるので、chibihamuntu・dekahamuntu とも付けていない）。
 # https://blog.comfy.org/p/making-the-minimax-h3-video-vae-2x
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
@@ -100,7 +121,7 @@ Type=simple
 WorkingDirectory=$COMFY_DIR
 Environment=CC=/usr/bin/cc
 Environment=CXX=/usr/bin/c++
-ExecStart=$COMFY_DIR/.venv/bin/python $COMFY_DIR/main.py --listen 127.0.0.1 --port 8188 --enable-manager --fast fp16_accumulation
+${cuda_unit_lines}ExecStart=$COMFY_DIR/.venv/bin/python $COMFY_DIR/main.py --listen 127.0.0.1 --port 8188 --enable-manager${COMFY_EXTRA_ARGS:+ $COMFY_EXTRA_ARGS}
 Restart=on-failure
 RestartSec=5
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=Turn off Gigabyte RTX 3090 lighting
+Description=Turn off GPU lighting (OpenRGB)
 After=systemd-modules-load.service nvidia-persistenced.service
 StartLimitIntervalSec=300
 StartLimitBurst=5
@@ -9,6 +9,8 @@ Type=oneshot
 ExecStartPre=/sbin/modprobe nvidia
 ExecStartPre=/sbin/modprobe i2c-dev
 ExecStart=/usr/local/sbin/turn-off-gpu-led
+# 対象のGPU（GPU_LED_MATCH・GPU_LED_COUNT）。ないときは Gigabyte RTX 3090 1台
+EnvironmentFile=-/etc/default/gpu-led-off
 StateDirectory=gpu-led-off
 Environment=HOME=/var/lib/gpu-led-off
 Environment=QT_QPA_PLATFORM=offscreen

@@ -8,6 +8,10 @@
 # localhost以外の平文HTTPではマイクの許可ダイアログすら出ない。
 set -euo pipefail
 
+# ホストごとの設定（APPLIO_CUDA_DEVICES・APPLIO_CONFLICTS）
+# shellcheck source=lib/ubuntu-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/ubuntu-host.sh"
+
 APPLIO_DIR="${APPLIO_DIR:-$HOME/Applio}"
 APPLIO_REPO="https://github.com/IAHispano/Applio.git"
 SERVICE_DIR="$HOME/.config/systemd/user"
@@ -103,20 +107,27 @@ step "systemd user service"
 mkdir -p "$SERVICE_DIR"
 # ConflictsでComfyUI・Qwenと排他にする。3090の24GBを取り合うと、
 # 学習が起動時にOOMで落ちるため、同時起動を許さない。
+# GPUが複数あるホストでは、同じGPUを使うunitだけと排他にする（APPLIO_CONFLICTS・APPLIO_CUDA_DEVICES）。
 # --client はリアルタイム変換のAPI(/api)とブラウザ用JSを有効化するフラグで、
 # サーバ側に付ける（名前に反してクライアント専用モードではない）。
+applio_cuda_lines=""
+if [[ -n "$APPLIO_CUDA_DEVICES" ]]; then
+  applio_cuda_lines="Environment=CUDA_DEVICE_ORDER=PCI_BUS_ID
+Environment=CUDA_VISIBLE_DEVICES=$APPLIO_CUDA_DEVICES
+"
+fi
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Applio (RVC training / realtime voice conversion)
 After=network-online.target
 Wants=network-online.target
-Conflicts=comfyui.service qwen38.service
+Conflicts=$APPLIO_CONFLICTS
 
 [Service]
 Type=simple
 WorkingDirectory=$APPLIO_DIR
 Environment=PYTHONUNBUFFERED=1
-ExecStart=$APPLIO_DIR/.venv/bin/python $APPLIO_DIR/app.py \\
+${applio_cuda_lines}ExecStart=$APPLIO_DIR/.venv/bin/python $APPLIO_DIR/app.py \\
   --client \\
   --server-name 127.0.0.1 \\
   --port $PORT

@@ -4,7 +4,12 @@
 # - このファイル（と OS別モジュール）の適用 = `home-manager switch` は
 #   ネットワーク・1Password認証・sudo に依存せず、常に冪等であること
 # - 命令的な初期構築は scripts/ のOS別bootstrapに分離
-{ pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 
 let
   # 1Password管理の共通マシン鍵（公開鍵）
@@ -97,6 +102,16 @@ let
   # safe-chainが直接起動した呼び出しだけ、全世代のshimを除いて実体をexecする。
   safeChainPathFirst = ''
     path=(${safe-chain-shims}/bin ''${path:#${safe-chain-shims}/bin})
+  '';
+  # 上と同じ並べ直しのbash版（Ubuntuのログインシェル用。docs/adr/0003）
+  safeChainPathFirstBash = ''
+    _safe_chain_path_first() {
+      local shims=${safe-chain-shims}/bin rest=":$PATH:"
+      while [[ $rest == *":$shims:"* ]]; do rest=''${rest//":$shims:"/:}; done
+      rest=''${rest#:}
+      rest=''${rest%:}
+      PATH="$shims''${rest:+:$rest}"
+    }
   '';
 
   safe-chain-shims = pkgs.runCommandLocal "safe-chain-shims" { } (
@@ -415,6 +430,72 @@ in
       typeset -ag precmd_functions chpwd_functions
       precmd_functions=(''${precmd_functions:#_safe_chain_path_first} _safe_chain_path_first)
       chpwd_functions=(''${chpwd_functions:#_safe_chain_path_first} _safe_chain_path_first)'';
+  };
+
+  # ===================
+  # Bash設定（Linuxだけ。docs/adr/0003）
+  # Ubuntu機のログインシェルは /bin/bash で、エージェント（Claude Code・Codex）もbashで
+  # コマンドを動かす。zshと同じPATH（sessionPath、mise、Safe Chainのshimが先頭）を通す。
+  # macOSのログインシェルはzshなので触らない。
+  #
+  # 読まれる経路:
+  #   bash -l（ssh、bash -lc）: ~/.bash_profile → ~/.profile（hm-session-vars）→ ~/.bashrc
+  #   ssh host 'cmd'          : /etc/bash.bashrc → ~/.bashrc（対話の判定より前の bashrcExtra だけ）
+  #   bash -i                 : ~/.bashrc
+  #   bash -c                 : 何も読まない（親の環境を受け継ぐ。BASH_ENVは使わない）
+  # ===================
+  programs.bash = lib.mkIf pkgs.stdenv.isLinux {
+    enable = true;
+    # ログインシェルはUbuntuの /bin/bash のまま。PATHの bash を差し替えない
+    package = null;
+    # 補完・履歴・shoptはUbuntu標準の /etc/skel/.bashrc に任せる（下のinitExtra）
+    enableCompletion = false;
+    shellOptions = [ ];
+    historySize = null;
+    historyFileSize = null;
+    historyControl = [ ];
+
+    # 非対話（ssh host 'cmd'、bash -lc）でも読まれる部分。
+    # ssh の非対話コマンドは ~/.profile を読まないので、ここでも hm-session-vars を読む
+    # （二度目以降は __HM_SESS_VARS_SOURCED で何もしない）。
+    bashrcExtra = ''
+      . "${config.home.sessionVariablesPackage}/etc/profile.d/hm-session-vars.sh"
+      ${safeChainPathFirstBash}
+      _safe_chain_path_first
+    '';
+
+    initExtra = lib.mkMerge [
+      # Ubuntu標準の対話設定（プロンプト・色・補完・履歴）。HMが ~/.bashrc を持つ前と同じにする。
+      # starship等の統合より先に読む
+      (lib.mkOrder 50 ''
+        [ -f /etc/skel/.bashrc ] && . /etc/skel/.bashrc
+      '')
+      # mise と Safe Chain。zshの initContent と同じ。direnv等の統合（mkAfter）より後に置く
+      (lib.mkOrder 2000 ''
+        # mise（runtime version manager）
+        if command -v mise &> /dev/null; then
+          eval "$(mise activate bash)"
+        fi
+
+        # Aikido Safe Chain: mise activateがPATH先頭へnode等を足すため、
+        # 対話シェルでは関数でもラッパーへ向ける
+        ${lib.concatMapStrings (cmd: ''
+          ${cmd}() { ${safe-chain-shims}/bin/${cmd} "$@"; }
+        '') safeChainCommands}
+        _safe_chain_path_first
+        # miseはプロンプトごと（PROMPT_COMMANDの先頭）とcdのたび（chpwd_functions）に
+        # node等をPATH先頭へ戻すので、そのあとで並べ直す。
+        if [[ ";''${PROMPT_COMMAND:-};" != *";_safe_chain_path_first;"* ]]; then
+          PROMPT_COMMAND="''${PROMPT_COMMAND:+$PROMPT_COMMAND;}_safe_chain_path_first"
+        fi
+        _scf_hooks=()
+        for _scf_hook in "''${chpwd_functions[@]}"; do
+          [[ $_scf_hook == _safe_chain_path_first ]] || _scf_hooks+=("$_scf_hook")
+        done
+        chpwd_functions=("''${_scf_hooks[@]}" _safe_chain_path_first)
+        unset _scf_hooks _scf_hook
+      '')
+    ];
   };
 
   # ===================

@@ -1,0 +1,42 @@
+# dekahamuntu のネットワークの雛形（netplan）。このままでは使わない。
+#
+# TODO(実機・本人): 次を確かめてから値を埋め、/etc/netplan/ に置く（置くのも netplan apply も本人が行う）。
+#   1. インターフェース名: `ip -br link`（有線は enp<番号>s0 のような名前になる見込み。2つ出るはず）
+#   2. チップとドライバ: `lspci -nnk | grep -A3 -i ethernet`
+#      ASUS ProArt B850-Creator WiFi（型番は要確認）の 5GbE ×2 は Realtek RTL8126 の見込み（推測。製品ページで確かめる）。
+#      RTL8126 は標準カーネルの r8169 が 6.9 から対応する。Ubuntu 24.04 の GA カーネル 6.8 では見えない可能性があり、
+#      HWE カーネル（24.04 では 6.11 以降。インストーラの起動メニューの HWE を選ぶ）なら r8169 で動く見込み。
+#      `Kernel driver in use: r8169` でリンクが上がらない（NO-CARRIER のまま）ときだけ、Realtek の r8126（DKMS）を検討する。
+#      追加のドライバは管理境界（ADR 0001）の外になるので、入れる前に本人が決める。
+#   3. Wi-Fi 7 のチップ: `lspci -nnk | grep -A3 -i network`（MediaTek MT7925 なら mt7925e、6.7 以降）。
+#      有線で使うなら Wi-Fi は設定しない（chibihamuntu は RTL8852BE の不具合でカーネルパニックの前歴がある）。
+#   4. 固定IPにするか DHCP のままにするか（ルーター側の予約でもよい）。Tailscale で届けば DHCP で足りる。
+#
+# 既定はインストーラが作った /etc/netplan/50-cloud-init.yaml。動いていれば置き換えなくてよい。
+# 置き換えるときは、別の経路（本体のコンソール、もう一方のNIC）を確保してから `sudo netplan try` で試す（120秒で戻る）。
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    # TODO: 実機の名前に置き換える（例: enp10s0）
+    lan0:
+      match:
+        # TODO: `ip -br link` の MAC に置き換える（名前が変わっても同じポートを指すため）
+        macaddress: "00:00:00:00:00:00"
+      set-name: lan0
+      dhcp4: true
+      dhcp6: false
+      # 固定にするなら dhcp4: false にして下を使う（値は TODO）
+      # addresses: [192.168.0.XX/24]
+      # routes:
+      #   - to: default
+      #     via: 192.168.0.1
+      # nameservers:
+      #   addresses: [192.168.0.1]
+    # 2つ目の 5GbE。使わないなら書かない（optional: true で起動を待たせない）
+    # lan1:
+    #   match:
+    #     macaddress: "00:00:00:00:00:00"
+    #   set-name: lan1
+    #   dhcp4: true
+    #   optional: true

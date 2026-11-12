@@ -47,16 +47,23 @@
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
       # 更新の速いツールはunstableから取る（それ以外はstable）
+      #
+      # cudaCapabilities: Ubuntu機のGPUの世代だけを指定する。全CUDA世代をコンパイルせず、
+      # llama.cppの初回構築時間とNix store使用量を抑える。
+      #   chibihamuntu: RTX 3090 (Ampere) = 8.6（既定）
+      #   dekahamuntu:  RTX 5060 Ti (Blackwell) = 12.0（CUDA 12.8以降が要る）
       unstableOverlay =
-        system: final: prev:
+        {
+          system,
+          cudaCapabilities ? [ "8.6" ],
+        }:
+        final: prev:
         let
           unstable = import nixpkgs-unstable {
             inherit system;
             config = {
               allowUnfree = true;
-              # Ubuntu機のRTX 3090 (Ampere) 専用。全CUDA世代をコンパイルせず、
-              # llama.cppの初回構築時間とNix store使用量を抑える。
-              cudaCapabilities = [ "8.6" ];
+              inherit cudaCapabilities;
             };
           };
         in
@@ -65,14 +72,17 @@
         };
 
       pkgsFor =
-        system:
+        {
+          system,
+          cudaCapabilities ? [ "8.6" ],
+        }:
         import nixpkgs {
           inherit system;
           config = {
             # unfreeパッケージを許可（1password-cli等）
             allowUnfree = true;
           };
-          overlays = [ (unstableOverlay system) ];
+          overlays = [ (unstableOverlay { inherit system cudaCapabilities; }) ];
         };
 
       # macOSユーザー用のHome Manager設定を生成
@@ -83,7 +93,7 @@
           system ? "aarch64-darwin",
         }:
         home-manager.lib.homeManagerConfiguration {
-          pkgs = pkgsFor system;
+          pkgs = pkgsFor { inherit system; };
           modules = [
             ./home/common.nix
             ./home/darwin.nix
@@ -98,13 +108,16 @@
         };
 
       # Ubuntu/Linuxユーザー用のHome Manager設定を生成
+      # hostModule: ホストごとの差（home/hosts/<ホスト>.nix）。なければchibihamuntuと同じ
       mkLinuxHome =
         {
           username,
           system ? "x86_64-linux",
+          hostModule ? null,
+          cudaCapabilities ? [ "8.6" ],
         }:
         home-manager.lib.homeManagerConfiguration {
-          pkgs = pkgsFor system;
+          pkgs = pkgsFor { inherit system cudaCapabilities; };
           modules = [
             ./home/common.nix
             ./home/linux.nix
@@ -113,7 +126,8 @@
               home.username = username;
               home.homeDirectory = "/home/${username}";
             }
-          ];
+          ]
+          ++ nixpkgs.lib.optional (hostModule != null) hostModule;
         };
     in
     {
@@ -127,7 +141,14 @@
           username = "chibiham";
           hostModule = ./home/hosts/mac-mini.nix;
         };
+        # chibihamuntu（RTX 3090・Intel）。名前は導入時のまま
         "chibiham@ubuntu-server" = mkLinuxHome { username = "chibiham"; };
+        # dekahamuntu（RTX 5060 Ti 16GB ×2・AMD Ryzen）
+        "chibiham@dekahamuntu" = mkLinuxHome {
+          username = "chibiham";
+          hostModule = ./home/hosts/dekahamuntu.nix;
+          cudaCapabilities = [ "12.0" ];
+        };
       };
 
       # flake.lockでピン留めされたhome-manager CLI
@@ -141,6 +162,6 @@
       });
 
       # `nix fmt` 用フォーマッター
-      formatter = forAllSystems (system: (pkgsFor system).nixfmt-rfc-style);
+      formatter = forAllSystems (system: (pkgsFor { inherit system; }).nixfmt-rfc-style);
     };
 }

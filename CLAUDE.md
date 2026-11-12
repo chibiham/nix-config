@@ -25,19 +25,22 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 │   ├── common.nix     # 共通設定
 │   ├── darwin.nix     # macOS共通設定
 │   ├── linux.nix      # Linux固有設定
-│   └── hosts/         # Macごとの固有設定（macbook.nix / mac-mini.nix）
+│   └── hosts/         # ホストごとの固有設定（macbook.nix / mac-mini.nix / dekahamuntu.nix）
+├── hosts/ubuntu/      # Ubuntu機ごとのスクリプトの設定（<ホスト名>.env。ADR 0002）
 ├── Brewfile           # Homebrew一覧（両Mac共通・同じ内容）
 ├── udev/             # Ubuntuへ配るudevルール（RAPL読み取り権限）
 ├── claude/skills/     # Nixで ~/.claude/skills に配るClaude Code skill（civitai-download）
 └── scripts/
     ├── bootstrap.sh       # 新しいMacの初期セットアップ
-    ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
+    ├── lib/ubuntu-host.sh # Ubuntu機ごとの設定を読む（各*-ubuntu.shがsource）
+    ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ（第1段）
     ├── install-tailscale-ubuntu.sh # Tailscale導入・認証
     ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
     ├── configure-ubuntu-hardware.sh # HWE・GPU起動時消灯・RAPL権限を反映（再起動なし）
     ├── install-hwe-kernel-ubuntu.sh # HWE・対応NVIDIAモジュール
+    ├── check-nvidia-kernel-modules-ubuntu.sh # カーネル更新・再起動の前にNVIDIAモジュールの版を確かめる（読むだけ）
     ├── install-gpu-led-off-ubuntu.sh # OpenRGBと消灯サービスの導入
-    ├── turn-off-gpu-led.sh # Gigabyte RTX 3090だけを消灯
+    ├── turn-off-gpu-led.sh # ホストの設定で決めたGPUだけを消灯（既定はGigabyte RTX 3090）
     ├── install-rapl-power-access-ubuntu.sh # RAPL energy_ujをpowerグループへ（udev）
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
     ├── install-diffusion-pipe-ubuntu.sh # Anima LoRA学習環境
@@ -82,7 +85,8 @@ bootstrap.shがやること（すべて冪等、途中失敗しても再実行�
 nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@mac-mini
 ```
 
-Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@ubuntu-server` にする。
+Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@ubuntu-server`（chibihamuntu）または `$USER@dekahamuntu` にする。
+dekahamuntu の初期構築は `docs/dekahamuntu-setup.md`、モデルの置き場所の叩き台は `docs/ai-server-placement.md`。
 
 定期的な更新（flake update → ビルド → vulnix → switch → mise → Homebrew）は `docs/maintenance.md` の手順で行う。
 
@@ -95,7 +99,10 @@ Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@u
 nix eval --raw '.#homeConfigurations."chibiham@mac-mini".activationPackage.drvPath'
 nix eval --raw '.#homeConfigurations."chibiham@macbook".activationPackage.drvPath'
 nix eval --raw '.#homeConfigurations."chibiham@ubuntu-server".activationPackage.drvPath'
+nix eval --raw '.#homeConfigurations."chibiham@dekahamuntu".activationPackage.drvPath'
 ```
+
+Ubuntu機のスクリプトを変えたら、chibihamuntu の挙動（`hosts/ubuntu/chibihamuntu.env` の既定）が変わっていないかを確かめる。
 
 push/PR時はGitHub Actions CI（`.github/workflows/ci.yml`）が全ユーザー分の評価を実行。
 `flake.lock` は毎週月曜に自動更新PRが作られる（`update-flake-lock.yml`）。
