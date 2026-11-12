@@ -52,6 +52,9 @@ unset _ubuntu_host_repo
 : "${COMFY_CUDA_DEVICES:=}"
 # comfyui.serviceの main.py に足す起動オプション（例: --fast fp16_accumulation）。空なら足さない
 : "${COMFY_EXTRA_ARGS:=}"
+# art-studio（~/ai）の unit に drop-in で足す値（configure-art-studio-ubuntu.sh）。両方とも空なら drop-in を書かない
+: "${ART_STUDIO_COMFYUI_URL:=}"
+: "${ART_STUDIO_CUDA_DEVICES:=}"
 : "${LLM_CUDA_DEVICES:=}"
 : "${TRAIN_CUDA_DEVICES:=}"
 : "${APPLIO_CUDA_DEVICES:=}"

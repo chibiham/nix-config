@@ -38,6 +38,7 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
     ├── install-qwen38-mac-mini.sh # Mac mini用Qwen3.8モデル取得
     ├── configure-comfyui-tailscale-serve.sh # ComfyUIだけをtailnet内にHTTPS公開
     ├── configure-tailscale-serve-ubuntu.sh # ホストのTAILSCALE_SERVEのとおりにtailnet内へHTTPS公開
+    ├── configure-art-studio-ubuntu.sh # art-studio（~/ai）のunitにホストの差分をdrop-inで足す
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
 
