@@ -48,7 +48,8 @@ echo "ホスト: $UBUNTU_HOST（$UBUNTU_HOST_FILE）/ Home Manager: $FLAKE_TARGE
 
 step "Ubuntuの基礎パッケージ"
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl git openssh-server xz-utils
+# sqlite3: art-studio などの SQLite の DB を、動いたまま写す（.backup）・確かめる（integrity_check）のに使う
+sudo apt-get install -y ca-certificates curl git openssh-server sqlite3 xz-utils
 sudo systemctl enable --now ssh
 
 if ! command -v nix >/dev/null; then
