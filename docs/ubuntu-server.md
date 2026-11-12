@@ -219,6 +219,15 @@ ComfyUIは`127.0.0.1:8188`だけで待ち受ける。インストール後、Tai
 ~/.config/nix-config/scripts/configure-comfyui-tailscale-serve.sh
 ```
 
+ホストで公開するものが決まっていれば、`hosts/ubuntu/<ホスト名>.env` の `TAILSCALE_SERVE`（「HTTPSのポート=127.0.0.1のポート」の一覧）にまとめて書き、こちらで揃えてもよい（何度流してもよい。一覧にないServeは `--prune` のときだけ外す。`--dry-run` で変えるコマンドだけ表示）:
+
+```bash
+~/.config/nix-config/scripts/configure-tailscale-serve-ubuntu.sh --dry-run
+~/.config/nix-config/scripts/configure-tailscale-serve-ubuntu.sh
+```
+
+`install-tailscale-ubuntu.sh` が `tailscale set --operator=$USER` を設定するので、serve の変更に sudo は要らない（operator が無い機械では sudo に落ちる）。
+
 表示された`https://<hostname>.<tailnet>.ts.net`を、同じtailnetへ登録した端末から開く。`--bg`で登録したServe設定はTailscale daemonへ保存され、UbuntuやTailscaleの再起動後も復帰する。
 
 Tailscale Serveはtailnet内だけの公開であり、インターネット公開するFunnelは使用しない。LAN全体へ公開する`--listen 0.0.0.0`も使用しない。tailnetのAccess Controlsを変更している場合は、接続元からUbuntuのHTTPSへの通信が許可されている必要がある。

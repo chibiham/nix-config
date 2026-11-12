@@ -26,6 +26,9 @@ unset _ubuntu_host_repo
 : "${UBUNTU_USER:=}"
 # tailscale up --hostname に渡す名前（空なら渡さない。OSのホスト名が使われる）
 : "${TAILSCALE_HOSTNAME:=}"
+# Tailscale Serve（tailnet内だけのHTTPS公開）。「HTTPSのポート=127.0.0.1のポート」を空白区切り（例: "443=8188 4520=4520"）。
+# configure-tailscale-serve-ubuntu.sh が使う。空なら何も足さない
+: "${TAILSCALE_SERVE:=}"
 
 # NVIDIA
 # 期待するGPUの枚数（0なら確かめない）

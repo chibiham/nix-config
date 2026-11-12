@@ -21,6 +21,7 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 | `OP_VAULT` | `chibihamuntu` | bootstrap-ubuntu | このマシン専用の1Password Vault（表示と照合。参照の正本は `home/hosts/<ホスト>.nix` の `chibiham.ubuntu.opVault`） |
 | `UBUNTU_USER` | 空 | bootstrap-ubuntu | このホストのユーザー。`$USER` と違えば止まる（bootstrap はこれが空でも止まる） |
 | `TAILSCALE_HOSTNAME` | 空 | install-tailscale | `tailscale up --hostname` に渡す名前（空ならOSのホスト名） |
+| `TAILSCALE_SERVE` | 空 | configure-tailscale-serve | tailnet内のHTTPS公開。「HTTPSのポート=127.0.0.1のポート」を空白区切り（例: `443=8188 4520=4520`）。一覧にないServeは `--prune` のときだけ外す |
 | `NVIDIA_EXPECTED_GPUS` | `0` | install-nvidia-driver | 期待するGPUの枚数（0は確かめない） |
 | `NVIDIA_REQUIRE_OPEN` | `0` | install-nvidia-driver, install-hwe-kernel, check-nvidia-kernel-modules | `nvidia-driver-*-open` 以外を拒む（Blackwellは1） |
 | `NVIDIA_MIN_DRIVER` | `0` | install-nvidia-driver | 推奨ドライバの世代の下限（Blackwellは570） |

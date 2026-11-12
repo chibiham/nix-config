@@ -23,6 +23,10 @@ if [[ -n "$TAILSCALE_HOSTNAME" ]]; then
   up_args+=("--hostname=$TAILSCALE_HOSTNAME")
 fi
 sudo tailscale up "${up_args[@]}"
+# serve（configure-tailscale-serve-ubuntu.sh、install-qwen38 など）をsudoなしで設定できるようにする。
+# chibihamuntu はこの形（OperatorUser=chibiham）で動いている
+sudo tailscale set --operator="$USER"
 
 echo "Tailscale IP: $(tailscale ip -4)"
 echo "SSH接続を確認してから、必要に応じてUFWを設定してください"
+echo "tailnet内への公開（ホストの TAILSCALE_SERVE）: $(dirname "${BASH_SOURCE[0]}")/configure-tailscale-serve-ubuntu.sh"

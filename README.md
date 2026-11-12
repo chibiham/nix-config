@@ -36,7 +36,8 @@ Nix + Home Manager によるmacOS / Ubuntu環境構築。
     ├── civitai-download.sh # Civitaiモデル取得（linux.nixがコマンド化）
     ├── install-qwen38-ubuntu.sh # Qwen3.8モデル・Router user service
     ├── install-qwen38-mac-mini.sh # Mac mini用Qwen3.8モデル取得
-    ├── configure-comfyui-tailscale-serve.sh # tailnet内だけにHTTPS公開
+    ├── configure-comfyui-tailscale-serve.sh # ComfyUIだけをtailnet内にHTTPS公開
+    ├── configure-tailscale-serve-ubuntu.sh # ホストのTAILSCALE_SERVEのとおりにtailnet内へHTTPS公開
     └── macos-defaults.sh  # macOSシステム設定（sudo必要、冪等）
 ```
 
