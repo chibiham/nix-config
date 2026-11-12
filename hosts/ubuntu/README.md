@@ -29,6 +29,7 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 | `GPU_LED_COUNT` | `1` | turn-off-gpu-led | 一致すべき台数。違えば何も変えずに失敗 |
 | `CPU_POWER_READ` | `1` | configure-ubuntu-hardware | 0ならpowercap（RAPL）の読み取り権限を入れない |
 | `COMFY_CUDA_DEVICES` | 空 | install-comfyui | comfyui.serviceの `CUDA_VISIBLE_DEVICES` |
+| `COMFY_EXTRA_ARGS` | 空 | install-comfyui | comfyui.serviceの main.py に足す起動オプション（例: `--fast fp16_accumulation`。どちらのホストも付けない） |
 | `LLM_CUDA_DEVICES` | 空 | install-qwen38 | qwen38.serviceの `CUDA_VISIBLE_DEVICES` |
 | `LLM_DUAL_CUDA_DEVICES` | 空 | install-qwen38 | 空でなければ、束ねて使う qwen38-dual.service を作る |
 | `LLM_DUAL_SPLIT_MODE` | `layer` | install-qwen38 | llama.cppの `--split-mode` |

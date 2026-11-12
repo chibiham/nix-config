@@ -47,6 +47,8 @@ unset _ubuntu_host_repo
 
 # GPUの割り当て（CUDA_VISIBLE_DEVICES）。空ならunitに書かない（すべてのGPUが見える）
 : "${COMFY_CUDA_DEVICES:=}"
+# comfyui.serviceの main.py に足す起動オプション（例: --fast fp16_accumulation）。空なら足さない
+: "${COMFY_EXTRA_ARGS:=}"
 : "${LLM_CUDA_DEVICES:=}"
 : "${TRAIN_CUDA_DEVICES:=}"
 : "${APPLIO_CUDA_DEVICES:=}"

@@ -106,8 +106,9 @@ fi
 
 step "systemd user service"
 mkdir -p "$SERVICE_DIR"
-# --fast fp16_accumulation: fp16の行列積・畳み込みをfp16で累積する（RTX 3090では約2倍のスループット。Blackwellでは未計測）。
-# 対応するVAE/モデルが高速化される。
+# 起動オプションの追加は hosts/ubuntu/<ホスト名>.env の COMFY_EXTRA_ARGS（既定は空）。
+# 例: --fast fp16_accumulation（fp16の行列積・畳み込みをfp16で累積する。RTX 3090では約2倍のスループット、
+# Blackwellでは未計測。絵がわずかに変わることがあるので、chibihamuntu・dekahamuntu とも付けていない）。
 # https://blog.comfy.org/p/making-the-minimax-h3-video-vae-2x
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
@@ -120,7 +121,7 @@ Type=simple
 WorkingDirectory=$COMFY_DIR
 Environment=CC=/usr/bin/cc
 Environment=CXX=/usr/bin/c++
-${cuda_unit_lines}ExecStart=$COMFY_DIR/.venv/bin/python $COMFY_DIR/main.py --listen 127.0.0.1 --port 8188 --enable-manager --fast fp16_accumulation
+${cuda_unit_lines}ExecStart=$COMFY_DIR/.venv/bin/python $COMFY_DIR/main.py --listen 127.0.0.1 --port 8188 --enable-manager${COMFY_EXTRA_ARGS:+ $COMFY_EXTRA_ARGS}
 Restart=on-failure
 RestartSec=5
 
