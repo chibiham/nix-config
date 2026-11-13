@@ -287,6 +287,8 @@ ls /sys/class/powercap/                                                  # intel
 
 使うのは CPU より GPU が多いので、ケースファンを GPU の温度に合わせて回す。CPU のクーラーのファン（CPU_FAN）は BIOS のまま触らない。
 
+ケースファンは Thermalright TL-C12C（本人の答え。個数と位置は未確認。仕様は [machines.md](machines.md#dekahamuntu)）。
+
 | 項目 | 決めたこと |
 |---|---|
 | 道具 | [fan2go](https://github.com/markusressel/fan2go) 0.15.0（公式の配布バイナリの `fan2go-linux-amd64-no-nvml` を、版と SHA256 で固定して `/usr/local/bin` に置く）。設定は YAML で宣言でき、hwmon のファンと、コマンドの出力の温度を組み合わせられる |

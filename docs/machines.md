@@ -47,7 +47,7 @@
 - OS: Ubuntu 24.04.5 LTS、カーネル 7.0.0-42-generic
 - CPU: 13th Gen Intel Core i7-13700KF。24 スレッド（lscpu は 16 コア・1 ソケット）、最大 5,400MHz、L3 30MiB
 - メモリ: MemTotal 65,645,188 kB（約 62.6GiB）。4 スロットのうち 2 枚（ロケータ Controller0-ChannelA-DIMM1・Controller1-ChannelA-DIMM1）、各 32GiB、DDR4。SMBIOS のメーカー欄は「Shenzhen Zhongshi Technology Co Ltd」、型番欄は空。速度の欄 2,666 MT/s、動いている速度も 2,666 MT/s。ボードの最大は 128GiB
-- GPU: NVIDIA GeForce RTX 3090、24,576MiB、PCI 01:00.0、サブシステム 1458:4043（1458 = Gigabyte）、VBIOS 94.02.42.40.B7、ドライバ 595.99.02。PCIe 4.0 x16 でつながっている。電力の上限 370W（設定できる最大 390W）
+- GPU: NVIDIA GeForce RTX 3090、24,576MiB、PCI 01:00.0、デバイス 10de:2204（GA102）、サブシステム 1458:4043（1458 = Gigabyte）、VBIOS 94.02.42.40.B7、ドライバ 595.99.02。PCIe 4.0 x16 でつながっている。電力の上限 370W（設定できる最大 390W）
 - ディスク:
   - sda = Fanxiang S101 2T（SATA、1.9T）。Ubuntu はこれに入っている。sda1 `/boot/efi` 1G、sda2 `/boot` 2G、sda3 LVM → `/` 1.9T（使用 894G・空き 886G）
   - nvme0n1 = Lexar SSD NM790 2TB（NVMe、PCIe 4.0 x4、ファームウェア 11296）。中は EFI 100M・16M・NTFS 1.9T・NTFS 889M。Ubuntu からはマウントしていない（Windows の並びに見える）
@@ -67,7 +67,7 @@
 ### 未確認
 
 - GPU の正式な型番（OC の付く GV-N3090GAMING OC-24GD か）。検索で見つかった GAMING の RTX 3090 は GV-N3090GAMING OC-24GD だけで、OC の付かない型番は見つからなかったが、Gigabyte の製品の一覧（ページは 403 で取れず）で確かめていないので決めない。カードのスロット数
-- PCI のサブシステム 1458:4043 がどの製品か。pci-ids の RTX 3090（10de:2204）の項に Gigabyte（1458）のサブシステムは載っていない。TechPowerUp の VBIOS のデータベースも検索で 1458:4043 の版は見つけられなかった（一覧のページは 403 で取れず）。実機の PCI のデバイス ID は記録していない
+- PCI のサブシステム 1458:4043 がどの製品か。pci-ids の RTX 3090（10de:2204）の項に Gigabyte（1458）のサブシステムは載っていない。TechPowerUp の VBIOS のデータベースも検索で 1458:4043 の版は見つけられなかった（一覧のページは 403 で取れず）。実機の PCI のデバイス ID は 10de:2204
 - メモリの型番、電圧（1.2V か 1.35V か）、2,666 MT/s で動いている理由（XMP を入れていないためか）。XMP を入れるかは本人が BIOS で決める
 - 電源 HX1200 の版（型番）。12V-2x6 があるか
 - Lexar NM790 がどの M.2 スロット（CPU 側の M.2_1 かチップセット側の M.2_2）に挿さっているか、Windows の用途
@@ -91,6 +91,7 @@
 | 電源 | CORSAIR RM850e | CP-9020296-JP | 850W、フルモジュラー、ATX 3.1（Intel ATX 3.1 認証）、PCIe 5.1、12V-2x6（12+4）×1 と 12V-2x6 → 8pin ×2 のケーブル、120mm ファン、Cybenetics Gold（80 PLUS の記載はページになし）、保証 7 年 | 本人、仕様（Corsair。CP-9020296-NA のページ） |
 | CPU クーラー | ID-COOLING FROZN A620 PRO SE（空冷、デュアルタワー、ブラック） | FROZN A620 PRO SE | 120 × 142 × 157mm、ヒートパイプ 6mm ×6、ファン 120 × 120 × 25mm ×2（AS-120-K、300〜2,000 RPM、4pin PWM）、TDP 260W、対応ソケット Intel LGA1851/1700/1200/115x、AMD AM5/AM4 | 本人、仕様（ID-COOLING） |
 | ケース | Antec C8 Curve Wood | — | フルタワー、464 × 303 × 476mm（奥行き × 幅 × 高さ）、E-ATX（280mm まで）/ ATX / Micro-ATX / Mini-ITX、ファンは最大 10、ラジエーター 上・側面・底面に 120〜360mm、GPU 440mm まで、CPU クーラー 175mm まで、電源 210mm まで。付属ファンの有無・数は未確認 | 本人、仕様（Antec） |
+| ケースファン | Thermalright TL-C12C（光らない版。ARGB の TL-C12C-S は別の型番） | TL-C12C | 実機で 4 チャネル（fan1・3・4・6）。個数は未確認。仕様: 120 × 120 × 25mm、120g、4pin PWM、最大 1,550 RPM ±10%、風量 66.17 CFM、静圧 1.53mmH2O、騒音 25.6 dBA（どれも最大）、S-FDB 軸受、0.20A。電圧・最低の回転数はページになし。ページの分類は「Non-LED 120mm」。何個入りかはページになし（TL-C12C X3 の別のページがあり、仕様は同じ。入り数の記載なし） | 本人（どの機械かは明示していない。執事の読み）、実機、仕様（Thermalright） |
 
 ### 実機で読んだ値（2026-11-13）
 
@@ -105,7 +106,7 @@
 
   | チャネル | 実機で読んだこと |
   |---|---|
-  | fan1・3・4・6 | ケースファン 4 つ。fan2go が GPU の温度で回す（[dekahamuntu-setup.md の「ケースファン」](dekahamuntu-setup.md#ケースファンgpu-の温度で回す)）。型番は未確認 |
+  | fan1・3・4・6 | ケースファン 4 つ。fan2go が GPU の温度で回す（[dekahamuntu-setup.md の「ケースファン」](dekahamuntu-setup.md#ケースファンgpu-の温度で回す)）。本人の答えでは Thermalright TL-C12C。4 チャネルとも mode=1（PWM）。PWM 77（30%）で約 520〜660 RPM、PWM 0 でも止まらない。全開の境の閾値（fan2go の threshold。最大の回転数そのものではない）は pwm1 1,356.6・pwm3 1,318.6・pwm4 1,475.3・pwm6 1,369.9 RPM |
   | fan2・5 | 約 810〜820 RPM でほぼ同じ回転数。CPU クーラーのファン 2 つの見込み（本人は 2 を「たぶん CPU のクーラー」と言っている） |
   | fan7 | 0 RPM |
 
@@ -117,10 +118,11 @@
 - メモリの型番: 商品名は AD5U560032G-DT-I、SMBIOS の型番欄は AD5U560032G-B
 - メモリの量: 64GB 挿していて、MemTotal は約 60.0GiB（内蔵 GPU の分が引かれている見込み。確かめていない）
 - SSD の速度: 本人の一覧は「最大読込 7400MB/s」、KingSpec のページは 7,200〜7,400MB/s（容量ごとの値はない）。M.2_1・M.2_2 は PCIe 5.0 x4 だが、SSD が PCIe 4.0 なので 4.0 x4 でつながっている
+- ケースファンの回転数: Thermalright のページの最大は 1,550 RPM ±10%（1,395〜1,705 RPM）。実機の全開の境の閾値は約 1,320〜1,480 RPM で、pwm4 だけがこの幅に入り、ほかの 3 つは幅より少し下。閾値は最大の回転数そのものではないので、食い違いとまでは言えない（全開の回転数は測っていない）
 
 ### 未確認
 
-- ケースファン 4 つの型番、付属品か買い足しか（Antec C8 Curve Wood の付属ファン）
+- ケースファンの個数（4 チャネルに何個つないでいるか）と位置（吸気・排気）。ケースの付属ファンの有無
 - fan2・fan5 が CPU クーラーのファン 2 つか（本人「たぶん」）。チャネルとヘッダーの対応
 - 負荷をかけたときの PCIe の速さ（Gen5 になるか）、P2P の可否
 - NVMe がどの M.2 スロットに挿さっているか
@@ -223,6 +225,10 @@ Macmini: M4 2024 32GB
 
 - 3090はGigabyte GeForce RTX3090 GV-N3090GAMING
 
+追加（2026-11-13、ケースファン。どの機械かは本人が明示していない。dekahamuntu と読んだ）:
+
+- Thermalright TL-C12C CPUファン 120mmケースクーラー、4ピンPWM静音コンピュータファン
+
 ### メーカーのページ（2026-11-13 に読んだ）
 
 「検索の抜粋」と書いたものは、ページの本文を取れず、検索で出たそのページの抜粋で値を読んだ。
@@ -247,6 +253,8 @@ Macmini: M4 2024 32GB
 | MasterLiquid 360L Core ARGB White | Cooler Master「MasterLiquid 360L Core ARGB White CPU Liquid Cooler」 | https://www.coolermaster.com/en-us/products/masterliquid-360l-core-argb-white.html |
 | FROZN A620 PRO SE | ID-COOLING「FROZN A620 PRO SE」 | https://www.idcooling.com/product/detail?id=496 |
 | C8 Curve Wood | Antec「C8 CURVE Wood」（検索の抜粋） | https://www.antec.com/product/case/c8-curve-wood |
+| TL-C12C | Thermalright「TL-C12C – Thermalright」 | https://www.thermalright.com/product/tl-c12c/ |
+| TL-C12C X3（入り数を見るため） | Thermalright「TL-C12C X3 – Thermalright」（仕様は TL-C12C と同じ。入り数の記載なし） | https://www.thermalright.com/product/tl-c12c-x3/ |
 | C3 T500 ARGB | PCCOOLER（CPS）「C3 T500 ARGB」（BK のページ） | http://www.cpspccooler.com/product/c3-t500-argb/ |
 | Mac mini（2024） | Apple「Mac mini (2024) - Tech Specs」 | https://support.apple.com/en-us/121555 |
 | MacBook Air（M2, 2022） | Apple「MacBook Air (M2, 2022) - Tech Specs」 | https://support.apple.com/en-us/111867 |
