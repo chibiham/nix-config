@@ -14,7 +14,7 @@
 
 | 機械 | 役割 | flake の構成名 | CPU | メモリ | GPU | ストレージ | OS |
 |---|---|---|---|---|---|---|---|
-| chibihamuntu | AI サーバー（ComfyUI、Qwen Router、LoRA 学習、Applio） | `chibiham@ubuntu-server` | Intel Core i7-13700KF（16 コア 24 スレッド） | DDR4 64GB（32GB ×2。2,666 MT/s で動いている） | RTX 3090 24GB ×1（Gigabyte。製品名は未確認） | SATA SSD 2TB（Ubuntu）、NVMe 2TB（Ubuntu からは使っていない） | Ubuntu 24.04.5 LTS |
+| chibihamuntu | AI サーバー（ComfyUI、Qwen Router、LoRA 学習、Applio） | `chibiham@ubuntu-server` | Intel Core i7-13700KF（16 コア 24 スレッド） | DDR4 64GB（Acclamator OUNCE 32GB ×2。2,666 MT/s で動いている） | RTX 3090 24GB ×1（Gigabyte。製品名は未確認） | SATA SSD 2TB（Ubuntu）、NVMe 2TB（Ubuntu からは使っていない） | Ubuntu 24.04.5 LTS |
 | dekahamuntu | AI サーバー（2 台目。ComfyUI、Qwen Router） | `chibiham@dekahamuntu` | AMD Ryzen 7 9700X（8 コア 16 スレッド） | DDR5 64GB（32GB ×2、5,600 MT/s） | RTX 5060 Ti 16GB ×2（Palit Infinity 3） | NVMe 2TB | Ubuntu 24.04.5 LTS |
 | Mac mini | flake.lock の更新とコミットをする Mac。MacBook から画面共有で操作する。ローカルの Qwen3.8（`qwen38`） | `chibiham@mac-mini` | Apple M4（10 コア） | 32GB | M4 内蔵（10 コア） | 1TB（内蔵） | macOS 27.0.1 |
 | MacBook Air | Mac mini を画面共有で操作する Mac。flake.lock は mac-mini で更新したものを pull して反映する | `chibiham@macbook` | Apple M2（8 コア） | 24GB | M2 内蔵（8 コアか 10 コアかは未確認） | 未確認 | 未確認 |
@@ -31,7 +31,7 @@
 |---|---|---|---|---|
 | CPU | Intel Core i7-13700KF | BX8071513700KF（BOX） | 16 コア（P 8 + E 8）24 スレッド、最大 5.40GHz、キャッシュ 30MB、Processor Base Power 125W・Maximum Turbo Power 253W、FCLGA1700、DDR5 5600 / DDR4 3200 MT/s まで、最大 192GB、PCIe 5.0・4.0（20 レーン）。仕様のページに内蔵 GPU の項目はない | 本人（型番）、仕様（Intel） |
 | マザーボード | ASUS TUF GAMING B760M-PLUS D4 | — | Micro ATX（24.4 × 24.4cm）、Intel B760、LGA1700、DDR4 DIMM ×4（最大 128GB、2133〜5333 MT/s。3333 以上は OC）、PCIe 5.0 x16 ×1（CPU）、PCIe 4.0 x16 形状 ×1（x4 動作、チップセット）、PCIe 4.0 x1 ×1、M.2 ×2（どちらも PCIe 4.0 x4。M.2_1 は CPU、M.2_2 はチップセット）、SATA ×4、有線 Realtek 2.5GbE、ファンのヘッダー（4pin）は CPU ×1・CPU OPT ×1・AIO ポンプ ×1・ケース ×3。Wi-Fi の規格は仕様のページで確かめられなかった | 本人、仕様（ASUS） |
-| メモリ | 不明（本人の一覧に型番・メーカーがない） | 未確認 | 本人: DDR4 PC4-25600（3200MHz）、CL22、1.2V、32GB ×2、ヒートシンク付き。実機: 2,666 MT/s で動いている（下の「食い違い」） | 本人、実機 |
+| メモリ | Acclamator OUNCE（DDR4-3200 32GB ×2、白ヒートシンク） | 未確認（商品名に出ていない） | 本人: DDR4 PC4-25600（3200MHz）、32GB ×2、CL22（最初の一覧）、電圧は最初の一覧が 1.2V・2 回目が 1.35V。実機: 2,666 MT/s で動いている（下の「食い違い」） | 本人（2 回）、実機 |
 | GPU | Gigabyte GeForce RTX 3090（製品名は未確認） | 未確認（PCI のサブシステム 1458:4043） | NVIDIA の RTX 3090 の仕様: 24GB GDDR6X、384bit、10,496 CUDA コア、ブースト 1.70GHz、グラフィックスカードの電力 350W、推奨のシステム電源 750W、補助電源 8pin ×2（Founders Edition）、NVLink あり。Gigabyte の製品としての長さ・補助電源・電力は未確認 | 本人、実機、仕様（NVIDIA。Founders Edition の値） |
 | SSD（SATA） | Fanxiang S101 2TB | 未確認 | 本人: 2.5 インチ 7mm、SATA 6Gb/s、3D NAND TLC。仕様: SATA III 6Gb/s、最大 読み 520MB/s・書き 480MB/s（S101 の 1TB の製品ページの値。2TB の値と TBW は未確認） | 本人、仕様（Fanxiang） |
 | SSD（NVMe） | Lexar NM790 2TB（本人の一覧にない） | 未確認 | M.2 2280、PCIe Gen4 x4、2TB は 最大 読み 7,400MB/s・書き 6,500MB/s、1,500TBW、保証 5 年 | 実機、仕様（Lexar） |
@@ -57,8 +57,9 @@
 
 ### 本人の一覧・仕様と実機の食い違い
 
-- メモリの速度: 商品名は 3200MHz（PC4-25600）、実機は 2,666 MT/s で動いている（SMBIOS の速度の欄も 2,666）。BIOS で XMP を使っていないのか、モジュールの SPD が 2,666 なのかは未確認
-- メモリのメーカー: 商品名にメーカーがなく、SMBIOS は「Shenzhen Zhongshi Technology Co Ltd」、型番欄は空
+- メモリの速度: 商品名は 3200MHz（PC4-25600）、実機は 2,666 MT/s で動いている（SMBIOS の速度の欄も 2,666）。BIOS で XMP を使っていないのか、モジュールの SPD が 2,666 なのかは未確認。見立て: DDR4-3200 で 1.35V は XMP のプロファイルによくある組み合わせなので、BIOS で XMP を入れていないため 2,666 MT/s で動いている、という見立てと合う（確かめていない）
+- メモリのメーカー: ブランドは Acclamator（本人）、SMBIOS のメーカー欄は「Shenzhen Zhongshi Technology Co Ltd」、型番欄は空。ブランドと製造元の関係は未確認
+- メモリの電圧: 最初の一覧の商品名は 1.2V、2 回目の商品名は 1.35V。どちらが正しいかは未確認
 - NVMe（Lexar NM790 2TB）が本人の一覧にない
 - Wi-Fi: 実機に RTL8852BE（802.11ax）があるが、ASUS の仕様のページで Wi-Fi の規格を確かめられなかった（ボードの名前に WIFI が付かない）。カードがどこに付いているかは未確認
 - GPU の電力の上限: 実機は 370W（最大 390W）、NVIDIA の RTX 3090 の仕様は 350W。Gigabyte の製品の値は未確認
@@ -66,7 +67,7 @@
 ### 未確認
 
 - GPU の Gigabyte の製品名（GAMING OC など）、長さ、補助電源の数
-- メモリの製品名・型番、2,666 MT/s で動いている理由
+- メモリの型番、電圧（1.2V か 1.35V か）、2,666 MT/s で動いている理由（XMP を入れていないためか）。XMP を入れるかは本人が BIOS で決める
 - 電源 HX1200 の版（型番）。12V-2x6 があるか
 - Lexar NM790 がどの M.2 スロット（CPU 側の M.2_1 かチップセット側の M.2_2）に挿さっているか、Windows の用途
 - Wi-Fi のカードの出どころ（ボード付属か後付けか）
@@ -212,6 +213,10 @@ dekahamuntu:
 macbook air: M2、2022 24GB
 
 Macmini: M4 2024 32GB
+
+追加（2026-11-13、chibihamuntu のメモリ）:
+
+- 64GB 3200MHz DDR4 PC4-25600 RAM 1.35V (32GB x 2枚) 白ヒートシンク付きシリーズ デスクトップPC用 メモリモジュール Memory Acclamator OUNCE
 
 ### メーカーのページ（2026-11-13 に読んだ）
 
