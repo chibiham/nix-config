@@ -286,7 +286,7 @@ ls /sys/class/powercap/                                                  # intel
 | 揺れを抑える | 温度は 1 秒ごとに読み、直近 10 回の平均で曲線を引く。PWM は 1 回（200ms）に 3 まで動かす（0→255 に約 17 秒） |
 | 止めない | `neverStop`。最低は `CASE_FAN_MIN_DUTY`（30%） |
 | 止めたとき・落ちたとき | BIOS の制御に戻す。fan2go 自身（`controlMode.onExit: restore`）と、unit の `ExecStopPost`（`case-fan-restore-bios`。入れたときに読んだ `pwmN_enable` の値に戻す。強制終了のときの保険） |
-| GPU の温度が読めないとき | `nvidia-smi` の失敗・1.5 秒で返らない・枚数が `NVIDIA_EXPECTED_GPUS`（2）でない・数でない値のとき、100℃ を出す。曲線は 83℃ で 100% なので全開になる |
+| GPU の温度が読めないとき | `nvidia-smi` の失敗・1.2 秒で返らない（TERM を無視しても 0.3 秒後に KILL。fan2go の cmd センサーの時間切れ 2 秒より手前で終える）・枚数が `NVIDIA_EXPECTED_GPUS`（2）でない・数でない値のとき、100℃ を出す。曲線は 83℃ で 100% なので全開になる |
 | 値の置き場所 | `hosts/ubuntu/dekahamuntu.env` の `CASE_FAN_*`（意味は `hosts/ubuntu/README.md`）。スクリプトの既定は切（`CASE_FAN_CONTROL=0`）。dekahamuntu は 1 |
 
 曲線（たたき台。`CASE_FAN_GPU_CURVE`・`CASE_FAN_CPU_CURVE`。「温度:デューティ%」）:
@@ -407,13 +407,22 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 - 1 本あたり 1 分 40 秒〜1 分 44 秒。全体でも約 1 分 45 秒（10:18:58 → 10:20:42）
 - 結果: 4 本とも「start/min boundary detected at PWM 0」（PWM 0 でも止まらない）、「max boundary confirmed at PWM 255」。解析の境は Start 1・Max 255、設定の上書きのあと Min 77・Start 77・Max 255
 
+負荷をかけたとき（執事が確かめた。10:26〜10:29 UTC）:
+
+- GPU 0 に約 160 秒の計算の負荷をかけた。GPU の温度は 33℃ → 70℃
+- pwm 1・3・4・6 が 77 → 164 に上がり、約 990〜1,180 RPM
+- 曲線（70℃ で 65% = PWM 約 166）とほぼ合う
+- 負荷が消えて 30 秒で pwm 89 まで下がった
+- pwm2（CPU のクーラー）は BIOS のまま変わらなかった
+
 #### まだ確かめていないこと
 
-- GPU に負荷をかけたとき（60℃・70℃ を超えたあたり）に pwm が上がり、止めると下がること
+- 83℃ 以上で全開（PWM 255）になること（70℃ までしか上げていない）
 - `systemctl stop fan2go` で BIOS の制御（`pwmN_enable=5`）に戻ること、起動し直したときに解析をやり直さないこと
 - 再起動のあと、`nct6775` が自動で読み込まれ、fan2go が自分で立ち上がること
 - GPU が読めないとき（failsafe）に全開になること（実機では起こしていない）
 - チャネル 2 が CPU のクーラーという見分け（本人「たぶん」）と、fan5 が CPU_OPT で 2 に連動しているという見込み
+- 実機の `/usr/local/sbin/case-fan-gpu-temp` はまだ古い版（`timeout -k 0.5 1.5`）。新しい版（`-k 0.3 1.2`）にするには入れるスクリプトの流し直しが要る（本人に頼んである。2026-11-13）
 
 ### RAM（DDR5 64GB）
 
