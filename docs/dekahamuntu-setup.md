@@ -287,7 +287,7 @@ ls /sys/class/powercap/                                                  # intel
 | 止めない | `neverStop`。最低は `CASE_FAN_MIN_DUTY`（30%） |
 | 止めたとき・落ちたとき | BIOS の制御に戻す。fan2go 自身（`controlMode.onExit: restore`）と、unit の `ExecStopPost`（`case-fan-restore-bios`。入れたときに読んだ `pwmN_enable` の値に戻す。強制終了のときの保険） |
 | GPU の温度が読めないとき | `nvidia-smi` の失敗・1.5 秒で返らない・枚数が `NVIDIA_EXPECTED_GPUS`（2）でない・数でない値のとき、100℃ を出す。曲線は 83℃ で 100% なので全開になる |
-| 値の置き場所 | `hosts/ubuntu/dekahamuntu.env` の `CASE_FAN_*`（意味は `hosts/ubuntu/README.md`）。既定は切（`CASE_FAN_CONTROL=0`） |
+| 値の置き場所 | `hosts/ubuntu/dekahamuntu.env` の `CASE_FAN_*`（意味は `hosts/ubuntu/README.md`）。スクリプトの既定は切（`CASE_FAN_CONTROL=0`）。dekahamuntu は 1 |
 
 曲線（たたき台。`CASE_FAN_GPU_CURVE`・`CASE_FAN_CPU_CURVE`。「温度:デューティ%」）:
 
@@ -310,11 +310,11 @@ ls /sys/class/powercap/                                                  # intel
 
 #### Super I/O（ファンのヘッダーの制御）
 
-ProArt B850-CREATOR WIFI NEO のファンのヘッダーは、Super I/O（Nuvoton。NCT6799D の見込み）が持つ。ドライバは `nct6775`。2026-11-13 の時点:
+ProArt B850-CREATOR WIFI NEO のファンのヘッダーは、Super I/O（Nuvoton）が持つ。ドライバは `nct6775`、hwmon の name は `nct6799`（2026-11-13 に実機で確かめた）。
 
-- Ubuntu は `nct6775` を自動で読み込まない（hwmon に pwm も fan もない）。入れるスクリプトが `/etc/modules-load.d/case-fan-control.conf` に書く
-- カーネル 7.0 の `nct6775` の「ASUS の WMI 経由で読むボード」の一覧に、このボードはない（ProArt は B550/B650/B660/B760/X570/X670E/X870E/Z490/Z690/Z790 だけ）。なので ISA を直に読みに行き、BIOS（ACPI）がその場所を握っていると掴めない。握っているかは読み込んでみないと分からない
-- 掴めないときの回避は起動オプション `acpi_enforce_resources=lax`（ACPI と同じ I/O をドライバも触ることを許す。BIOS とドライバが同時に触ると読み違いが起きうる。広く使われている回避）。`--probe` が要りそうと言ったときだけ、本人が `CASE_FAN_ACPI_LAX=1` にする
+- Ubuntu は `nct6775` を自動で読み込まない（読み込む前は hwmon に pwm も fan もない）。入れるスクリプトが `/etc/modules-load.d/case-fan-control.conf` に書く（実機で `nct6775` が書かれたことを確かめた）
+- カーネル 7.0 の `nct6775` の「ASUS の WMI 経由で読むボード」の一覧に、このボードはない（ProArt は B550/B650/B660/B760/X570/X670E/X870E/Z490/Z690/Z790 だけ）。なので ISA を直に読みに行き、BIOS（ACPI）がその場所を握っていると掴めない。BIOS 1002・カーネル 7.0.0-43-generic では、`acpi_enforce_resources=lax` なしで掴めた（2026-11-13）
+- BIOS やカーネルを上げて掴めなくなったときの回避は起動オプション `acpi_enforce_resources=lax`（ACPI と同じ I/O をドライバも触ることを許す。BIOS とドライバが同時に触ると読み違いが起きうる。広く使われている回避）。`--probe` が要りそうと言ったときだけ、本人が `CASE_FAN_ACPI_LAX=1` にする
 - `asus-ec-sensors`・`asus_wmi_sensors` は温度などを読むだけで、ファンを操れない（このボードも一覧にない）
 
 #### 本人がやる順
@@ -350,7 +350,7 @@ scripts/install-case-fan-control-ubuntu.sh
 
 入れるスクリプトがすること: `libsensors5`（なければ apt）、`/etc/modules-load.d/case-fan-control.conf`、fan2go を止めた状態で BIOS の `pwmN_enable` を `/etc/fan2go/case-fan-restore.conf` に記録、fan2go と 2 つのスクリプトを置く、`/etc/fan2go/fan2go.yaml` を書いて `fan2go config validate` を通す（通らなければ何も起動しない）、`fan2go.service` を有効にして起動、15 秒後の状態を出す。
 
-初回の解析: fan2go 0.15.0 は、初めて見るファンの PWM と RPM の関係を一度だけ測る（ファンを止めたり全開にしたりする。1 本ずつ、数分）。結果は `/var/lib/fan2go/fan2go.db` に残り、2 回目からは測らない。測っているあいだは温度で回らないので、ComfyUI・LLM を動かしていないときに入れる。
+初回の解析: fan2go 0.15.0 は、初めて見るファンの PWM と RPM の関係を一度だけ測る（ファンを止めたり全開にしたりする）。dekahamuntu では 4 本が同時に始まり、全体で約 1 分 45 秒で終わった（下の「実機で確かめた値」）。結果は `/var/lib/fan2go/fan2go.db` に残り、2 回目からは測らない。測っているあいだは温度で回らないので、ComfyUI・LLM を動かしていないときに入れる。
 
 #### 確かめ方
 
@@ -374,12 +374,46 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 
 `CASE_FAN_ACPI_LAX` だけ戻すときは、env を 0 にして入れるスクリプトを流す（GRUB の drop-in を消して `update-grub`。次の起動から）。
 
-#### 実機で確かめていないこと（2026-11-13）
+#### 実機で確かめた値（2026-11-13）
 
-- `nct6775` がこのボードの Super I/O を掴めるか、`lax` が要るか、チップの name（`nct6799` の見込み）、どのチャネルがどのヘッダーか
-- ファンが 4pin（PWM）か 3pin（DC）か、30% で回り続けるか
-- systemd の制限（`MemoryDenyWriteExecute`・`SystemCallFilter` など。公式の unit のまま）の中で `nvidia-smi` が動くか。動かなければ status が failsafe になり全開になる（安全側）。そのときは unit の制限を緩める
-- 初回の解析にかかる時間、`pwmMap: identity`（nct6775 の PWM は 0〜255 をそのまま読み返す想定）
+本人が入れたときの出力と、読むだけで見た値。
+
+- 環境: ProArt B850-CREATOR WIFI NEO、BIOS 1002、カーネル 7.0.0-43-generic。起動オプションに `acpi_enforce_resources=lax` はない。hwmon の name は `nct6799`
+- `/etc/modules-load.d/case-fan-control.conf` に `nct6775` が書かれた
+- `fan2go config validate` が通った（一時の設定 `/etc/fan2go/fan2go.new.yaml`）。`fan2go.service` は 10:18:55 UTC に active (running)、再起動 0 回、メモリ約 13MB
+- systemd の制限（`MemoryDenyWriteExecute`・`SystemCallFilter` など。公式の unit のまま）の中で `nvidia-smi` が動いた。`/run/fan2go/case-fan-gpu-temp.status` は「ok 33 gpus=2」
+- pwm は 1・2・3・4・6・7（pwm5 はない）。`pwmN_mode` はすべて 1（PWM。4pin の制御）。DC（3pin）のチャネルはない
+- 入れる前の BIOS の `pwmN_enable` は、1・3・4・6 とも 5（`/etc/fan2go/case-fan-restore.conf` に `nct6799 <ch> 5` と記録された）
+- `pwmMap: identity`・`setPwmToGetPwmMap: identity` のままで動いた（ログに「Using identity pwm map」）
+
+チャネル:
+
+| チャネル | 役割 | 制御 | PWM 31/255（解析の途中） | PWM 77（30%。解析のあと、GPU 33℃・28℃ のアイドル） | max の境の閾値（fan2go の threshold） |
+|---|---|---|---|---|---|
+| 1 | ケースファン | fan2go（`pwm1_enable=1`） | 406 RPM | 約 530 RPM | 1356.6 RPM |
+| 2 | CPU のクーラー（本人の見分け。「たぶん」）。約 830 RPM | BIOS のまま（`pwm2_enable=5`） | — | — | — |
+| 3 | ケースファン | fan2go（`pwm3_enable=1`） | 435 RPM | 約 520 RPM | 1318.6 RPM |
+| 4 | ケースファン | fan2go（`pwm4_enable=1`） | 529 RPM | 約 660 RPM | 1475.3 RPM |
+| 5 | pwm がなく回転数だけ。約 840 RPM（2 とほぼ同じ回転数） | — | — | — | — |
+| 6 | ケースファン | fan2go（`pwm6_enable=1`） | 390 RPM | 約 537 RPM | 1369.9 RPM |
+| 7 | RPM 0 | — | — | — | — |
+
+- max の境の閾値は fan2go が「threshold」と出した値で、最大の回転数そのものではない
+- 30%（PWM 77）で 4 本とも回り続けている。`CASE_FAN_MIN_DUTY=30` のままでよい
+
+初回の解析:
+
+- 4 本が同時に始まった。設定は `runFanInitializationInParallel: false` だが、ログでは 4 本とも 10:18:58 に始まった
+- 1 本あたり 1 分 40 秒〜1 分 44 秒。全体でも約 1 分 45 秒（10:18:58 → 10:20:42）
+- 結果: 4 本とも「start/min boundary detected at PWM 0」（PWM 0 でも止まらない）、「max boundary confirmed at PWM 255」。解析の境は Start 1・Max 255、設定の上書きのあと Min 77・Start 77・Max 255
+
+#### まだ確かめていないこと
+
+- GPU に負荷をかけたとき（60℃・70℃ を超えたあたり）に pwm が上がり、止めると下がること
+- `systemctl stop fan2go` で BIOS の制御（`pwmN_enable=5`）に戻ること、起動し直したときに解析をやり直さないこと
+- 再起動のあと、`nct6775` が自動で読み込まれ、fan2go が自分で立ち上がること
+- GPU が読めないとき（failsafe）に全開になること（実機では起こしていない）
+- チャネル 2 が CPU のクーラーという見分け（本人「たぶん」）と、fan5 が CPU_OPT で 2 に連動しているという見込み
 
 ### RAM（DDR5 64GB）
 
@@ -420,6 +454,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | ドライバの版 | 595.99.02（`nvidia-driver-595-open`）、CUDA 13.2 | 2026-11-12 |
 | カーネル | 7.0.0-43-generic（`linux-generic-hwe-24.04`） | 2026-11-12 |
 | powercap のゾーン | `intel-rapl:0`、`intel-rapl:0:0` | 2026-11-12 |
+| ケースファン（Super I/O・チャネル） | `nct6775`（hwmon の name `nct6799`。BIOS 1002 で `lax` なし）。1・3・4・6 がケースファン（fan2go）、2 は CPU のクーラー（本人「たぶん」。BIOS のまま）。pwm はすべて mode=1（PWM）。細かい値は「[ケースファン](#ケースファンgpu-の温度で回す)」の「実機で確かめた値」 | 2026-11-13 |
 
 ---
 
@@ -447,6 +482,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | comfyui.service | GPU 0（`CUDA_DEVICE_ORDER=PCI_BUS_ID`・`CUDA_VISIBLE_DEVICES=0`）、`CC=/usr/bin/cc`、`--fast` なし。enabled | `install-comfyui-ubuntu.sh`（`COMFY_CUDA_DEVICES=0`、`COMFY_EXTRA_ARGS` は空）。まねのコマンドで流し、実機の unit と同じになることを確かめた |
 | art-studio.service | unit 本体（PORT=4520、`ART_STUDIO_INBOX`、mise の node 24）。enabled | `~/ai/scripts/install-art-studio`。まねのコマンドで流し、実機の unit と同じになることを確かめた |
 | art-studio の drop-in | `art-studio.service.d/dekahamuntu.conf`（`COMFYUI_URL=http://127.0.0.1:8188`、GPU 0） | `configure-art-studio-ubuntu.sh`（`ART_STUDIO_COMFYUI_URL`・`ART_STUDIO_CUDA_DEVICES`）。実機と同じ中身になることを確かめた |
+| ケースファン（2026-11-13 に入れた） | fan2go 0.15.0（`fan2go.service`、active (running)）、`/etc/fan2go/fan2go.yaml`・`case-fan-restore.conf`、`/etc/modules-load.d/case-fan-control.conf`（`nct6775`）。チャネル 1・3・4・6 | `install-case-fan-control-ubuntu.sh`（`CASE_FAN_*`） |
 
 ### `~/ai`（chibiham-ai）の手順で再現するもの
 
