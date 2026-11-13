@@ -287,7 +287,7 @@ ls /sys/class/powercap/                                                  # intel
 
 使うのは CPU より GPU が多いので、ケースファンを GPU の温度に合わせて回す。CPU のクーラーのファン（CPU_FAN）は BIOS のまま触らない。
 
-ケースファンは Thermalright TL-C12C（本人の答え。個数と位置は未確認。仕様は [machines.md](machines.md#dekahamuntu)）。
+ケースファンは合わせて 10 個（本人の答え）: Thermalright TL-C14C（140mm）×7 と TL-C12C（120mm）×3。底 140mm ×3 吸気・側面 120mm ×3 吸気・天面 140mm ×3 排気・背面 140mm ×1 排気（吸気 6・排気 4）。10 個が 4 チャネル（fan1・3・4・6）にどう分かれてつながっているかは未確認。仕様・食い違い・電流は [machines.md](machines.md#dekahamuntu)。
 
 | 項目 | 決めたこと |
 |---|---|
@@ -361,7 +361,7 @@ scripts/install-case-fan-control-ubuntu.sh
 
 入れるスクリプトがすること: `libsensors5`（なければ apt）、`/etc/modules-load.d/case-fan-control.conf`、fan2go を止めた状態で BIOS の `pwmN_enable` を `/etc/fan2go/case-fan-restore.conf` に記録、fan2go と 2 つのスクリプトを置く、`/etc/fan2go/fan2go.yaml` を書いて `fan2go config validate` を通す（通らなければ何も起動しない）、`fan2go.service` を有効にして起動、15 秒後の状態を出す。
 
-初回の解析: fan2go 0.15.0 は、初めて見るファンの PWM と RPM の関係を一度だけ測る（ファンを止めたり全開にしたりする）。dekahamuntu では 4 本が同時に始まり、全体で約 1 分 45 秒で終わった（下の「実機で確かめた値」）。結果は `/var/lib/fan2go/fan2go.db` に残り、2 回目からは測らない。測っているあいだは温度で回らないので、ComfyUI・LLM を動かしていないときに入れる。
+初回の解析: fan2go 0.15.0 は、初めて見るファンの PWM と RPM の関係を一度だけ測る（ファンを止めたり全開にしたりする）。dekahamuntu では 4 チャネルが同時に始まり、全体で約 1 分 45 秒で終わった（下の「実機で確かめた値」）。結果は `/var/lib/fan2go/fan2go.db` に残り、2 回目からは測らない。測っているあいだは温度で回らないので、ComfyUI・LLM を動かしていないときに入れる。
 
 #### 確かめ方
 
@@ -410,13 +410,13 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 | 7 | RPM 0 | — | — | — | — |
 
 - max の境の閾値は fan2go が「threshold」と出した値で、最大の回転数そのものではない
-- 30%（PWM 77）で 4 本とも回り続けている。`CASE_FAN_MIN_DUTY=30` のままでよい
+- 30%（PWM 77）で 4 チャネルとも回り続けている。`CASE_FAN_MIN_DUTY=30` のままでよい
 
 初回の解析:
 
-- 4 本が同時に始まった。設定は `runFanInitializationInParallel: false` だが、ログでは 4 本とも 10:18:58 に始まった
-- 1 本あたり 1 分 40 秒〜1 分 44 秒。全体でも約 1 分 45 秒（10:18:58 → 10:20:42）
-- 結果: 4 本とも「start/min boundary detected at PWM 0」（PWM 0 でも止まらない）、「max boundary confirmed at PWM 255」。解析の境は Start 1・Max 255、設定の上書きのあと Min 77・Start 77・Max 255
+- 4 チャネルが同時に始まった。設定は `runFanInitializationInParallel: false` だが、ログでは 4 チャネルとも 10:18:58 に始まった
+- 1 チャネルあたり 1 分 40 秒〜1 分 44 秒。全体でも約 1 分 45 秒（10:18:58 → 10:20:42）
+- 結果: 4 チャネルとも「start/min boundary detected at PWM 0」（PWM 0 でも止まらない）、「max boundary confirmed at PWM 255」。解析の境は Start 1・Max 255、設定の上書きのあと Min 77・Start 77・Max 255
 
 負荷をかけたとき（執事が確かめた。10:26〜10:29 UTC）:
 
