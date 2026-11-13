@@ -7,6 +7,7 @@ Uses a fake hwmon tree and a fake nvidia-smi. Needs bash 4 or later
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -268,7 +269,10 @@ class GpuTempTests(unittest.TestCase):
         self.assertEqual(r.returncode, 0)
         self.assertEqual(r.stdout, "100000\n")
         self.assertIn("failsafe", status)
-        self.assertLess(self.elapsed, 1.8)
+        # 時間は Linux でだけ確かめる。TERM を無視するものに timeout -k 0.3 1.2 をかけると、
+        # Linux（coreutils 9.4）は 1.50 秒で終わるが、macOS の timeout は素で約 1.8 秒かかる
+        if sys.platform.startswith("linux"):
+            self.assertLess(self.elapsed, 1.8)
 
 
 class RestoreTests(unittest.TestCase):
