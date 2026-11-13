@@ -200,6 +200,10 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 
 subako の `subako.config.json` の `machines` に dekahamuntu を足すと、GPU の温度（`alerts.gpuTempC`）・CPU 電力が見える。nvidia-smi の行ごとに読むので 2 枚とも見張られる。CPU 電力は `/sys/class/powercap/intel-rapl:0` を読む（AMD でも同じ名前で出る見込み）。subako 側の作業なので、subako のエージェントに頼む。
 
+### 2-8. ケースファンを GPU の温度で回す
+
+本人が順に流す（sudo が要る）。中身と手順は下の「[ケースファン](#ケースファンgpu-の温度で回す)」。
+
 ---
 
 ## ハードウェアごとの注意
@@ -269,6 +273,113 @@ cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver                 # amd-ps
 cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference  # balance_performance
 ls /sys/class/powercap/                                                  # intel-rapl:0 があるか
 ```
+
+### ケースファン（GPU の温度で回す）
+
+使うのは CPU より GPU が多いので、ケースファンを GPU の温度に合わせて回す。CPU のクーラーのファン（CPU_FAN）は BIOS のまま触らない。
+
+| 項目 | 決めたこと |
+|---|---|
+| 道具 | [fan2go](https://github.com/markusressel/fan2go) 0.15.0（公式の配布バイナリの `fan2go-linux-amd64-no-nvml` を、版と SHA256 で固定して `/usr/local/bin` に置く）。設定は YAML で宣言でき、hwmon のファンと、コマンドの出力の温度を組み合わせられる |
+| 回し方 | ケースファン = max(GPU の曲線, CPU の曲線)。GPU の入力は 2 枚の温度の最大 |
+| GPU の温度 | `case-fan-gpu-temp`（root 所有、`/usr/local/sbin`）が `nvidia-smi` で読み、最大をミリ度で出す。fan2go の NVML（GPU を直に読む）は使わない |
+| 揺れを抑える | 温度は 1 秒ごとに読み、直近 10 回の平均で曲線を引く。PWM は 1 回（200ms）に 3 まで動かす（0→255 に約 17 秒） |
+| 止めない | `neverStop`。最低は `CASE_FAN_MIN_DUTY`（30%） |
+| 止めたとき・落ちたとき | BIOS の制御に戻す。fan2go 自身（`controlMode.onExit: restore`）と、unit の `ExecStopPost`（`case-fan-restore-bios`。入れたときに読んだ `pwmN_enable` の値に戻す。強制終了のときの保険） |
+| GPU の温度が読めないとき | `nvidia-smi` の失敗・1.5 秒で返らない・枚数が `NVIDIA_EXPECTED_GPUS`（2）でない・数でない値のとき、100℃ を出す。曲線は 83℃ で 100% なので全開になる |
+| 値の置き場所 | `hosts/ubuntu/dekahamuntu.env` の `CASE_FAN_*`（意味は `hosts/ubuntu/README.md`）。既定は切（`CASE_FAN_CONTROL=0`） |
+
+曲線（たたき台。`CASE_FAN_GPU_CURVE`・`CASE_FAN_CPU_CURVE`。「温度:デューティ%」）:
+
+| GPU（2 枚の最大） | デューティ | | CPU（Tctl） | デューティ |
+|---|---|---|---|---|
+| 45℃ 以下 | 30% | | 60℃ 以下 | 30% |
+| 60℃ | 45% | | 75℃ | 45% |
+| 70℃ | 65% | | 85℃ | 65% |
+| 78℃ | 85% | | 95℃ | 100% |
+| 83℃ 以上 | 100% | | | |
+
+点の間は直線でつなぐ。GPU は subako の見張りの警告（85℃）の手前で全開にする。CPU の曲線は緩くしてある（Tctl は負荷ですぐ上がり、CPU は自分のクーラーで冷やすので、ケースファンは補助）。
+
+なぜ fan2go か:
+
+- lm-sensors の `fancontrol` は hwmon の温度しか読めない。NVIDIA の GPU の温度は hwmon に出ない
+- CoolerControl も GPU の温度でケースファンを回せるが、設定が Web の画面寄りで、このリポジトリから宣言しにくい
+- Nix（Home Manager）では入れない。root のサービスがユーザーの Nix のストアのパスを指すと、世代の掃除（GC）で消えうる。ADR 0001 の境界どおり、OS のサービスはスクリプトで入れる。Home Manager の出力は変わらない
+- GPU の温度を fan2go の NVML でなくコマンドで読むのは、読めないときに全開へ倒すことをこちらで決められるから（0.15.0 は、センサーが読めないと最後の平均のまま動く。全開に倒す `onSensorFailure` は、まだリリースされていない版にしかない）。NVML を使わないので、配布バイナリも NVML なしの版にした
+
+#### Super I/O（ファンのヘッダーの制御）
+
+ProArt B850-CREATOR WIFI NEO のファンのヘッダーは、Super I/O（Nuvoton。NCT6799D の見込み）が持つ。ドライバは `nct6775`。2026-11-13 の時点:
+
+- Ubuntu は `nct6775` を自動で読み込まない（hwmon に pwm も fan もない）。入れるスクリプトが `/etc/modules-load.d/case-fan-control.conf` に書く
+- カーネル 7.0 の `nct6775` の「ASUS の WMI 経由で読むボード」の一覧に、このボードはない（ProArt は B550/B650/B660/B760/X570/X670E/X870E/Z490/Z690/Z790 だけ）。なので ISA を直に読みに行き、BIOS（ACPI）がその場所を握っていると掴めない。握っているかは読み込んでみないと分からない
+- 掴めないときの回避は起動オプション `acpi_enforce_resources=lax`（ACPI と同じ I/O をドライバも触ることを許す。BIOS とドライバが同時に触ると読み違いが起きうる。広く使われている回避）。`--probe` が要りそうと言ったときだけ、本人が `CASE_FAN_ACPI_LAX=1` にする
+- `asus-ec-sensors`・`asus_wmi_sensors` は温度などを読むだけで、ファンを操れない（このボードも一覧にない）
+
+#### 本人がやる順
+
+```bash
+cd ~/.config/nix-config
+
+# 1. 調べる（読むだけ。sudo 不要）
+scripts/install-case-fan-control-ubuntu.sh --probe
+
+# 2. nct6775 を一時的に読み込んでから調べる（sudo。再起動で消える。ファンは変えない）
+scripts/install-case-fan-control-ubuntu.sh --probe --load-module
+#    「見立て」が次のどれか:
+#    ✓ Super I/O nct67xx を掴めていて、pwm がある → 3. へ
+#    ⚠ ACPI が握っていて掴めない → 本人が決めて CASE_FAN_ACPI_LAX=1 → 5. を流す（GRUB を書き換えて止まる）→ 再起動 → 2. から
+#    ⚠ Super I/O が見つからない → 執事に出力を渡す（nct6683 の系統か、このやり方では操れない）
+
+# 3. どのチャネルがどのファンか（--probe の fanN の RPM が 0 でないものが、つながっているヘッダー）
+#    CPU_FAN がどれかを必ず確かめる。そのチャネルを 10 秒だけ全開にして RPM を見せ、元に戻す（sudo）
+#    （env の CASE_FAN_HWMON を使う。既定の nct6799 と --probe の name が違えば、先に env を直す）
+scripts/install-case-fan-control-ubuntu.sh --identify 2
+
+# 4. hosts/ubuntu/dekahamuntu.env を埋める
+#    CASE_FAN_HWMON=<--probe の name、例 nct6799>
+#    CASE_FAN_CHANNELS="<ケースファンのチャネル。CPU_FAN は入れない>"
+#    3pin（--probe で mode=0）のファンなら CASE_FAN_MIN_DUTY を 50 前後に
+#    CASE_FAN_CONTROL=1
+scripts/install-case-fan-control-ubuntu.sh --print-config   # 書く予定の fan2go.yaml を見る（sudo 不要）
+
+# 5. 入れる（sudo）。GPU が暇なときに流す（下の「初回の解析」）
+scripts/install-case-fan-control-ubuntu.sh
+```
+
+入れるスクリプトがすること: `libsensors5`（なければ apt）、`/etc/modules-load.d/case-fan-control.conf`、fan2go を止めた状態で BIOS の `pwmN_enable` を `/etc/fan2go/case-fan-restore.conf` に記録、fan2go と 2 つのスクリプトを置く、`/etc/fan2go/fan2go.yaml` を書いて `fan2go config validate` を通す（通らなければ何も起動しない）、`fan2go.service` を有効にして起動、15 秒後の状態を出す。
+
+初回の解析: fan2go 0.15.0 は、初めて見るファンの PWM と RPM の関係を一度だけ測る（ファンを止めたり全開にしたりする。1 本ずつ、数分）。結果は `/var/lib/fan2go/fan2go.db` に残り、2 回目からは測らない。測っているあいだは温度で回らないので、ComfyUI・LLM を動かしていないときに入れる。
+
+#### 確かめ方
+
+```bash
+systemctl status fan2go                           # active (running)
+journalctl -u fan2go -f                           # 初回の解析の進み、警告
+cat /run/fan2go/case-fan-gpu-temp.status          # 「ok <最大の℃> gpus=2」。failsafe なら GPU が読めず全開
+scripts/install-case-fan-control-ubuntu.sh --probe   # pwmN の値（enable=1 は fan2go が操っている）と RPM
+sudo fan2go -c /etc/fan2go/fan2go.yaml curve      # 曲線の今の値（fan2go の CLI）
+```
+
+GPU に負荷をかけて（ComfyUI で数枚生成など）、`nvidia-smi` の温度が 60℃・70℃ を超えたあたりで pwm が上がり、負荷を止めると 10〜20 秒かけて下がることを見る。
+
+#### 戻し方
+
+```bash
+sudo systemctl stop fan2go        # 一時的に BIOS の制御へ（起動すればまた操る）
+sudo systemctl disable --now fan2go   # 次の起動からも操らない
+scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit・設定・fan2go・modules-load・GRUB の lax）。そのあと env の CASE_FAN_CONTROL=0
+```
+
+`CASE_FAN_ACPI_LAX` だけ戻すときは、env を 0 にして入れるスクリプトを流す（GRUB の drop-in を消して `update-grub`。次の起動から）。
+
+#### 実機で確かめていないこと（2026-11-13）
+
+- `nct6775` がこのボードの Super I/O を掴めるか、`lax` が要るか、チップの name（`nct6799` の見込み）、どのチャネルがどのヘッダーか
+- ファンが 4pin（PWM）か 3pin（DC）か、30% で回り続けるか
+- systemd の制限（`MemoryDenyWriteExecute`・`SystemCallFilter` など。公式の unit のまま）の中で `nvidia-smi` が動くか。動かなければ status が failsafe になり全開になる（安全側）。そのときは unit の制限を緩める
+- 初回の解析にかかる時間、`pwmMap: identity`（nct6775 の PWM は 0〜255 をそのまま読み返す想定）
 
 ### RAM（DDR5 64GB）
 
