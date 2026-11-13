@@ -48,6 +48,24 @@ unset _ubuntu_host_repo
 # CPU消費電力（powercapのenergy_uj）の読み取り権限
 : "${CPU_POWER_READ:=1}"
 
+# ケースファンをGPUの温度で回す（install-case-fan-control-ubuntu.sh、fan2go）。既定は切
+: "${CASE_FAN_CONTROL:=0}"
+# Super I/O のドライバ（/etc/modules-load.d に書いて起動のたびに読み込む）
+: "${CASE_FAN_MODULE:=nct6775}"
+# 操る hwmon の name（例: nct6799）。--probe の出力から決める
+: "${CASE_FAN_HWMON:=}"
+# 操る pwm のチャネル（空白区切り。RPM の番号が違えば pwm:rpm）。CPU_FAN は入れない
+: "${CASE_FAN_CHANNELS:=}"
+# 最低のデューティ（%）。止めない
+: "${CASE_FAN_MIN_DUTY:=30}"
+# 曲線（「温度:デューティ%」を空白区切り）。ケースファン = max(GPU, CPU)。CPU を空にすると GPU だけ
+: "${CASE_FAN_GPU_CURVE:=45:30 60:45 70:65 78:85 83:100}"
+: "${CASE_FAN_CPU_CURVE:=}"
+: "${CASE_FAN_CPU_HWMON:=k10temp}"
+: "${CASE_FAN_CPU_TEMP_CHANNEL:=1}"
+# 1 なら GRUB に acpi_enforce_resources=lax を足す（ACPI が Super I/O を握っていて掴めないときだけ）
+: "${CASE_FAN_ACPI_LAX:=0}"
+
 # GPUの割り当て（CUDA_VISIBLE_DEVICES）。空ならunitに書かない（すべてのGPUが見える）
 : "${COMFY_CUDA_DEVICES:=}"
 # comfyui.serviceの main.py に足す起動オプション（例: --fast fp16_accumulation）。空なら足さない
