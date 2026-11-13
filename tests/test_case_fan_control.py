@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -211,23 +212,26 @@ class WriteConfigTests(unittest.TestCase):
 
 
 class GpuTempTests(unittest.TestCase):
-    def run_sensor(self, output, exit_code=0, expected="2", sleep=0):
+    def run_sensor(self, output, exit_code=0, expected="2", sleep=0, ignore_term=False):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             smi = base / "nvidia-smi"
             smi.write_text(
                 "#!/bin/sh\n"
-                f"sleep {sleep}\n"
+                + ("trap '' TERM\n" if ignore_term else "")
+                + f"sleep {sleep}\n"
                 f"printf '%s' '{output}'\n"
                 f"exit {exit_code}\n"
             )
             smi.chmod(0o755)
             status = base / "status"
+            started = time.monotonic()
             r = subprocess.run(
                 [BASH, str(GPU_TEMP), expected, "100"],
                 env={**os.environ, "CASE_FAN_NVIDIA_SMI": str(smi), "CASE_FAN_STATUS_FILE": str(status)},
                 capture_output=True, text=True, timeout=10,
             )
+            self.elapsed = time.monotonic() - started
             return r, status.read_text() if status.exists() else ""
 
     def test_maximum_of_two_gpus_in_millidegrees(self):
@@ -257,6 +261,14 @@ class GpuTempTests(unittest.TestCase):
     def test_hang_is_full_speed(self):
         r, _ = self.run_sensor("40\n41\n", sleep=5)
         self.assertEqual(r.stdout, "100000\n")
+
+    def test_hang_ignoring_term_ends_before_fan2go_timeout(self):
+        # fan2go 0.15.0 の cmd センサーの時間切れは 2 秒。超えると読み取りが捨てられ、全開に倒れない
+        r, status = self.run_sensor("40\n41\n", sleep=5, ignore_term=True)
+        self.assertEqual(r.returncode, 0)
+        self.assertEqual(r.stdout, "100000\n")
+        self.assertIn("failsafe", status)
+        self.assertLess(self.elapsed, 1.8)
 
 
 class RestoreTests(unittest.TestCase):
