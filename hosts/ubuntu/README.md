@@ -46,7 +46,7 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 | `LLM_CUDA_DEVICES` | 空 | install-qwen38 | qwen38.serviceの `CUDA_VISIBLE_DEVICES` |
 | `LLM_DUAL_CUDA_DEVICES` | 空 | install-qwen38 | 空でなければ、束ねて使う qwen38-dual.service を作る |
 | `LLM_DUAL_SPLIT_MODE` | `layer` | install-qwen38 | llama.cppの `--split-mode` |
-| `LLM_DUAL_TENSOR_SPLIT` | 空 | install-qwen38 | llama.cppの `--tensor-split` |
+| `LLM_DUAL_TENSOR_SPLIT` | 空 | install-qwen38 | llama.cppの `--tensor-split`（各GPUへの層の比。dekahamuntu は `39,10`）。n-cpu-moe を使うモデルでは重い層が後ろに固まるので、半々（`1,1`）にすると後ろのGPUに寄る。n-cpu-moe を変えたら合わせて変える。Router の全部のモデルに同じ値が効く |
 | `TRAIN_CUDA_DEVICES` | 空 | install-diffusion-pipe | 学習スクリプトの `CUDA_VISIBLE_DEVICES` と `--num_gpus` |
 | `APPLIO_CUDA_DEVICES` | 空 | install-applio | applio.serviceの `CUDA_VISIBLE_DEVICES` |
 | `APPLIO_CONFLICTS` | `comfyui.service qwen38.service` | install-applio | applio.serviceの `Conflicts=` |

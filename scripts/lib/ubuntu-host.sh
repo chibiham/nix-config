@@ -81,7 +81,8 @@ unset _ubuntu_host_repo
 : "${LLM_DUAL_CUDA_DEVICES:=}"
 # llama.cppの分割の仕方（layer: 層ごと / row: 行ごと。PCIeだけの構成ではlayerが無難）
 : "${LLM_DUAL_SPLIT_MODE:=layer}"
-# 各GPUへの配分（例: 1,1）。空ならllama.cppが空きVRAMから決める
+# 各GPUへの層の配分（例: 39,10）。空ならllama.cppが空きVRAMから決める。
+# n-cpu-moeを使うモデルでは、エキスパートをGPUに置く重い層が後ろに固まるので、半々（1,1）にすると後ろのGPUに寄る
 : "${LLM_DUAL_TENSOR_SPLIT:=}"
 
 # qwen38.serviceを何と一緒に起動するか（同じGPUならcomfyui.service、別GPUならdefault.target）

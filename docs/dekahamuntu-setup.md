@@ -192,6 +192,13 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 
 > docs/ubuntu-server.md の「Qwen3.8」の章を読んで、Home Manager の設定が入っていることを確かめてから、`scripts/install-qwen38-ubuntu.sh` を流して。dekahamuntu.env では dense の 27B は取らず（`QWEN_INSTALL_27B=0`）、Flash-Next（MoE）だけを取る。qwen38.service は GPU 1、qwen38-dual.service は 2 枚を層ごとに分ける。n-cpu-moe の値は推測なので、`ai-mode split` と `ai-mode llm-dual` のそれぞれでモデルをロードし、`nvidia-smi` で各 GPU の空きが 1GB 前後になるところまで詰めて、決まった値を hosts/ubuntu/dekahamuntu.env に書いてコミットして。計った速度（prompt と生成の tok/s）も docs/ai-server-placement.md に書いて。
 
+2026-11-13 の実績（n-cpu-moe を詰め、速さを chibihamuntu と比べた。細かい値は [ai-server-placement.md の「実測（2026-11-13）」](ai-server-placement.md#実測2026-11-13-qwen38-flash-next)）:
+
+1. モデルは UD-Q3_K_XL（3 分割）と `mmproj-BF16.gguf` だけを `~/models/qwen3.8-flash-next` に取った（`install-qwen38-ubuntu.sh` の `download_model` と同じ取り方。約 87GB を約 3 分 50 秒）。Uncensored 版は取っていない
+2. `install-qwen38-ubuntu.sh` はまだ流していない（qwen38.service・qwen38-dual.service・プリセットはまだない）。llama-server を一時の user unit（systemd-run）で、qwen38.service と同じ引数で立てて計った
+3. 詰めた値を dekahamuntu.env に入れた: n-cpu-moe は 1 枚 45、束ね 33。`LLM_DUAL_TENSOR_SPLIT` は 39,10（1,1 では読み込めない）。Uncensored 版の 40 / 30 は未計測の推測値のまま
+4. 長い問い（入力 3,939 トークン）の温まったあとの生成は、1 枚 約 25.6 tok/s、束ね 約 29.0 tok/s（chibihamuntu は約 22.7 tok/s。llama.cpp の版が違う）
+
 ### 2-6. 学習・Applio（必要になったら）
 
 > 学習を dekahamuntu でもするなら、`scripts/install-diffusion-pipe-ubuntu.sh` を流して（GPU 0）。`~/ai/scripts/lora-train` の `Conflicts=` は chibihamuntu の 1 枚を前提に comfyui・qwen38・applio を止めるので、dekahamuntu で使う前に ~/ai 側の変更が要るかを確かめて私に聞いて。
@@ -227,7 +234,7 @@ GPU の割り当て（`hosts/ubuntu/dekahamuntu.env`）:
 |---|---|---|
 | comfyui.service | 0 | 既定で起動 |
 | qwen38.service | 1 | 既定で起動（ComfyUI とは独立） |
-| qwen38-dual.service | 0,1 | `ai-mode llm-dual`。comfyui・qwen38 と排他。`--split-mode layer --tensor-split 1,1` |
+| qwen38-dual.service | 0,1 | `ai-mode llm-dual`。comfyui・qwen38 と排他。`--split-mode layer --tensor-split 39,10`（n-cpu-moe 33 と組。1,1 は後ろの GPU に寄って落ちる） |
 | applio.service | 0 | comfyui・qwen38-dual と排他 |
 | diffusion-pipe の学習 | 0 | `TRAIN_CUDA_DEVICES=0,1` にすると 2 枚のデータ並列（`--num_gpus=2`） |
 
@@ -427,7 +434,8 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 ### RAM（DDR5 64GB）
 
 - chibihamuntu と同じ 64GB。swap はインストーラの既定（`/swap.img` 8GB）のままでよい。hugepages は使っていない（llama.cpp は mmap、PyTorch は既定）
-- Qwen3.8-Flash-Next（約 86GB）は RAM に収まらず、ページキャッシュに読みながら動く（chibihamuntu の実測で RAM をほぼ使い切る）。dekahamuntu では VRAM が 32GB あるぶん、束ねたときはエキスパートを多く GPU に置ける
+- Qwen3.8-Flash-Next（UD-Q3_K_XL、約 87GB）は、ほかに RAM を使うものがアイドルなら収まる（2026-11-13 の実測）。温まったあとの llama-server の RSS は 1 枚 54.5GB（うち mmap 51.8GB）、束ね 41.2GB（38.4GB）で、問いのあいだのディスクの読みはほぼ止まる。束ねるとエキスパートを多く GPU に置けるぶん、RAM が約 13GB 少なく済む
+- 1 枚で ComfyUI と同居させると RAM の残りは約 5GB。ほかのプロセスに 16〜20GB を使われると、モデルのページキャッシュが追い出され、問いのたびに SSD を数十 GB 読み直して遅くなる（RAM の確保でまねた試し。[ai-server-placement.md](ai-server-placement.md#実測2026-11-13-qwen38-flash-next)）
 - DDR5 の EXPO（メモリのオーバークロックの設定）は、4 枚挿しで不安定になりやすい。常時稼働なので、EXPO を使うなら最初にメモリの検査（memtest86+ など）を本人がする
 
 ### ネットワーク
@@ -464,6 +472,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | カーネル | 7.0.0-43-generic（`linux-generic-hwe-24.04`） | 2026-11-12 |
 | powercap のゾーン | `intel-rapl:0`、`intel-rapl:0:0` | 2026-11-12 |
 | ケースファン（Super I/O・チャネル） | `nct6775`（hwmon の name `nct6799`。BIOS 1002 で `lax` なし）。1・3・4・6 がケースファン（fan2go）、2 は CPU のクーラー（本人「たぶん」。BIOS のまま）。pwm はすべて mode=1（PWM）。細かい値は「[ケースファン](#ケースファンgpu-の温度で回す)」の「実機で確かめた値」 | 2026-11-13 |
+| Qwen3.8-Flash-Next（UD-Q3_K_XL）の n-cpu-moe・tensor-split | 1 枚（GPU 1）45、束ね 33（`--tensor-split 39,10`）。llama.cpp 0.6.0。長い問いの温まったあと: 1 枚 入力 約 440 / 生成 約 25.6 tok/s、束ね 約 519 / 約 29.0 tok/s。細かい値は [ai-server-placement.md の「実測（2026-11-13）」](ai-server-placement.md#実測2026-11-13-qwen38-flash-next) | 2026-11-13 |
 
 ---
 
