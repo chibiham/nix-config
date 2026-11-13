@@ -142,6 +142,74 @@ class PrintConfigTests(unittest.TestCase):
         self.assertIn("minPwm: 128", r.stdout)
 
 
+# にせの fan2go: viper と同じく、-c のパスの拡張子が .yaml / .yml でなければ読めずに落ちる
+FAKE_FAN2GO = """#!/bin/sh
+printf '%s\\n' "$*" >> "$FAKE_LOG"
+[ "$1" = -c ] || exit 3
+case "$2" in
+  *.yaml|*.yml) ;;
+  *) echo "FATAL: Error reading config file, Unsupported Config Type" >&2; exit 1 ;;
+esac
+[ "$(stat -c %a "$2")" = 644 ] || { echo "bad mode" >&2; exit 4; }
+grep -q '^fans:' "$2" || exit 5
+exit "${FAKE_EXIT:-0}"
+"""
+
+
+class WriteConfigTests(unittest.TestCase):
+    def setUp(self):
+        self.fx = Fixture()
+        self.addCleanup(self.fx.close)
+        self.etc = self.fx.base / "etc-fan2go"
+        self.etc.mkdir()
+        self.fan2go = self.fx.base / "fan2go"
+        self.fan2go.write_text(FAKE_FAN2GO)
+        self.fan2go.chmod(0o755)
+        self.log = self.fx.base / "fan2go.log"
+
+    def run_write(self, **env):
+        full = {
+            **os.environ,
+            "UBUNTU_HOST": "no-such-host-for-tests",
+            "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
+            "CASE_FAN_HWMON": "nct6799",
+            "CASE_FAN_CHANNELS": "2 3",
+            "CASE_FAN_TEST_CONFIG_DIR": str(self.etc),
+            "CASE_FAN_TEST_FAN2GO": str(self.fan2go),
+            "FAKE_LOG": str(self.log),
+            **env,
+        }
+        return subprocess.run([BASH, str(INSTALL), "--test-write-config"], env=full,
+                              capture_output=True, text=True)
+
+    def test_validates_a_yaml_named_file_then_replaces(self):
+        r = self.run_write()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        args = self.log.read_text().split()
+        self.assertEqual(args[:2], ["-c", str(self.etc / "fan2go.new.yaml")])
+        self.assertIn("validate", args)
+        self.assertIn("platform: nct6799", (self.etc / "fan2go.yaml").read_text())
+        self.assertEqual(oct((self.etc / "fan2go.yaml").stat().st_mode & 0o777), "0o644")
+        self.assertEqual(sorted(p.name for p in self.etc.iterdir()), ["fan2go.yaml"])
+
+    def test_rejected_config_keeps_the_old_one_and_leaves_nothing(self):
+        (self.etc / "fan2go.yaml").write_text("old\n")
+        r = self.run_write(FAKE_EXIT="1")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("受け付けませんでした", r.stderr)
+        self.assertEqual((self.etc / "fan2go.yaml").read_text(), "old\n")
+        self.assertEqual(sorted(p.name for p in self.etc.iterdir()), ["fan2go.yaml"])
+
+    def test_leftover_from_an_earlier_run_is_replaced(self):
+        left = self.etc / "fan2go.new.yaml"
+        left.write_text("garbage\n")
+        left.chmod(0o600)
+        r = self.run_write()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(left.exists())
+        self.assertIn("fans:", (self.etc / "fan2go.yaml").read_text())
+
+
 class GpuTempTests(unittest.TestCase):
     def run_sensor(self, output, exit_code=0, expected="2", sleep=0):
         with tempfile.TemporaryDirectory() as directory:
