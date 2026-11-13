@@ -132,6 +132,7 @@
   | fan1・3・6 | Thermalright TL-C14C（140mm）の 7 個（底 3・天面 3・背面 1）のどれか（本人の答え）。どのチャネルがどの位置か・何個ずつかは未確認。PWM 77（30%）で fan1 約 530・fan3 約 520・fan6 約 537 RPM。全開の境の閾値は fan1 1,356.6・fan3 1,318.6・fan6 1,369.9 RPM |
   | fan2・5 | 約 810〜820 RPM でほぼ同じ回転数。CPU クーラーのファン 2 つの見込み（本人は 2 を「たぶん CPU のクーラー」と言っている） |
   | fan7 | 0 RPM |
+  | 負荷のとき（2026-11-13 15:42〜16:18 UTC。ComfyUI の画像と Flash-Next を同時に回した記録の最大） | GPU 0 72℃・180W、GPU 1 44℃・82W、CPU の Tctl 82℃。pwm 1・3・4・6 は最大 168〜169（約 66%）で fan1 1,019・fan3 1,028・fan4 1,201・fan6 1,051 RPM、fan2 は最大 2,061 RPM（[ai-server-placement.md](ai-server-placement.md#comfyui-で画像を作りながらの同居dekahamuntu2026-11-14)） |
 
   ASUS の仕様のファンのヘッダーは 7 つ（CPU・CPU OPT・AIO ポンプ・ケース ×4）。チャネルの番号とヘッダーの対応は未確認
 - そのほか: USB にキーボードとマウス、ASUS AURA LED Controller

@@ -208,6 +208,7 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
    `configure-tailscale-serve-ubuntu.sh` でも同じ形になる（`TAILSCALE_SERVE` に `8443=8080` を入れた。operator がなければ sudo に落ちる）
 5. 入れた unit で確かめた: Router 経由で UD-Q3_K_XL と Uncensored 版を読み込んで答えが返った（長い問いの温まったあとの生成 約 25.7 / 約 29.3 tok/s。GPU 1 に 14,822 / 14,526MiB。GPU 0 は ComfyUI の 138MiB だけ）。`ai-mode llm-dual` で束ねに切り替えて 2 つとも答えが返り、`ai-mode split` で戻した。そのあいだ ComfyUI は `/system_stats` 200、fan2go は active
 6. いまの形（本人の決め、2026-11-13）: `ai-mode split` が既定。GPU 0 = ComfyUI、GPU 1 = Flash-Next の Router を常駐（モデルは最初の問いで読み込む）。束ね（`ai-mode llm-dual`）は必要なときに切り替える
+7. ComfyUI で画像（Anima、Qwen-Image 2.1）を 1 枚ずつ続けて作りながら計った（2026-11-14 の本人の依頼）: 長い問いの温まったあとの生成は UD-Q3_K_XL 20.62〜22.26、Uncensored 版 22.15〜25.79 tok/s（単独より 1〜2 割遅い）、画像の 1 枚あたりは +1〜2%。SSD の大きな読み直しは起きなかった。細かい値は [ai-server-placement.md の「ComfyUI で画像を作りながらの同居」](ai-server-placement.md#comfyui-で画像を作りながらの同居dekahamuntu2026-11-14)
 
 ### 2-6. 学習・Applio（必要になったら）
 
@@ -434,9 +435,15 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 - 負荷が消えて 30 秒で pwm 89 まで下がった
 - pwm2（CPU のクーラー）は BIOS のまま変わらなかった
 
+2 枚の GPU が同時に働いたとき（ComfyUI で画像を作りながら Flash-Next を回した計測。2026-11-13 15:42〜16:18 UTC、10 秒おき 218 回の記録の最大。[ai-server-placement.md](ai-server-placement.md#comfyui-で画像を作りながらの同居dekahamuntu2026-11-14)）:
+
+- GPU 0（画像）72℃・180W、GPU 1（LLM）44℃・82W、CPU の Tctl 82℃（画像だけのときは 64〜68℃）
+- pwm 1・3・4・6 は最大 168〜169（約 66%）。回転数は fan1 1,019・fan3 1,028・fan4 1,201・fan6 1,051 RPM。CPU クーラーのファン（fan2）は最大 2,061 RPM
+- `case-fan-gpu-temp.status` はずっと ok、fan2go は active のまま。終わったあと pwm は 77（30%）に戻った
+
 #### まだ確かめていないこと
 
-- 83℃ 以上で全開（PWM 255）になること（70℃ までしか上げていない）
+- 83℃ 以上で全開（PWM 255）になること（GPU は 72℃ までしか上がっていない。2 枚が同時に働いたときも同じ）
 - `systemctl stop fan2go` で BIOS の制御（`pwmN_enable=5`）に戻ること、起動し直したときに解析をやり直さないこと
 - 再起動のあと、`nct6775` が自動で読み込まれ、fan2go が自分で立ち上がること
 - GPU が読めないとき（failsafe）に全開になること（実機では起こしていない）
