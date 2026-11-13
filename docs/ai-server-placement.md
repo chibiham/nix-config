@@ -1,6 +1,6 @@
 # どのモデルをどちらのマシンで動かすか（叩き台）
 
-状態: 叩き台（2026-11-11）。Flash-Next の実測を足した（2026-11-13）。決めるのは本人。決まったら「決定」の節に書き、各ホストの設定（`hosts/ubuntu/*.env`、`~/ai` のモデル台帳）に反映する。
+状態: 叩き台（2026-11-11）。Flash-Next の実測を足した（2026-11-13）。dekahamuntu の Flash-Next の置き方は本人が決めた（2026-11-13。「[決定](#決定)」）。ほかは決めるのは本人。決まったら「決定」の節に書き、各ホストの設定（`hosts/ubuntu/*.env`、`~/ai` のモデル台帳）に反映する。
 
 本人の案（2026-11-11）: dense の LLM と LoRA 学習は chibihamuntu、画像生成と MoE の LLM は dekahamuntu。
 
@@ -85,7 +85,7 @@ Flash-Next（UD-Q3_K_XL）は RAM 64GB に収まる（2026-11-13 の実測）。
 
 1. Flash-Next を GPU 1 枚（16GB）で動かすと chibihamuntu（24GB）より遅くなる見込みだったが、実測（2026-11-13）では 1 枚でも chibihamuntu より速く、束ねるとさらに速い（下の「実測」。llama.cpp の版は違う）
 2. ComfyUI の主なワークフローが 16GB で回るか（Qwen-Image・ACE-Step はテキストエンコーダーの入れ替えで遅くなる）
-3. dekahamuntu の n-cpu-moe: UD-Q3_K_XL は詰めた（1 枚 45、束ね 33・`--tensor-split 39,10`。2026-11-13）。Uncensored 版（推測値 40 / 30）は未計測
+3. dekahamuntu の n-cpu-moe: 詰めた（2026-11-13、`--tensor-split 39,10`）。UD-Q3_K_XL は 1 枚 45・束ね 33、Uncensored 版は 1 枚 42・束ね 31
 
 ### 案 B（LLM を chibihamuntu に寄せる）
 
@@ -107,7 +107,7 @@ chibihamuntu（3090 1 枚）、dekahamuntu の 1 枚、dekahamuntu の 2 枚束�
 
 ### 計り方
 
-- モデル: `unsloth/Qwen3.8-Flash-Next-GGUF` の UD-Q3_K_XL（revision 38bb39ee…、3 分割）と `mmproj-BF16.gguf`。dekahamuntu へは `install-qwen38-ubuntu.sh` の `download_model` と同じ取り方（aria2c、同じ revision・名前）でこの 2 つだけを取った（約 87GB を約 3 分 50 秒、約 490MiB/s）。Uncensored 版（i1-IQ3_M、約 89.5GB）は取っていない。dekahamuntu では `install-qwen38-ubuntu.sh` そのものはまだ流していない（qwen38.service・qwen38-dual.service・プリセットはまだない）
+- モデル: `unsloth/Qwen3.8-Flash-Next-GGUF` の UD-Q3_K_XL（revision 38bb39ee…、3 分割）と `mmproj-BF16.gguf`。dekahamuntu へは `install-qwen38-ubuntu.sh` の `download_model` と同じ取り方（aria2c、同じ revision・名前）でこの 2 つだけを取った（約 87GB を約 3 分 50 秒、約 490MiB/s）。Uncensored 版（i1-IQ3_M、約 89.5GB）はあとで取って詰めた（下の「[Uncensored 版の詰めと速さ](#uncensored-版の詰めと速さdekahamuntu)」）。この表の計測は `install-qwen38-ubuntu.sh` を流す前（流したのはこのあと。下の「[入れた unit での確かめ](#入れた-unit-での確かめdekahamuntu)」）
 - llama-server を一時の user unit（systemd-run）で、`qwen38.service` と同じ引数で立てた: `--ctx-size 131072 --n-gpu-layers 99 --flash-attn on --cache-type-k q8_0 --cache-type-v q8_0 --parallel 1 --jinja --batch-size 2048 --ubatch-size 2048 --mmproj …`。Router（`--models-preset`）と `--agent` は使わず、モデル 1 つを直に指定した
 - 束ねは `CUDA_VISIBLE_DEVICES=0,1 --split-mode layer --tensor-split <値>`、1 枚は `CUDA_VISIBLE_DEVICES=1`（どちらも `CUDA_DEVICE_ORDER=PCI_BUS_ID`）
 - 問い: `/v1/chat/completions`、temperature 0、max_tokens 512、cache_prompt false。短い問い = 入力 83 トークン、長い問い = 入力 3,939 トークン（`docs/ubuntu-server.md` の先頭 9,000 字の解説を頼む）。どの回も 512 トークンを出し切った（finish=length）
@@ -174,9 +174,47 @@ VRAM は読み込み直後の MiB（GPU 0 / GPU 1）。
 | 1 枚 | 46 | 13,604 |
 | 1 枚 | **45**（採用） | 14,666。計測のあと 14,822（空き 1,489） |
 | 1 枚 | 44 | 計算で 15,728（空き約 0.4GB）。流していない |
+| Uncensored 版・束ね | 30 @ 39,10 | GPU 0 に mmproj（862MiB）が入らず落ちる |
+| Uncensored 版・束ね | **31 @ 39,10**（採用） | 15,298 / 13,014。計測のあと 15,454 / 13,170（空き 857 / 3,141） |
+| Uncensored 版・1 枚 | 41 | 15,508（空き 803。計測のあとは約 650 の見込みで、きつい） |
+| Uncensored 版・1 枚 | **42**（採用） | 14,370。計測のあと 14,526（空き 1,785） |
 
 - エキスパート 1 層ぶんは約 1,062MiB、層を 1 つ GPU の間で動かすと約 1,148MiB。束ねの 33 と 34 の速さの差は約 1%
-- 採用した値は `hosts/ubuntu/dekahamuntu.env`（`QWEN_FLASH_N_CPU_MOE=45`、`QWEN_DUAL_FLASH_N_CPU_MOE=33`、`LLM_DUAL_TENSOR_SPLIT=39,10`）。tensor-split は unit の引数で、Router の全部のモデルに同じ値が効く。Uncensored 版（非エキスパートの大きさが違う）が 39,10 で載るかは未確認
+- Uncensored 版のエキスパート 1 層ぶんは約 1,138MiB
+- 採用した値は `hosts/ubuntu/dekahamuntu.env`（`QWEN_FLASH_N_CPU_MOE=45`、`QWEN_FLASH_UNCENSORED_N_CPU_MOE=42`、`QWEN_DUAL_FLASH_N_CPU_MOE=33`、`QWEN_DUAL_FLASH_UNCENSORED_N_CPU_MOE=31`、`LLM_DUAL_TENSOR_SPLIT=39,10`）。tensor-split は unit の引数で、Router の全部のモデルに同じ値が効く。UD-Q3_K_XL に合わせた 39,10 では、Uncensored 版の束ねで GPU 1 に約 3.1GB 余る（使い切るにはモデルごとの tensor-split が要る。スクリプトは変えていない）
+
+### Uncensored 版の詰めと速さ（dekahamuntu）
+
+- モデル: mradermacher の Qwen3.8-Flash-Next-Uncensored i1-IQ3_M（約 89.5GB）と `Qwen3.8-Flash-Next-Uncensored.mmproj-f16.gguf`。`install-qwen38-ubuntu.sh` の `download_model` と同じ取り方で取った（約 473MiB/s）。ファイルの大きさは chibihamuntu と同じ（sha256 は照らしていない）
+- 計り方は上と同じ（llama.cpp 0.6.0、qwen38.service と同じ引数、同じ問い）。1 枚は GPU 1 で、ComfyUI は動かしたまま。束ねのあいだは ComfyUI を止めた（15:04:52〜15:07:37 UTC。キューが空で、art-studio に running のループがないのを確かめてから。戻して `/system_stats` 200）
+
+| | 1 枚（GPU 1）、n-cpu-moe 42 | 束ね、n-cpu-moe 31 @ 39,10 |
+|---|---|---|
+| 長い問い・温まったあと 入力 tok/s | 452.1 / 477.3 / 476.9 | 554.5 / 560.7 |
+| 長い問い・温まったあと 生成 tok/s | 29.37 / 29.44 / 29.42 | 33.82 / 33.95 |
+| 最初の長い問い 入力 / 生成 | 88.8 / 26.67 | 160.1 / 32.29 |
+| 短い問い 入力 / 生成 | 40.9 / 27.03 → 53.4 / 29.91 | 62.8 / 33.05 → 66.4 / 34.37 |
+| VRAM（計測のあと） | GPU 1: 14,526MiB（空き 1,785） | 15,454 / 13,170MiB（空き 857 / 3,141） |
+| llama-server の RSS（うち mmap） | 48.7GB（46.3GB） | 37.6GB（35.1GB） |
+
+- UD-Q3_K_XL（1 枚 25.6、束ね 29.0）より生成が速い。RAM も少ない
+
+### 入れた unit での確かめ（dekahamuntu）
+
+`install-qwen38-ubuntu.sh` を流したあと（2026-11-13）、Router（`qwen38.service`、GPU 1、`--models-max 1`）経由で計った。ComfyUI はアイドルで、モデルを載せていなかった（ComfyUI の cgroup のメモリは約 85〜140MB）。
+
+| | UD-Q3_K_XL | Uncensored 版 |
+|---|---|---|
+| 最初の短い問い 入力 / 生成 | 7.8 / 19.54 | 3.4 / 15.57 |
+| 長い問い 入力 / 生成（1 回目 → 2 回目 → 3 回目） | 170.4 / 24.59 → 426.6 / 25.67 → 444.4 / 25.69 | 186.7 / 28.08 → 476.0 / 29.35 → 476.0 / 29.28 |
+| VRAM | GPU 1: 14,822MiB。GPU 0 は ComfyUI の 138MiB だけ | GPU 1: 14,526MiB |
+| llama-server の RSS（うち mmap） | 52.0GB（50.4GB） | 47.5GB（45.5GB） |
+| free -m used / buff/cache / available | 4,348 / 56,781 / 57,057 | 4,477 / 57,602 / 56,928 |
+
+- モデル未ロードのとき、GPU 1 の VRAM は 4MiB。Uncensored 版への切り替えで UD-Q3_K_XL は自動でアンロードされた
+- swap は 1,474MB（前の試しの名残を含む）
+- `ai-mode llm-dual`（15:14 UTC）で qwen38 と ComfyUI が止まり、qwen38-dual が起動した。長い問いは UD-Q3_K_XL 125.7 / 27.26 → 502.9 / 29.13、Uncensored 版 102.0 / 31.06 → 550.5 / 33.87。VRAM は Uncensored 版で 15,454 / 13,170MiB。`ai-mode split` で戻した（15:17:37 UTC に ComfyUI の `/system_stats` 200。qwen38 は active、qwen38-dual は inactive。モデルは 2 つとも unloaded）
+- そのあいだ ComfyUI は `/system_stats` 200 のまま、fan2go は active、`case-fan-gpu-temp.status` は ok
 
 ### そのほか
 
@@ -185,23 +223,48 @@ VRAM は読み込み直後の MiB（GPU 0 / GPU 1）。
 - chibihamuntu: `lora-charactor pause`（10:39 UTC）→ 計測 → `resume`（10:51 UTC）。止めたのは次の学習を始めることだけで、途中の学習は切っていない（後処理が自分で終わった）。再開のあと次の学習が走っているのを確かめた
 - dekahamuntu: ComfyUI を止めたのは 10:48〜10:59 UTC（束ねの計測のあいだ。キューが空で、art-studio に running のループがないのを確かめてから）。起動し直して `/system_stats` が 200
 
-### 見立て（実測からの判断。決めるのは本人）
+### 見立て（実測からの判断）
 
 - Flash-Next を dekahamuntu に置く案（案 A）は、速さの面で裏づけられた。1 枚でも 3090 より速い（ただし llama.cpp の版が違う）
 - 束ねが最も速く、RAM も約 13GB 少なく済むが、ComfyUI を止める（排他）。1 枚は ComfyUI と同居できるが、ComfyUI が RAM を 16GB 以上使うと SSD を読み直して遅くなる（SSD への負荷はここで出る）
-- 選べる形（unit の既定は変えていない）:
-  - (a) ふだんは ComfyUI、LLM を使うときに `ai-mode llm-dual` で束ねに切り替える。LLM は最も速く、RAM の取り合いもない。切り替えのあいだ画像は作れない
-  - (b) qwen38.service（1 枚、GPU 1）を常駐させ、重く使うときだけ束ねる。Router はモデルを載せるまで VRAM を使わない。画像と LLM を同時に使えるが、ComfyUI が RAM を多く使う生成と重なると、SSD を読み直して遅くなる
-  - (c) chibihamuntu に残す。dekahamuntu の RAM を ComfyUI に空けられるが、生成は 1 枚の dekahamuntu より約 1 割遅く、chibihamuntu の学習と 1 枚を取り合う形が続く
+- 選べた形と、本人が選んだもの（2026-11-13。下の「決定」）:
+  - **(b) qwen38.service（1 枚、GPU 1）を常駐させ、重く使うときだけ束ねる**（選ばれた）。Router はモデルを載せるまで VRAM を使わない。画像と LLM を同時に使えるが、ComfyUI が RAM を多く使う生成と重なると、SSD を読み直して遅くなる
+  - (a) ふだんは ComfyUI だけ、LLM を使うときに `ai-mode llm-dual` で束ねる。切り替えのあいだ画像は作れない
+  - (c) chibihamuntu に残す。生成は 1 枚の dekahamuntu より約 1 割遅く、chibihamuntu の学習と 1 枚を取り合う形が続く
 - 余裕を取るなら、束ねは n-cpu-moe 34（空き 1.9GB / 1.5GB、速さの差は約 1%）。画像の入力（mmproj）で GPU 0 の VRAM が足りるかは確かめていない
 
 ## 決定
 
-（本人が決めたらここに書く）
+### dekahamuntu の Flash-Next（2026-11-13）
+
+本人の決め（2026-11-13、原文）:
+
+> いや、画像生成のモデル類はほとんど16gbで収まると思うからとりあえずflash nextとcomfy常駐にしよう。nixで設定して
+
+形（上の「見立て」の (b)）:
+
+- dekahamuntu: GPU 0 = ComfyUI、GPU 1 = Flash-Next の Router（`qwen38.service`）を常駐。`ai-mode split` が既定
+- 束ね（`qwen38-dual.service`）は `ai-mode llm-dual` で切り替える。既定にしない
+- GPU 2 枚での画像の並列生成（案 C）は今回やらない
+- dekahamuntu に常駐を足した（`install-qwen38-ubuntu.sh` を流した。「[入れた unit での確かめ](#入れた-unit-での確かめdekahamuntu)」）。chibihamuntu の Flash-Next はそのまま（chibihamuntu から外すか、27B だけにするかは本人がまだ決めていない）
+- Tailscale Serve の 8443（tailnet への Qwen の公開）は、本人が sudo で流すまでない（`sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080`。2026-11-13 の時点でまだ）
+
+### 同居の心配（RAM。設定は変えていない）
+
+- 本人の理由は「画像生成のモデル類はほとんど 16GB で収まる」で、VRAM の話。GPU は分かれているので VRAM は取り合わない
+- RAM は別。Flash-Next を読み込むと llama-server が 47.5〜52.0GB を使い（RSS。入れた unit での値）、RAM 61.4GB から used と mmap を引いた残りは、UD-Q3_K_XL で約 6.7GB（61.4 − 4.3 − 50.4）、Uncensored 版で約 11.4GB（61.4 − 4.5 − 45.5）
+- ComfyUI がモデルを RAM に持った状態での Flash-Next の速さは計れていない（本番のキューに生成を投げない決まり）。RAM が足りなくなったときの落ち方は、前の「[RAM の圧をまねた試し](#1-枚で-comfyui-と同居できるかram-の圧をまねた試し)」の値しかない（ほかに 16〜20GB を使われると、生成 17〜19 tok/s、入力 70〜85 tok/s に落ちた）
+- 対策の案（どれもまだしていない）:
+  - ComfyUI の RAM のキャッシュを絞る起動オプション（`COMFY_EXTRA_ARGS` は本人の決めで空のまま）
+  - RAM の増設（ボードの最大は 256GB、空きスロット 2）
+  - LLM を重く使うときは `ai-mode llm-dual` に切り替える（RSS が約 13GB 少ない）
+  - Uncensored 版を使う（RSS が約 4.5GB 少ない）
 
 ## 次にやること
 
-1. dekahamuntu の Flash-Next: UD-Q3_K_XL は 1 枚・束ねた形で計った（2026-11-13、下の「実測」）。残り: Uncensored 版の n-cpu-moe、画像の入力（mmproj）を使ったときの GPU 0 の VRAM、llama.cpp の版をそろえた比較、冷えた状態（ページキャッシュを捨てたあと）の読み込み時間。どの形で動かすか（下の「見立て」の (a)〜(c)）は本人が決める
-2. chibihamuntu の学習と Applio の VRAM を計る（`nvidia-smi --query-gpu=memory.used --format=csv -l 5` を学習中に流す）
-3. 決まったら、モデルを置き直す（`~/ai/scripts/models` の台帳と restore。数百 GB の転送になる）
-4. Mac の codex・pi の設定（`home/common.nix`）は chibihamuntu の 8443 番を指している。dekahamuntu の LLM を使うなら、そのプロファイルを足す
+1. 本人が sudo で Tailscale Serve の 8443 を設定する（`sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080`、または `configure-tailscale-serve-ubuntu.sh`）。それまで dekahamuntu の Qwen は tailnet から見えない
+2. dekahamuntu の Flash-Next の残り: ComfyUI にモデルが載った状態（RAM を使っている状態）での速さ、Uncensored 版の束ねで GPU 1 を使い切る（モデルごとの tensor-split。スクリプトの変更が要る）、画像の入力（mmproj）を使ったときの VRAM、llama.cpp の版をそろえた比較、冷えた状態（ページキャッシュを捨てたあと）の読み込み時間
+3. chibihamuntu の Flash-Next をどうするか（外す、27B だけにする、そのまま）を本人が決める
+4. chibihamuntu の学習と Applio の VRAM を計る（`nvidia-smi --query-gpu=memory.used --format=csv -l 5` を学習中に流す）
+5. 決まったら、モデルを置き直す（`~/ai/scripts/models` の台帳と restore。数百 GB の転送になる）
+6. Mac の codex・pi の設定（`home/common.nix`）は chibihamuntu の 8443 番を指している。dekahamuntu の LLM を使うなら、そのプロファイルを足す

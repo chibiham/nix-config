@@ -171,7 +171,8 @@ macOSのセキュリティ制約により自動化できないもの:
 - その他: htop, tree, curl, wget, awscli, terraform, flyctl, cloudflared
 - Linux AI推論: CUDA対応llama.cpp + ai-mode（モデル取得は明示スクリプト）
 - ai-modeの排他対象: qwen38 / comfyui / applio。3090の24GBを取り合うため、applioはunitの `Conflicts=` で同時起動を禁止している。
-  qwen38（Router）はモデル未ロードならVRAMを使わないのでComfyUIと同時に動かし、VRAMの受け渡しはComfyUIノードと `ai-mode` が行う
+  qwen38（Router）はモデル未ロードならVRAMを使わないのでComfyUIと同時に動かし、VRAMの受け渡しはComfyUIノードと `ai-mode` が行う。
+  以上はchibihamuntu（3090 1枚）の話。dekahamuntu（5060 Ti 16GB ×2）は既定が `ai-mode split`（GPU 0 = ComfyUI、GPU 1 = qwen38 を常駐）で、2枚を束ねるときだけ `ai-mode llm-dual`（qwen38-dual。ComfyUI・qwen38と排他）に切り替える
 
 ### macOS統合
 

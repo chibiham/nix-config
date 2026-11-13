@@ -29,7 +29,7 @@ dekahamuntu は chibihamuntu と同じく AI サーバーとして使う 2 台�
 4. `install-tailscale-ubuntu.sh` で Tailscale に入れ、ブラウザで認証する（下の 5.）
 5. `claude` と `codex login` にログインする（下の 6.）
 6. GitHub に `gh auth login` で入る（https。`~/ai` の clone に使う。下の 6.）。ssh の鍵で push したいなら、鍵を作って GitHub に登録する（任意。2026-11 時点では作っていない）
-7. 第2段の sudo（ドライバ、`build-essential` など、linger、Tailscale serve、ディスクの拡張）は、エージェントが出したコマンドを本人が流す（エージェントは sudo のパスワードを持たない）
+7. 第2段の sudo（ドライバ、`build-essential` など、linger、Tailscale serve、ディスクの拡張）は、エージェントが出したコマンドを本人が流す（エージェントは sudo のパスワードを持たない）。Tailscale serve の Qwen の 8443（`sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080`）は 2026-11-13 の時点でまだ流していない（下の 2-5）
 
 ---
 
@@ -107,7 +107,7 @@ hostname -s   # dekahamuntu と出ること（hosts/ubuntu/dekahamuntu.env を�
 
 表示された URL を Mac のブラウザで開いて認証する（認証キーは使わない）。`--hostname=dekahamuntu` で登録される。続けて `tailscale set --operator=$USER` を流すので、以後の `tailscale serve` は sudo なしで設定できる（chibihamuntu と同じ）。tailnet の管理画面で、鍵の期限（Key expiry）を切るかは本人が決める。
 
-tailnet 内への公開（Tailscale Serve）は、サービスを入れたあとに `scripts/configure-tailscale-serve-ubuntu.sh` で、`hosts/ubuntu/dekahamuntu.env` の `TAILSCALE_SERVE`（`443=8188 4520=4520`）のとおりにする（第2段の 2-4）。
+tailnet 内への公開（Tailscale Serve）は、サービスを入れたあとに `scripts/configure-tailscale-serve-ubuntu.sh` で、`hosts/ubuntu/dekahamuntu.env` の `TAILSCALE_SERVE`（`443=8188 4520=4520 8443=8080`）のとおりにする（第2段の 2-4・2-5）。
 
 Mac から tailnet 経由で入れることを確かめる。
 
@@ -194,12 +194,20 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 
 > docs/ubuntu-server.md の「Qwen3.8」の章を読んで、Home Manager の設定が入っていることを確かめてから、`scripts/install-qwen38-ubuntu.sh` を流して。dekahamuntu.env では dense の 27B は取らず（`QWEN_INSTALL_27B=0`）、Flash-Next（MoE）だけを取る。qwen38.service は GPU 1、qwen38-dual.service は 2 枚を層ごとに分ける。n-cpu-moe の値は推測なので、`ai-mode split` と `ai-mode llm-dual` のそれぞれでモデルをロードし、`nvidia-smi` で各 GPU の空きが 1GB 前後になるところまで詰めて、決まった値を hosts/ubuntu/dekahamuntu.env に書いてコミットして。計った速度（prompt と生成の tok/s）も docs/ai-server-placement.md に書いて。
 
-2026-11-13 の実績（n-cpu-moe を詰め、速さを chibihamuntu と比べた。細かい値は [ai-server-placement.md の「実測（2026-11-13）」](ai-server-placement.md#実測2026-11-13-qwen38-flash-next)）:
+2026-11-13 の実績（n-cpu-moe を詰め、速さを chibihamuntu と比べ、入れて常駐させた。細かい値は [ai-server-placement.md の「実測（2026-11-13）」](ai-server-placement.md#実測2026-11-13-qwen38-flash-next)）:
 
-1. モデルは UD-Q3_K_XL（3 分割）と `mmproj-BF16.gguf` だけを `~/models/qwen3.8-flash-next` に取った（`install-qwen38-ubuntu.sh` の `download_model` と同じ取り方。約 87GB を約 3 分 50 秒）。Uncensored 版は取っていない
-2. `install-qwen38-ubuntu.sh` はまだ流していない（qwen38.service・qwen38-dual.service・プリセットはまだない）。llama-server を一時の user unit（systemd-run）で、qwen38.service と同じ引数で立てて計った
-3. 詰めた値を dekahamuntu.env に入れた: n-cpu-moe は 1 枚 45、束ね 33。`LLM_DUAL_TENSOR_SPLIT` は 39,10（1,1 では読み込めない）。Uncensored 版の 40 / 30 は未計測の推測値のまま
-4. 長い問い（入力 3,939 トークン）の温まったあとの生成は、1 枚 約 25.6 tok/s、束ね 約 29.0 tok/s（chibihamuntu は約 22.7 tok/s。llama.cpp の版が違う）
+1. モデルは UD-Q3_K_XL（3 分割）と `mmproj-BF16.gguf`、Uncensored 版（mradermacher の i1-IQ3_M、約 89.5GB）と `Qwen3.8-Flash-Next-Uncensored.mmproj-f16.gguf` を `~/models/qwen3.8-flash-next` に取った（`install-qwen38-ubuntu.sh` の `download_model` と同じ取り方。UD-Q3_K_XL は約 87GB を約 3 分 50 秒、Uncensored 版は約 473MiB/s）。Uncensored 版のファイルの大きさは chibihamuntu と同じ（sha256 は照らしていない）。27B は取っていない（`QWEN_INSTALL_27B=0`）
+2. n-cpu-moe は llama-server を一時の user unit（systemd-run）で、qwen38.service と同じ引数で立てて詰めた。値は dekahamuntu.env: UD-Q3_K_XL は 1 枚 45・束ね 33、Uncensored 版は 1 枚 42・束ね 31。`LLM_DUAL_TENSOR_SPLIT` は 39,10（1,1 では読み込めない）。Uncensored 版の束ねは 39,10 のままだと GPU 1 に約 3.1GB 余る（tensor-split はモデルごとに変えられない）
+3. `install-qwen38-ubuntu.sh` を流した（実機の作業ツリーが古いので、env の値は環境変数 `QWEN_FLASH_N_CPU_MOE=45 QWEN_FLASH_UNCENSORED_N_CPU_MOE=42 QWEN_DUAL_FLASH_N_CPU_MOE=33 QWEN_DUAL_FLASH_UNCENSORED_N_CPU_MOE=31 LLM_DUAL_TENSOR_SPLIT=39,10` で渡した）。入ったもの: `qwen38.service`（enabled、`WantedBy=default.target`、GPU 1、Router、ポート 8080）、`qwen38-dual.service`（enable しない。`Conflicts=qwen38.service comfyui.service`、GPU 0,1、`--split-mode layer --tensor-split 39,10`）、`~/.config/llama.cpp/qwen38-models.ini`（45 / 42）、`qwen38-dual-models.ini`（33 / 31）、`qwen38-flash-chat-template.jinja`。home-manager switch は要らなかった（llama-server 0.6.0 と `ai-mode` は入っていた）
+4. スクリプトは最後の Tailscale Serve の段だけ「Access denied: serve config denied」で失敗した（終了コード 1。operator を設定していないので sudo が要る）。本人が流すコマンド（**まだ流していない**。それまで Qwen の Web UI・API は機械の中の 127.0.0.1:8080 だけで、tailnet からは見えない）:
+
+   ```bash
+   sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080
+   ```
+
+   `configure-tailscale-serve-ubuntu.sh` でも同じ形になる（`TAILSCALE_SERVE` に `8443=8080` を入れた。operator がなければ sudo に落ちる）
+5. 入れた unit で確かめた: Router 経由で UD-Q3_K_XL と Uncensored 版を読み込んで答えが返った（長い問いの温まったあとの生成 約 25.7 / 約 29.3 tok/s。GPU 1 に 14,822 / 14,526MiB。GPU 0 は ComfyUI の 138MiB だけ）。`ai-mode llm-dual` で束ねに切り替えて 2 つとも答えが返り、`ai-mode split` で戻した。そのあいだ ComfyUI は `/system_stats` 200、fan2go は active
+6. いまの形（本人の決め、2026-11-13）: `ai-mode split` が既定。GPU 0 = ComfyUI、GPU 1 = Flash-Next の Router を常駐（モデルは最初の問いで読み込む）。束ね（`ai-mode llm-dual`）は必要なときに切り替える
 
 ### 2-6. 学習・Applio（必要になったら）
 
@@ -236,7 +244,7 @@ GPU の割り当て（`hosts/ubuntu/dekahamuntu.env`）:
 |---|---|---|
 | comfyui.service | 0 | 既定で起動 |
 | qwen38.service | 1 | 既定で起動（ComfyUI とは独立） |
-| qwen38-dual.service | 0,1 | `ai-mode llm-dual`。comfyui・qwen38 と排他。`--split-mode layer --tensor-split 39,10`（n-cpu-moe 33 と組。1,1 は後ろの GPU に寄って落ちる） |
+| qwen38-dual.service | 0,1 | `ai-mode llm-dual`（既定にしない。`ai-mode split` で戻す）。comfyui・qwen38 と排他。`--split-mode layer --tensor-split 39,10`（UD-Q3_K_XL の n-cpu-moe 33 と組。1,1 は後ろの GPU に寄って落ちる） |
 | applio.service | 0 | comfyui・qwen38-dual と排他 |
 | diffusion-pipe の学習 | 0 | `TRAIN_CUDA_DEVICES=0,1` にすると 2 枚のデータ並列（`--num_gpus=2`） |
 
@@ -476,7 +484,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | カーネル | 7.0.0-43-generic（`linux-generic-hwe-24.04`） | 2026-11-12 |
 | powercap のゾーン | `intel-rapl:0`、`intel-rapl:0:0` | 2026-11-12 |
 | ケースファン（Super I/O・チャネル） | `nct6775`（hwmon の name `nct6799`。BIOS 1002 で `lax` なし）。1・3・4・6 がケースファン（fan2go）、2 は CPU のクーラー（本人「たぶん」。BIOS のまま）。pwm はすべて mode=1（PWM）。細かい値は「[ケースファン](#ケースファンgpu-の温度で回す)」の「実機で確かめた値」 | 2026-11-13 |
-| Qwen3.8-Flash-Next（UD-Q3_K_XL）の n-cpu-moe・tensor-split | 1 枚（GPU 1）45、束ね 33（`--tensor-split 39,10`）。llama.cpp 0.6.0。長い問いの温まったあと: 1 枚 入力 約 440 / 生成 約 25.6 tok/s、束ね 約 519 / 約 29.0 tok/s。細かい値は [ai-server-placement.md の「実測（2026-11-13）」](ai-server-placement.md#実測2026-11-13-qwen38-flash-next) | 2026-11-13 |
+| Qwen3.8-Flash-Next の n-cpu-moe・tensor-split | UD-Q3_K_XL: 1 枚（GPU 1）45、束ね 33。Uncensored 版（i1-IQ3_M）: 1 枚 42、束ね 31。束ねは `--tensor-split 39,10`。llama.cpp 0.6.0。`qwen38.service`（GPU 1）を常駐、束ねは `ai-mode llm-dual`。長い問いの温まったあと: UD-Q3_K_XL は 1 枚 入力 約 440 / 生成 約 25.6 tok/s、束ね 約 519 / 約 29.0 tok/s。Uncensored 版は 1 枚 約 477 / 約 29.4、束ね 554.5〜560.7 / 約 33.9（2 回）。細かい値は [ai-server-placement.md の「実測（2026-11-13）」](ai-server-placement.md#実測2026-11-13-qwen38-flash-next) | 2026-11-13 |
 
 ---
 
@@ -495,7 +503,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | mise | Node.js 24、Python 3.12 | `bootstrap-ubuntu.sh` |
 | シークレット | `~/.secrets/.env`（Service Account のトークン）、`~/.secrets/.env.secrets`（`update-secrets` の出力） | `bootstrap-ubuntu.sh`（トークンは本人が貼る） |
 | Tailscale | `tailscale`（apt）、名前 `dekahamuntu`、operator は未設定 | `install-tailscale-ubuntu.sh`（いまの版は `--operator=$USER` も設定する） |
-| Tailscale Serve | `https://dekahamuntu.<tailnet>.ts.net` → 8188、`:4520` → 4520 | `configure-tailscale-serve-ubuntu.sh`（`TAILSCALE_SERVE=443=8188 4520=4520`）。まねのコマンドで流し、いまの `tailscale serve status` と同じになることを確かめた |
+| Tailscale Serve | `https://dekahamuntu.<tailnet>.ts.net` → 8188、`:4520` → 4520。`:8443` → 8080（Qwen）はまだない（2026-11-13。本人が sudo で流す） | `configure-tailscale-serve-ubuntu.sh`（`TAILSCALE_SERVE=443=8188 4520=4520 8443=8080`）。443・4520 はまねのコマンドで流し、いまの `tailscale serve status` と同じになることを確かめた（8443 を足す前） |
 | HWE カーネル | `linux-generic-hwe-24.04`、7.0.0-43 | インストーラで HWE を選ぶ。`install-hwe-kernel-ubuntu.sh` でも入る |
 | NVIDIA ドライバ | `nvidia-driver-595-open`、`linux-modules-nvidia-595-open-generic-hwe-24.04`、595.99.02 | `install-nvidia-driver-ubuntu.sh`（`ubuntu-drivers install`）。`pciutils`・`ubuntu-drivers-common` もここ |
 | RAPL | `power` グループ、`/etc/udev/rules.d/99-rapl-power.rules` | `install-rapl-power-access-ubuntu.sh`（`configure-ubuntu-hardware.sh` から） |
@@ -504,6 +512,9 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | comfyui.service | GPU 0（`CUDA_DEVICE_ORDER=PCI_BUS_ID`・`CUDA_VISIBLE_DEVICES=0`）、`CC=/usr/bin/cc`、`--fast` なし。enabled | `install-comfyui-ubuntu.sh`（`COMFY_CUDA_DEVICES=0`、`COMFY_EXTRA_ARGS` は空）。まねのコマンドで流し、実機の unit と同じになることを確かめた |
 | art-studio.service | unit 本体（PORT=4520、`ART_STUDIO_INBOX`、mise の node 24）。enabled | `~/ai/scripts/install-art-studio`。まねのコマンドで流し、実機の unit と同じになることを確かめた |
 | art-studio の drop-in | `art-studio.service.d/dekahamuntu.conf`（`COMFYUI_URL=http://127.0.0.1:8188`、GPU 0） | `configure-art-studio-ubuntu.sh`（`ART_STUDIO_COMFYUI_URL`・`ART_STUDIO_CUDA_DEVICES`）。実機と同じ中身になることを確かめた |
+| Qwen の unit（2026-11-13 に入れた） | `qwen38.service`（GPU 1、Router、ポート 8080。enabled、`WantedBy=default.target`）、`qwen38-dual.service`（GPU 0,1、`--split-mode layer --tensor-split 39,10`、`Conflicts=qwen38.service comfyui.service`。enable しない） | `install-qwen38-ubuntu.sh`（`LLM_CUDA_DEVICES`・`LLM_DUAL_*`・`QWEN_WANTED_BY`） |
+| Qwen のプリセット（2026-11-13 に入れた） | `~/.config/llama.cpp/qwen38-models.ini`（n-cpu-moe 45 / 42）、`qwen38-dual-models.ini`（33 / 31）、`qwen38-flash-chat-template.jinja` | `install-qwen38-ubuntu.sh`（`QWEN_*_N_CPU_MOE`） |
+| Qwen のモデル（2026-11-13 に取った） | `~/models/qwen3.8-flash-next`（UD-Q3_K_XL・Uncensored 版 i1-IQ3_M と各 mmproj）。27B はない | `install-qwen38-ubuntu.sh`（`QWEN_INSTALL_27B=0`） |
 | ケースファン（2026-11-13 に入れた） | fan2go 0.15.0（`fan2go.service`、active (running)）、`/etc/fan2go/fan2go.yaml`・`case-fan-restore.conf`、`/etc/modules-load.d/case-fan-control.conf`（`nct6775`）。チャネル 1・3・4・6 | `install-case-fan-control-ubuntu.sh`（`CASE_FAN_*`） |
 
 ### `~/ai`（chibiham-ai）の手順で再現するもの
@@ -526,6 +537,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | GitHub | `gh auth login` 済み（`~/.config/gh/hosts.yml`、https） | 第1段の 6. |
 | Claude Code・Codex のログイン | — | 第1段の 6. |
 | sudo の操作 | ドライバ、apt、linger、Tailscale の認証と serve、lvextend | エージェントがコマンドを出し、本人が流す |
+| Tailscale Serve の 8443（Qwen） | まだない（2026-11-13。`install-qwen38-ubuntu.sh` の最後の段が operator なしで断られた） | 本人が `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080` を流す（`configure-tailscale-serve-ubuntu.sh` でもよい） |
 | sudoers | 追加なし（`/etc/sudoers.d` は既定のまま） | なし |
 | netplan | インストーラ（cloud-init）の `/etc/netplan/50-cloud-init.yaml` のまま | なし（雛形は使っていない） |
 
