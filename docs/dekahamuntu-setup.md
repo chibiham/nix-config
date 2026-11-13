@@ -287,7 +287,7 @@ ls /sys/class/powercap/                                                  # intel
 
 使うのは CPU より GPU が多いので、ケースファンを GPU の温度に合わせて回す。CPU のクーラーのファン（CPU_FAN）は BIOS のまま触らない。
 
-ケースファンは合わせて 10 個（本人の答え）: Thermalright TL-C14C（140mm）×7 と TL-C12C（120mm）×3。底 140mm ×3 吸気・側面 120mm ×3 吸気・天面 140mm ×3 排気・背面 140mm ×1 排気（吸気 6・排気 4）。10 個が 4 チャネル（fan1・3・4・6）にどう分かれてつながっているかは未確認。仕様・食い違い・電流は [machines.md](machines.md#dekahamuntu)。
+ケースファンは合わせて 10 個（本人の答え）: Thermalright TL-C14C（140mm）×7 と TL-C12C（120mm）×3。底 140mm ×3 吸気・側面 120mm ×3 吸気・天面 140mm ×3 排気・背面 140mm ×1 排気（吸気 6・排気 4）。fan4 = 側面の 120mm ×3（本人が確認）。140mm の 7 個が fan1・3・6 にどう分かれているかは未確認。仕様・食い違い・電流は [machines.md](machines.md#dekahamuntu)。
 
 | 項目 | 決めたこと |
 |---|---|
@@ -401,12 +401,12 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 
 | チャネル | 役割 | 制御 | PWM 31/255（解析の途中） | PWM 77（30%。解析のあと、GPU 33℃・28℃ のアイドル） | max の境の閾値（fan2go の threshold） |
 |---|---|---|---|---|---|
-| 1 | ケースファン | fan2go（`pwm1_enable=1`） | 406 RPM | 約 530 RPM | 1356.6 RPM |
+| 1 | ケースファン（140mm。位置は未確認） | fan2go（`pwm1_enable=1`） | 406 RPM | 約 530 RPM | 1356.6 RPM |
 | 2 | CPU のクーラー（本人の見分け。「たぶん」）。約 830 RPM | BIOS のまま（`pwm2_enable=5`） | — | — | — |
-| 3 | ケースファン | fan2go（`pwm3_enable=1`） | 435 RPM | 約 520 RPM | 1318.6 RPM |
-| 4 | ケースファン | fan2go（`pwm4_enable=1`） | 529 RPM | 約 660 RPM | 1475.3 RPM |
+| 3 | ケースファン（140mm。位置は未確認） | fan2go（`pwm3_enable=1`） | 435 RPM | 約 520 RPM | 1318.6 RPM |
+| 4 | ケースファン（側面の 120mm ×3。本人が確認、2026-11-13） | fan2go（`pwm4_enable=1`） | 529 RPM | 約 660 RPM | 1475.3 RPM |
 | 5 | pwm がなく回転数だけ。約 840 RPM（2 とほぼ同じ回転数） | — | — | — | — |
-| 6 | ケースファン | fan2go（`pwm6_enable=1`） | 390 RPM | 約 537 RPM | 1369.9 RPM |
+| 6 | ケースファン（140mm。位置は未確認） | fan2go（`pwm6_enable=1`） | 390 RPM | 約 537 RPM | 1369.9 RPM |
 | 7 | RPM 0 | — | — | — | — |
 
 - max の境の閾値は fan2go が「threshold」と出した値で、最大の回転数そのものではない
