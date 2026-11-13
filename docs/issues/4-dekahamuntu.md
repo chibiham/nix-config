@@ -1,7 +1,7 @@
 ---
 status: doing
 created: 2026-11-11
-updated: 2026-11-13
+updated: 2026-11-14
 assignee: agent
 goal:
   - text: flake に chibiham@dekahamuntu があり評価が通る。chibihamuntu（chibiham@ubuntu-server）と Mac の評価結果（drvPath）が変わっていない
@@ -17,7 +17,7 @@ goal:
   - text: 本人が dekahamuntu で第1段を通し、Claude Code が動く
     done: true
   - text: 第2段（ドライバ・HWE・ComfyUI・Qwen）を通し、実機で確かめた値を docs/dekahamuntu-setup.md に書く
-    done: false
+    done: true
 ---
 # dekahamuntu（2 台目の Ubuntu の AI サーバー）を Nix でセットアップできるようにする
 
@@ -57,3 +57,4 @@ goal:
 - 2026-11-14 00:21 [agent] 返事待ち: dekahamuntu で `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080` を流してもらえますか。流れたら、tailnet から Qwen に届くのを確かめて完了条件 6 に印を付けます。
 - 2026-11-14 01:21 [agent] 本人の依頼（2026-11-14「comfyで適当に画像生成を1枚ずつループして生成して計測してみて」）で、dekahamuntu の本番の ComfyUI（GPU 0）に Anima と Qwen-Image 2.1 を 1 枚ずつ続けて投げながら、常駐の Router（GPU 1）で Flash-Next を計った（11-13 15:42〜16:18 UTC）。画像は Anima 25.2→25.3〜25.6 秒、Qwen-Image 17.2→17.2〜17.6 秒でほぼ変わらず。LLM の生成（温まったあとの長い問い）は UD-Q3_K_XL 25.7→20.6〜22.3 tok/s、Uncensored 29.3→22.2〜25.8 tok/s、入力はほぼ同じ。SSD の大きな読み直しは起きなかった（UD は 1 回の問いで約 0.2〜0.3GB、Uncensored は 0）。最大は GPU 0 72℃、GPU 1 44℃、Tctl 82℃、pwm 169、fan2go は ok のまま。終わったあと LLM をアンロードし、ComfyUI の VRAM を /free で降ろし、試しの画像（temp の 77 枚）を消した。Router 常駐・モデル未ロード・ComfyUI 200・キュー空に戻った。swap に 2,005MB が残った（前は 235MB）。結果は docs/ai-server-placement.md（agent/4）。Tailscale Serve 8443 は本人がまだ流していない
 - 2026-11-14 01:21 [agent] 返事待ち: dekahamuntu で `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080` を流してもらえますか。流れたら、tailnet から Qwen に届くのを確かめて完了条件 6 に印を付けます。
+- 2026-11-14 04:07 [agent] 完了条件 6 を済みにした: 第2段が通った。ドライバ 595.99.02・HWE カーネル 7.0.0-43・ComfyUI（GPU 0、/system_stats 200）は 2026-11-12 の実績。Qwen は 2026-11-13 に install-qwen38-ubuntu.sh を実機で流し、qwen38.service が enabled・active（GPU 1 だけ、未ロードで VRAM 4MiB）、Router 経由で UD-Q3_K_XL と Uncensored 版の読み込みと応答、ai-mode llm-dual → split の切り替えを確かめた。Tailscale Serve 8443 は本人が sudo で流し（2026-11-14）、Mac から tailnet 経由で /health 200、/v1/chat/completions に答え「2」が返るのを確かめた（19:06 UTC）。実機で確かめた値（n-cpu-moe 1 枚 45 / 42・束ね 33 / 31、tensor-split 39,10、速さ、VRAM、ケースファン、GPU のメーカー）は docs/dekahamuntu-setup.md の「実機で確かめた値」と 2-5、細かい実測は docs/ai-server-placement.md（agent/4 の 20bcf05 まで）
