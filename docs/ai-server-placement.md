@@ -314,7 +314,7 @@ RAM・swap・ディスク（同居のとき）:
 - 束ね（`qwen38-dual.service`）は `ai-mode llm-dual` で切り替える。既定にしない
 - GPU 2 枚での画像の並列生成（案 C）は今回やらない
 - dekahamuntu に常駐を足した（`install-qwen38-ubuntu.sh` を流した。「[入れた unit での確かめ](#入れた-unit-での確かめdekahamuntu)」）。chibihamuntu の Flash-Next はそのまま（chibihamuntu から外すか、27B だけにするかは本人がまだ決めていない）
-- Tailscale Serve の 8443（tailnet への Qwen の公開）は、本人が sudo で流すまでない（`sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080`。2026-11-13 の時点でまだ）
+- Tailscale Serve の 8443（tailnet への Qwen の公開）は、本人が sudo で流した（2026-11-14。`sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080`）。tailnet から答えが返るのを確かめた（[dekahamuntu-setup.md の 2-5](dekahamuntu-setup.md)）
 
 ### 同居の心配（RAM。設定は変えていない）
 
@@ -330,9 +330,8 @@ RAM・swap・ディスク（同居のとき）:
 
 ## 次にやること
 
-1. 本人が sudo で Tailscale Serve の 8443 を設定する（`sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080`、または `configure-tailscale-serve-ubuntu.sh`）。それまで dekahamuntu の Qwen は tailnet から見えない
-2. dekahamuntu の Flash-Next の残り: ComfyUI が VRAM に収まらないモデルを RAM に置くとき（16GB を超えるモデル、複数のモデルの入れ替え、動画など）の同居の速さ（Anima・Qwen-Image 2.1 での同居は 2026-11-14 に計った）、同居で生成が落ちる理由（CPU・メモリの帯域の取り合いという見込みの確かめ）、Uncensored 版の束ねで GPU 1 を使い切る（モデルごとの tensor-split。スクリプトの変更が要る）、画像の入力（mmproj）を使ったときの VRAM、llama.cpp の版をそろえた比較、冷えた状態（ページキャッシュを捨てたあと）の読み込み時間
-3. chibihamuntu の Flash-Next をどうするか（外す、27B だけにする、そのまま）を本人が決める
-4. chibihamuntu の学習と Applio の VRAM を計る（`nvidia-smi --query-gpu=memory.used --format=csv -l 5` を学習中に流す）
-5. 決まったら、モデルを置き直す（`~/ai/scripts/models` の台帳と restore。数百 GB の転送になる）
-6. Mac の codex・pi の設定（`home/common.nix`）は chibihamuntu の 8443 番を指している。dekahamuntu の LLM を使うなら、そのプロファイルを足す
+1. dekahamuntu の Flash-Next の残り: ComfyUI が VRAM に収まらないモデルを RAM に置くとき（16GB を超えるモデル、複数のモデルの入れ替え、動画など）の同居の速さ（Anima・Qwen-Image 2.1 での同居は 2026-11-14 に計った）、同居で生成が落ちる理由（CPU・メモリの帯域の取り合いという見込みの確かめ）、Uncensored 版の束ねで GPU 1 を使い切る（モデルごとの tensor-split。スクリプトの変更が要る）、画像の入力（mmproj）を使ったときの VRAM、llama.cpp の版をそろえた比較、冷えた状態（ページキャッシュを捨てたあと）の読み込み時間
+2. chibihamuntu の Flash-Next をどうするか（外す、27B だけにする、そのまま）を本人が決める
+3. chibihamuntu の学習と Applio の VRAM を計る（`nvidia-smi --query-gpu=memory.used --format=csv -l 5` を学習中に流す）
+4. 決まったら、モデルを置き直す（`~/ai/scripts/models` の台帳と restore。数百 GB の転送になる）
+5. Mac の codex・pi の設定（`home/common.nix`）は chibihamuntu の 8443 番を指している。dekahamuntu の LLM を使うなら、そのプロファイルを足す

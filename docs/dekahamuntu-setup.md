@@ -29,7 +29,7 @@ dekahamuntu は chibihamuntu と同じく AI サーバーとして使う 2 台�
 4. `install-tailscale-ubuntu.sh` で Tailscale に入れ、ブラウザで認証する（下の 5.）
 5. `claude` と `codex login` にログインする（下の 6.）
 6. GitHub に `gh auth login` で入る（https。`~/ai` の clone に使う。下の 6.）。ssh の鍵で push したいなら、鍵を作って GitHub に登録する（任意。2026-11 時点では作っていない）
-7. 第2段の sudo（ドライバ、`build-essential` など、linger、Tailscale serve、ディスクの拡張）は、エージェントが出したコマンドを本人が流す（エージェントは sudo のパスワードを持たない）。Tailscale serve の Qwen の 8443（`sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080`）は 2026-11-13 の時点でまだ流していない（下の 2-5）
+7. 第2段の sudo（ドライバ、`build-essential` など、linger、Tailscale serve、ディスクの拡張）は、エージェントが出したコマンドを本人が流す（エージェントは sudo のパスワードを持たない）。Tailscale serve の Qwen の 8443（`sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080`）は本人が sudo で流した（2026-11-14。tailnet から答えが返るのを確かめた。下の 2-5）
 
 ---
 
@@ -199,7 +199,7 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 1. モデルは UD-Q3_K_XL（3 分割）と `mmproj-BF16.gguf`、Uncensored 版（mradermacher の i1-IQ3_M、約 89.5GB）と `Qwen3.8-Flash-Next-Uncensored.mmproj-f16.gguf` を `~/models/qwen3.8-flash-next` に取った（`install-qwen38-ubuntu.sh` の `download_model` と同じ取り方。UD-Q3_K_XL は約 87GB を約 3 分 50 秒、Uncensored 版は約 473MiB/s）。Uncensored 版のファイルの大きさは chibihamuntu と同じ（sha256 は照らしていない）。27B は取っていない（`QWEN_INSTALL_27B=0`）
 2. n-cpu-moe は llama-server を一時の user unit（systemd-run）で、qwen38.service と同じ引数で立てて詰めた。値は dekahamuntu.env: UD-Q3_K_XL は 1 枚 45・束ね 33、Uncensored 版は 1 枚 42・束ね 31。`LLM_DUAL_TENSOR_SPLIT` は 39,10（1,1 では読み込めない）。Uncensored 版の束ねは 39,10 のままだと GPU 1 に約 3.1GB 余る（tensor-split はモデルごとに変えられない）
 3. `install-qwen38-ubuntu.sh` を流した（実機の作業ツリーが古いので、env の値は環境変数 `QWEN_FLASH_N_CPU_MOE=45 QWEN_FLASH_UNCENSORED_N_CPU_MOE=42 QWEN_DUAL_FLASH_N_CPU_MOE=33 QWEN_DUAL_FLASH_UNCENSORED_N_CPU_MOE=31 LLM_DUAL_TENSOR_SPLIT=39,10` で渡した）。入ったもの: `qwen38.service`（enabled、`WantedBy=default.target`、GPU 1、Router、ポート 8080）、`qwen38-dual.service`（enable しない。`Conflicts=qwen38.service comfyui.service`、GPU 0,1、`--split-mode layer --tensor-split 39,10`）、`~/.config/llama.cpp/qwen38-models.ini`（45 / 42）、`qwen38-dual-models.ini`（33 / 31）、`qwen38-flash-chat-template.jinja`。home-manager switch は要らなかった（llama-server 0.6.0 と `ai-mode` は入っていた）
-4. スクリプトは最後の Tailscale Serve の段だけ「Access denied: serve config denied」で失敗した（終了コード 1。operator を設定していないので sudo が要る）。本人が流すコマンド（**まだ流していない**。それまで Qwen の Web UI・API は機械の中の 127.0.0.1:8080 だけで、tailnet からは見えない）:
+4. スクリプトは最後の Tailscale Serve の段だけ「Access denied: serve config denied」で失敗した（終了コード 1。operator を設定していないので sudo が要る）。本人が sudo で流した（2026-11-14）。tailnet から答えが返るのを確かめた（下の 8.）。流したコマンド:
 
    ```bash
    sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080
@@ -209,6 +209,7 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 5. 入れた unit で確かめた: Router 経由で UD-Q3_K_XL と Uncensored 版を読み込んで答えが返った（長い問いの温まったあとの生成 約 25.7 / 約 29.3 tok/s。GPU 1 に 14,822 / 14,526MiB。GPU 0 は ComfyUI の 138MiB だけ）。`ai-mode llm-dual` で束ねに切り替えて 2 つとも答えが返り、`ai-mode split` で戻した。そのあいだ ComfyUI は `/system_stats` 200、fan2go は active
 6. いまの形（本人の決め、2026-11-13）: `ai-mode split` が既定。GPU 0 = ComfyUI、GPU 1 = Flash-Next の Router を常駐（モデルは最初の問いで読み込む）。束ね（`ai-mode llm-dual`）は必要なときに切り替える
 7. ComfyUI で画像（Anima、Qwen-Image 2.1）を 1 枚ずつ続けて作りながら計った（2026-11-14 の本人の依頼）: 長い問いの温まったあとの生成は UD-Q3_K_XL 20.62〜22.26、Uncensored 版 22.15〜25.79 tok/s（単独より 1〜2 割遅い）、画像の 1 枚あたりは +1〜2%。SSD の大きな読み直しは起きなかった。細かい値は [ai-server-placement.md の「ComfyUI で画像を作りながらの同居」](ai-server-placement.md#comfyui-で画像を作りながらの同居dekahamuntu2026-11-14)
+8. 本人が 4. の `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080` を流した（2026-11-14）。確かめた（2026-11-13 19:06 UTC = 日本時間 11-14 4:06）: `tailscale serve status` に 443 → 8188、4520 → 4520、8443 → 8080 の 3 つ（どれも tailnet only）。Mac から tailnet 経由で 8443 の `/health` が 200、`/models` に 2 つのモデルが出て、`/v1/chat/completions`（Uncensored 版、「1+1 は？数字だけで答えて。」）に「2」が返った。そのあとモデルをアンロードした（2 つとも unloaded、Router は常駐、ComfyUI は `/system_stats` 200）。これで第2段の Qwen（常駐の qwen38.service と tailnet への公開）は通った
 
 ### 2-6. 学習・Applio（必要になったら）
 
@@ -510,7 +511,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | mise | Node.js 24、Python 3.12 | `bootstrap-ubuntu.sh` |
 | シークレット | `~/.secrets/.env`（Service Account のトークン）、`~/.secrets/.env.secrets`（`update-secrets` の出力） | `bootstrap-ubuntu.sh`（トークンは本人が貼る） |
 | Tailscale | `tailscale`（apt）、名前 `dekahamuntu`、operator は未設定 | `install-tailscale-ubuntu.sh`（いまの版は `--operator=$USER` も設定する） |
-| Tailscale Serve | `https://dekahamuntu.<tailnet>.ts.net` → 8188、`:4520` → 4520。`:8443` → 8080（Qwen）はまだない（2026-11-13。本人が sudo で流す） | `configure-tailscale-serve-ubuntu.sh`（`TAILSCALE_SERVE=443=8188 4520=4520 8443=8080`）。443・4520 はまねのコマンドで流し、いまの `tailscale serve status` と同じになることを確かめた（8443 を足す前） |
+| Tailscale Serve | `https://dekahamuntu.<tailnet>.ts.net` → 8188、`:4520` → 4520。`:8443` → 8080（Qwen）は本人が sudo で流した（2026-11-14。tailnet から答えが返るのを確かめた）。3 つとも tailnet only | `configure-tailscale-serve-ubuntu.sh`（`TAILSCALE_SERVE=443=8188 4520=4520 8443=8080`）。443・4520 はまねのコマンドで流し、いまの `tailscale serve status` と同じになることを確かめた（8443 を足す前） |
 | HWE カーネル | `linux-generic-hwe-24.04`、7.0.0-43 | インストーラで HWE を選ぶ。`install-hwe-kernel-ubuntu.sh` でも入る |
 | NVIDIA ドライバ | `nvidia-driver-595-open`、`linux-modules-nvidia-595-open-generic-hwe-24.04`、595.99.02 | `install-nvidia-driver-ubuntu.sh`（`ubuntu-drivers install`）。`pciutils`・`ubuntu-drivers-common` もここ |
 | RAPL | `power` グループ、`/etc/udev/rules.d/99-rapl-power.rules` | `install-rapl-power-access-ubuntu.sh`（`configure-ubuntu-hardware.sh` から） |
@@ -544,7 +545,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | GitHub | `gh auth login` 済み（`~/.config/gh/hosts.yml`、https） | 第1段の 6. |
 | Claude Code・Codex のログイン | — | 第1段の 6. |
 | sudo の操作 | ドライバ、apt、linger、Tailscale の認証と serve、lvextend | エージェントがコマンドを出し、本人が流す |
-| Tailscale Serve の 8443（Qwen） | まだない（2026-11-13。`install-qwen38-ubuntu.sh` の最後の段が operator なしで断られた） | 本人が `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080` を流す（`configure-tailscale-serve-ubuntu.sh` でもよい） |
+| Tailscale Serve の 8443（Qwen） | 本人が流した（2026-11-14。tailnet から答えが返るのを確かめた）。2026-11-13 に `install-qwen38-ubuntu.sh` の最後の段が operator なしで断られたため、手で流した | 入れ直すときも、本人が `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080` を流す（`configure-tailscale-serve-ubuntu.sh` でもよい） |
 | sudoers | 追加なし（`/etc/sudoers.d` は既定のまま） | なし |
 | netplan | インストーラ（cloud-init）の `/etc/netplan/50-cloud-init.yaml` のまま | なし（雛形は使っていない） |
 
