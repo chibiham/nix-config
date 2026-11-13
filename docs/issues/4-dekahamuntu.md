@@ -1,7 +1,7 @@
 ---
 status: doing
 created: 2026-11-11
-updated: 2026-11-11
+updated: 2026-11-13
 assignee: agent
 goal:
   - text: flake に chibiham@dekahamuntu があり評価が通る。chibihamuntu（chibiham@ubuntu-server）と Mac の評価結果（drvPath）が変わっていない
@@ -15,7 +15,7 @@ goal:
   - text: どのモデルをどちらで動かすかの叩き台が docs/ai-server-placement.md にある
     done: true
   - text: 本人が dekahamuntu で第1段を通し、Claude Code が動く
-    done: false
+    done: true
   - text: 第2段（ドライバ・HWE・ComfyUI・Qwen）を通し、実機で確かめた値を docs/dekahamuntu-setup.md に書く
     done: false
 ---
@@ -39,3 +39,4 @@ goal:
 
 - 2026-11-11 [agent] 枝 feat/dekahamuntu。flake に chibiham@dekahamuntu（cudaCapabilities 12.0、home/hosts/dekahamuntu.nix）。home/linux.nix に chibiham.ubuntu.opVault・aiMode。scripts/lib/ubuntu-host.sh と hosts/ubuntu/{chibihamuntu,dekahamuntu}.env。Blackwell の検査（install-nvidia-driver・install-hwe-kernel）、check-nvidia-kernel-modules-ubuntu.sh（読むだけ。chibihamuntu で流して動くことを確かめた）、GPU 2 枚の割り当て（ComfyUI=0、Qwen=1、qwen38-dual=0,1、学習・Applio=0）、LED の複数台、RAPL のゾーンがないときに止まらないこと
 - 2026-11-11 [agent] 確かめたこと: 3 つの既存の構成の drvPath が変わらない。dekahamuntu を評価でき、llama.cpp は CMAKE_CUDA_ARCHITECTURES=120。shellcheck と bash -n。ComfyUI・Qwen・Applio・diffusion-pipe のインストーラを、コマンドを差し替えた環境で旧版と新版を流し、chibihamuntu（とホストのファイルがないホスト）で書かれる unit・設定ファイルが同じことを確かめた
+- 2026-11-13 19:36 [agent] 完了条件 5 を済みにした: 2026-11-13 に Mac から `ssh dekahamuntu`（Tailscale 経由）で入れ、`zsh -lic "claude --version"` が「2.1.323 (Claude Code)」を返した。~/.config/nix-config が clone されていて、comfyui.service（user unit）が enabled・active。第1段の実績は docs/dekahamuntu-setup.md の「実機で本人が最初にやる順（2026-11 の実績）」にある
