@@ -241,6 +241,7 @@ switch自体が失敗するときの典型原因:
 
 ## 詳細ドキュメント
 
+- [docs/machines.md](docs/machines.md) — 4台の機械の部品・仕様（仕様の正）
 - [docs/1password-cli.md](docs/1password-cli.md) — 1Password CLI連携の詳細
 - [docs/mise-setup.md](docs/mise-setup.md) — miseの使い方
 - [docs/neovim-setup.md](docs/neovim-setup.md) — NeoVim設定

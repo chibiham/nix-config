@@ -91,6 +91,7 @@ nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config
 
 Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@ubuntu-server`（chibihamuntu）または `$USER@dekahamuntu` にする。
 dekahamuntu の初期構築は `docs/dekahamuntu-setup.md`、モデルの置き場所の叩き台は `docs/ai-server-placement.md`。
+4 台の機械の部品・仕様の正は `docs/machines.md`。
 
 定期的な更新（flake update → ビルド → vulnix → switch → mise → Homebrew）は `docs/maintenance.md` の手順で行う。
 

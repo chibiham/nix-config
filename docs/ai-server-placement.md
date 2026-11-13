@@ -15,10 +15,12 @@
 | VRAM の帯域（仕様） | 936 GB/s | 448 GB/s ×2（1 枚あたり 3090 の約半分） |
 | 低い精度の演算 | FP16/BF16、INT8 | FP16/BF16、INT8、**FP8・FP4（NVFP4）をハードウェアで扱う** |
 | GPU の消費電力（仕様） | 350W | 180W ×2 |
-| GPU 間 | — | NVLink なし。PCIe 5.0 x8 ×2（見込み。実機で確かめる。[dekahamuntu-setup.md](dekahamuntu-setup.md) の「PCIe の帯域」） |
-| CPU | Intel i7-13700KF（24 スレッド） | AMD Ryzen 7 9700X |
-| RAM | DDR4 64GB | DDR5 64GB（帯域は DDR4 より広い。推測で 1.5〜2 倍） |
-| ディスク | 1.9TB（約 900GB 使用） | 未確認 |
+| GPU 間 | — | NVLink なし。PCIe 5.0 x8 ×2（実機は 2 枚とも幅 x8・最大 Gen5。負荷時の速さは未確認。[dekahamuntu-setup.md](dekahamuntu-setup.md) の「PCIe の帯域」） |
+| CPU | Intel i7-13700KF（24 スレッド） | AMD Ryzen 7 9700X（16 スレッド） |
+| RAM | DDR4 64GB（2,666 MT/s で動いている） | DDR5 64GB（5,600 MT/s。帯域は DDR4 より広い。推測で 1.5〜2 倍） |
+| ディスク | 1.9TB（約 900GB 使用） | 1.9TB（約 580GB 使用。2026-11-13） |
+
+部品・仕様の正は [machines.md](machines.md)。この表は要約。
 
 読み方:
 

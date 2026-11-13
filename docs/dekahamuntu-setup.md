@@ -5,12 +5,14 @@ dekahamuntu は chibihamuntu と同じく AI サーバーとして使う 2 台�
 | | chibihamuntu | dekahamuntu |
 |---|---|---|
 | CPU | Intel Core i7-13700KF | AMD Ryzen 7 9700X（Zen 5、8 コア） |
-| マザーボード | — | ASUS ProArt B850-CREATOR WIFI NEO |
-| GPU | RTX 3090 24GB ×1（Ampere、sm_86） | RTX 5060 Ti 16GB ×2（Blackwell、sm_120）。合計 32GB、NVLink なし |
+| マザーボード | ASUS TUF GAMING B760M-PLUS D4 | ASUS ProArt B850-CREATOR WIFI NEO |
+| GPU | RTX 3090 24GB ×1（Gigabyte。Ampere、sm_86） | RTX 5060 Ti 16GB ×2（Palit Infinity 3。Blackwell、sm_120）。合計 32GB、NVLink なし |
 | RAM | DDR4 64GB | DDR5 64GB |
 | Home Manager | `chibiham@ubuntu-server` | `chibiham@dekahamuntu` |
 | スクリプトの設定 | `hosts/ubuntu/chibihamuntu.env` | `hosts/ubuntu/dekahamuntu.env` |
 | 1Password Vault | `chibihamuntu` | `dekahamuntu`（作る） |
+
+部品・仕様の正は [machines.md](machines.md)。この表は要約。
 
 セットアップは 2 段に分ける。実機の今の状態と、それをどのスクリプトで再現するかは [dekahamuntu の状態（2026-11-12）](#dekahamuntu-の状態2026-11-12)。
 
@@ -240,11 +242,11 @@ GPU の割り当て（`hosts/ubuntu/dekahamuntu.env`）:
 
 番号は `CUDA_DEVICE_ORDER=PCI_BUS_ID` で `nvidia-smi` と揃える。
 
-GPU LED: カードのメーカーが分からないので、消灯は切ってある（`GPU_LED_OFF=0`）。同じカード 2 枚は名前で区別できないので、`turn-off-gpu-led` は `GPU_LED_COUNT=2` なら一覧の番号で 2 枚とも消す。OpenRGB がそのカードを扱えるかを確かめてから 1 にする。
+GPU LED: カードは Palit GeForce RTX 5060 Ti Infinity 3 16GB（サブシステム 1569:f328。2026-11-13 に分かった）。OpenRGB で消せるかをまだ確かめていないので、消灯は切ってある（`GPU_LED_OFF=0`）。同じカード 2 枚は名前で区別できないので、`turn-off-gpu-led` は `GPU_LED_COUNT=2` なら一覧の番号で 2 枚とも消す。OpenRGB がそのカードを扱えるかを確かめてから 1 にする。
 
 ### PCIe の帯域
 
-ASUS の製品ページによれば（実機では未確認）、ProArt B850 には CPU 直結の PCIe 5.0 x16 スロット（SafeSlot）が 2 本あり、2 本とも使うと x8/x8 になる。ほかに PCIe 4.0 の x16 形状のスロット（x4 動作）が 1 本ある。RTX 5060 Ti はもともと x8 のカードなので、2 枚を上の 2 本に挿せば、どちらも **PCIe 5.0 x8（片方向 約 32GB/s、PCIe 4.0 x16 と同じ程度）** で動く見込み。3 本目（x4）に挿すと帯域が 1/2 になるので使わない。
+ASUS の製品ページによれば、ProArt B850 には CPU 直結の PCIe 5.0 x16 スロット（SafeSlot）が 2 本あり、2 本とも使うと x8/x8 になる。ほかに PCIe 4.0 の x16 形状のスロット（x4 動作。M.2_3 を使うと無効）が 1 本ある。RTX 5060 Ti はもともと x8 のカードなので、2 枚を上の 2 本に挿せば、どちらも **PCIe 5.0 x8（片方向 約 32GB/s、PCIe 4.0 x16 と同じ程度）** で動く。実機では 2 枚とも幅 x8、最大 Gen5（アイドルでは 2.5GT/s に下がる。負荷時の current は未確認。下の「[実機で確かめた値](#実機で確かめた値)」）。3 本目（x4）に挿すと帯域が 1/2 になるので使わない。
 
 NVLink はない。2 枚を束ねる形（LLM の分割、学習のデータ並列）は GPU 間の通信が PCIe 越しになる。
 
@@ -462,7 +464,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 |---|---|---|
 | マザーボードの型番 | ASUS ProArt B850-CREATOR WIFI NEO（DMI） | 2026-11-12 |
 | CPU の型番 | AMD Ryzen 7 9700X 8-Core | 2026-11-12 |
-| GPU のメーカー・型番、VRAM | NVIDIA GeForce RTX 5060 Ti ×2、各 16311MiB、VBIOS 98.06.4E.00.1B。メーカーは未確認 | 2026-11-12 |
+| GPU のメーカー・型番、VRAM | NVIDIA GeForce RTX 5060 Ti ×2、各 16311MiB、VBIOS 98.06.4E.00.1B。サブシステム 1569:f328（Palit。本人の一覧では GeForce RTX 5060 Ti Infinity 3 16GB、NE7506T019T1-GB2061S）。電力の上限 180W | 2026-11-12（メーカーは 2026-11-13） |
 | PCIe（GPU 0 / GPU 1） | 最大 Gen5 x8 / Gen5 x8（`pcie.link.*.max`。負荷時の current は未確認）。バス 01:00.0 / 03:00.0 | 2026-11-12 |
 | `nvidia-smi topo -m` の GPU0-GPU1 | PHB | 2026-11-12 |
 | P2P | 未確認 | |

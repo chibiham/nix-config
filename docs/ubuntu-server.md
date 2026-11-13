@@ -7,8 +7,10 @@ NVIDIAドライバ、CUDA、ComfyUIはGPU装着後に追加する。
 
 | ホスト | 構成 | Home Manager | スクリプトの設定 |
 |---|---|---|---|
-| chibihamuntu | Intel / RTX 3090 24GB ×1 / DDR4 64GB | `$USER@ubuntu-server` | `hosts/ubuntu/chibihamuntu.env` |
-| dekahamuntu | AMD Ryzen / RTX 5060 Ti 16GB ×2 / DDR5 64GB | `$USER@dekahamuntu` | `hosts/ubuntu/dekahamuntu.env` |
+| chibihamuntu | Intel Core i7-13700KF / RTX 3090 24GB ×1 / DDR4 64GB | `$USER@ubuntu-server` | `hosts/ubuntu/chibihamuntu.env` |
+| dekahamuntu | AMD Ryzen 7 9700X / RTX 5060 Ti 16GB ×2 / DDR5 64GB | `$USER@dekahamuntu` | `hosts/ubuntu/dekahamuntu.env` |
+
+部品・仕様の正は [machines.md](machines.md)。この表は要約。
 
 `scripts/*-ubuntu.sh` はホスト名（`hostname -s`）から `hosts/ubuntu/<ホスト名>.env` を読み、GPUの割り当て・ドライバの条件・LEDの対象などを決める（変数は `hosts/ubuntu/README.md`、決定は [ADR 0002](adr/0002-ubuntu機ごとの設定.md)）。
 ファイルのないホストでは chibihamuntu と同じ既定で動く。ただし `bootstrap-ubuntu.sh` はファイルがないと止まる。
@@ -168,7 +170,7 @@ journalctl -u gpu-led-off.service -b --no-pager
 対象はホストの設定の `GPU_LED_MATCH`（OpenRGBの一覧の行に当てる正規表現）と `GPU_LED_COUNT`（台数）で、
 インストーラが `/etc/default/gpu-led-off` に書く（ないときはGigabyte RTX 3090 1台）。
 同じ名前のカードが複数あるときは、一覧の番号で全部を一度に消す。`GPU_LED_OFF=0` のホストでは
-`configure-ubuntu-hardware.sh` が消灯を入れない（dekahamuntuはカードのメーカーを確かめるまで0）。
+`configure-ubuntu-hardware.sh` が消灯を入れない（dekahamuntuはカードがPalitと分かった（2026-11-13）。OpenRGBで消せるかを確かめるまで0）。
 
 root所有のsystem serviceとして動くため、SSHログインやユーザー領域の実行ファイルに依存しない。
 I2Cデバイスを全ユーザーへ開放する設定も不要。OpenRGBの設定は`/var/lib/gpu-led-off`に分離する。
