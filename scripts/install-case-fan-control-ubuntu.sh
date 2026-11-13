@@ -24,6 +24,8 @@ GPU_TEMP_BIN=/usr/local/sbin/case-fan-gpu-temp
 RESTORE_BIN=/usr/local/sbin/case-fan-restore-bios
 CONFIG_DIR=/etc/fan2go
 CONFIG_FILE=$CONFIG_DIR/fan2go.yaml
+# 検査してから置き換えるための一時の設定。fan2go（viper）は拡張子で形式を決めるので .yaml で終える
+CONFIG_NEW=$CONFIG_DIR/fan2go.new.yaml
 RESTORE_CONF=$CONFIG_DIR/case-fan-restore.conf
 UNIT_FILE=/etc/systemd/system/fan2go.service
 MODULES_LOAD_FILE=/etc/modules-load.d/case-fan-control.conf
@@ -61,6 +63,15 @@ case "${1:-}" in
     ;;
   --print-config) mode=print-config; [[ $# -eq 1 ]] || usage ;;
   --uninstall) mode=uninstall; [[ $# -eq 1 ]] || usage ;;
+  # 試験だけ: 設定を書いて検査する所を、CASE_FAN_TEST_CONFIG_DIR と CASE_FAN_TEST_FAN2GO で動かす（sudo 不要）
+  --test-write-config)
+    mode=test-write-config
+    [[ $# -eq 1 && -n "${CASE_FAN_TEST_CONFIG_DIR:-}" && -n "${CASE_FAN_TEST_FAN2GO:-}" ]] || usage
+    FAN2GO_BIN=$CASE_FAN_TEST_FAN2GO
+    CONFIG_DIR=$CASE_FAN_TEST_CONFIG_DIR
+    CONFIG_FILE=$CONFIG_DIR/fan2go.yaml
+    CONFIG_NEW=$CONFIG_DIR/fan2go.new.yaml
+    ;;
   *) usage ;;
 esac
 
@@ -70,7 +81,7 @@ case "$mode" in
   probe) if "$load_module"; then needs_root=true; fi ;;
 esac
 # --print-config は試験のため Linux でなくても動く
-if [[ "$mode" != print-config && "$(uname -s)" != Linux ]]; then
+if [[ "$mode" != print-config && "$mode" != test-write-config && "$(uname -s)" != Linux ]]; then
   echo "このスクリプトはLinux専用です" >&2
   exit 1
 fi
@@ -558,6 +569,21 @@ write_restore_conf() {
   mv -f "$RESTORE_CONF.tmp" "$RESTORE_CONF"
 }
 
+# 設定を一時のファイルに書き、fan2go が受け付けたときだけ置き換える。失敗・中断で一時のファイルを残さない
+write_config() {
+  # 前の実行で残ったものがあっても、作り直す（root 所有・0644 にするため）
+  rm -f -- "$CONFIG_NEW"
+  # shellcheck disable=SC2064
+  trap "rm -f -- '$CONFIG_NEW'" EXIT
+  render_config > "$CONFIG_NEW"
+  chmod 0644 "$CONFIG_NEW"
+  if ! "$FAN2GO_BIN" -c "$CONFIG_NEW" --no-style config validate; then
+    die "fan2go が設定を受け付けませんでした。何も起動していません（BIOS の制御のまま）"
+  fi
+  mv -f -- "$CONFIG_NEW" "$CONFIG_FILE"
+  trap - EXIT
+}
+
 do_install() {
   if [[ "$CASE_FAN_CONTROL" != 1 ]]; then
     echo "ケースファンの制御は切ってあります（hosts/ubuntu/$UBUNTU_HOST.env の CASE_FAN_CONTROL=$CASE_FAN_CONTROL）。何も変えていません。"
@@ -596,13 +622,7 @@ do_install() {
   install -d -o root -g root -m 0755 "$CONFIG_DIR"
   write_restore_conf
 
-  render_config > "$CONFIG_FILE.tmp"
-  chmod 0644 "$CONFIG_FILE.tmp"
-  if ! "$FAN2GO_BIN" -c "$CONFIG_FILE.tmp" --no-style config validate; then
-    rm -f -- "$CONFIG_FILE.tmp"
-    die "fan2go が設定を受け付けませんでした。何も起動していません（BIOS の制御のまま）"
-  fi
-  mv -f "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+  write_config
 
   install -m 0644 "$REPO_DIR/systemd/fan2go.service" "$UNIT_FILE"
   systemctl daemon-reload
@@ -635,7 +655,7 @@ do_uninstall() {
   if [[ -x "$RESTORE_BIN" && -f "$RESTORE_CONF" ]]; then
     "$RESTORE_BIN" || true
   fi
-  rm -f -- "$UNIT_FILE" "$CONFIG_FILE" "$RESTORE_CONF" "$FAN2GO_BIN" "$GPU_TEMP_BIN" "$RESTORE_BIN" "$MODULES_LOAD_FILE"
+  rm -f -- "$UNIT_FILE" "$CONFIG_FILE" "$CONFIG_NEW" "$RESTORE_CONF" "$FAN2GO_BIN" "$GPU_TEMP_BIN" "$RESTORE_BIN" "$MODULES_LOAD_FILE"
   rmdir "$CONFIG_DIR" 2>/dev/null || true
   rm -rf -- /var/lib/fan2go
   systemctl daemon-reload
@@ -647,6 +667,7 @@ do_uninstall() {
 case "$mode" in
   probe) probe ;;
   print-config) check_settings; render_config ;;
+  test-write-config) check_settings; write_config ;;
   identify) identify ;;
   install) do_install ;;
   uninstall) do_uninstall ;;
