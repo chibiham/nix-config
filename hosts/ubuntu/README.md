@@ -29,6 +29,16 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 | `GPU_LED_MATCH` | `gigabyte.*rtx ?3090` | turn-off-gpu-led | OpenRGBの一覧の行（小文字）に当てる正規表現 |
 | `GPU_LED_COUNT` | `1` | turn-off-gpu-led | 一致すべき台数。違えば何も変えずに失敗 |
 | `CPU_POWER_READ` | `1` | configure-ubuntu-hardware | 0ならpowercap（RAPL）の読み取り権限を入れない |
+| `CASE_FAN_CONTROL` | `0` | configure-ubuntu-hardware, install-case-fan-control | 1ならケースファンをGPU（とCPU）の温度で回す（fan2go）。0なら入れない（入れたものは `--uninstall` で外す） |
+| `CASE_FAN_MODULE` | `nct6775` | install-case-fan-control | Super I/O のドライバ。`/etc/modules-load.d/case-fan-control.conf` に書いて起動のたびに読み込む |
+| `CASE_FAN_HWMON` | 空 | install-case-fan-control | 操る hwmon の name（例: `nct6799`）。同じ name が2つあれば止まる |
+| `CASE_FAN_CHANNELS` | 空 | install-case-fan-control | 操る pwm のチャネル（空白区切り。fan の番号が違えば `pwm:rpm`、例 `2 3` / `2:4`）。CPU_FAN は入れない |
+| `CASE_FAN_MIN_DUTY` | `30` | install-case-fan-control | 最低のデューティ（%、10〜100）。止めない（3pin のファンは高めにする） |
+| `CASE_FAN_GPU_CURVE` | `45:30 60:45 70:65 78:85 83:100` | install-case-fan-control | GPU の温度（全 GPU の最大、℃）→ デューティ（%）。最初の点より下は最初の値、最後の点より上は最後の値。最後の温度は 100℃ 未満（読めないときに全開にするため） |
+| `CASE_FAN_CPU_CURVE` | 空 | install-case-fan-control | CPU の温度 → デューティ。ケースファン = max(GPU, CPU)。空なら GPU だけ |
+| `CASE_FAN_CPU_HWMON` | `k10temp` | install-case-fan-control | CPU の温度の hwmon の name（Intel なら `coretemp`） |
+| `CASE_FAN_CPU_TEMP_CHANNEL` | `1` | install-case-fan-control | `temp<N>_input` の N（k10temp の 1 は Tctl） |
+| `CASE_FAN_ACPI_LAX` | `0` | install-case-fan-control | 1なら GRUB に `acpi_enforce_resources=lax` を足す（`/etc/default/grub.d/60-case-fan-acpi-lax.cfg`。再起動が要る）。0 に戻して流すと外す |
 | `COMFY_CUDA_DEVICES` | 空 | install-comfyui | comfyui.serviceの `CUDA_VISIBLE_DEVICES` |
 | `ART_STUDIO_COMFYUI_URL` | 空 | configure-art-studio | art-studio の unit の drop-in に書く `COMFYUI_URL`（空なら書かない） |
 | `ART_STUDIO_CUDA_DEVICES` | 空 | configure-art-studio | art-studio（モザイクの YOLO）の `CUDA_VISIBLE_DEVICES`（空なら書かない） |
@@ -47,6 +57,6 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 
 `CUDA_VISIBLE_DEVICES` を書くときは、番号を `nvidia-smi` と揃えるため `CUDA_DEVICE_ORDER=PCI_BUS_ID` も書く。
 
-`sudo` で自分を起動し直すスクリプト（configure-ubuntu-hardware、install-hwe-kernel、install-gpu-led-off、install-rapl-power-access）では、呼び出し側の環境変数は落ちる。値はこのファイルに書く。
+`sudo` で自分を起動し直すスクリプト（configure-ubuntu-hardware、install-hwe-kernel、install-gpu-led-off、install-rapl-power-access、install-case-fan-control）では、呼び出し側の環境変数は落ちる。値はこのファイルに書く。
 
 新しいホストを足すときは、`<ホスト名>.env`、`home/hosts/<ホスト名>.nix`、`flake.nix` の `mkLinuxHome` のエントリの3つを足す（ADR 0002）。

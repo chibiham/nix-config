@@ -29,6 +29,7 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 ├── hosts/ubuntu/      # Ubuntu機ごとのスクリプトの設定（<ホスト名>.env。ADR 0002）
 ├── Brewfile           # Homebrew一覧（両Mac共通・同じ内容）
 ├── udev/             # Ubuntuへ配るudevルール（RAPL読み取り権限）
+├── systemd/          # Ubuntuへ配るsystem unit（GPU LED消灯、fan2go）
 ├── claude/skills/     # Nixで ~/.claude/skills に配るClaude Code skill（civitai-download）
 └── scripts/
     ├── bootstrap.sh       # 新しいMacの初期セットアップ
@@ -42,6 +43,9 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
     ├── install-gpu-led-off-ubuntu.sh # OpenRGBと消灯サービスの導入
     ├── turn-off-gpu-led.sh # ホストの設定で決めたGPUだけを消灯（既定はGigabyte RTX 3090）
     ├── install-rapl-power-access-ubuntu.sh # RAPL energy_ujをpowerグループへ（udev）
+    ├── install-case-fan-control-ubuntu.sh # ケースファンをGPUの温度で回す（fan2go。--probe は読むだけ。systemd/fan2go.service）
+    ├── case-fan-gpu-temp.sh # fan2goのセンサー: GPUの温度の最大（読めなければ全開側）
+    ├── case-fan-restore-bios.sh # fan2goが止まったときにBIOSの制御へ戻す
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
     ├── install-diffusion-pipe-ubuntu.sh # Anima LoRA学習環境
     ├── install-applio-ubuntu.sh # Applio（RVC学習・リアルタイム音声変換）
