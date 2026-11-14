@@ -65,3 +65,21 @@ goal:
 - 2026-11-14 17:08 [agent] 実装レビュー開始。指定の git log / git diff develop..agent/4 を確認。差分は18コミット・18ファイルで、主な実装変更はfan2goによるケースファン制御、dekahamuntuの実測設定、ompのprovider追加。コード変更・コミット・実機への反映は行わない。
 - 2026-11-14 17:11 [agent] レビューでGPUのみの設定（CASE_FAN_CPU_CURVE空）が、fan2go 0.15.0では不正になることを確認。--print-configを偽hwmonで実行すると参照1本のmaximum曲線を生成する一方、固定版のvalidateCurvesは2本以上を要求する。追加でGPU曲線の最終値が100%未満でも受理され、温度取得失敗時の全開保証が崩れる経路を調査中。実機操作なし。
 - 2026-11-14 17:12 [agent] 実装レビュー完了、修正が必要な不具合2件（ともにP2）。(1) install-case-fan-control-ubuntu.sh:284-285: CPU曲線が空だとmaximumの参照が1本となり、固定版fan2go 0.15.0の検証（2本以上必須）で導入失敗。(2) 同:202-204: GPU曲線の最終デューティ100%を検証しておらず、45:30 83:65を受理するため、GPU取得失敗の100℃でもPWM166止まり（CPU60℃以下なら全開にならない）。偽hwmonで--print-configを実行し両経路の出力を確認、上流の検証・補間実装と照合。既存24試験はmacOSでBash5/coreutils/LC_ALL=Cにて全件成功（実fan2goによる検証ではない）。補助スクリプト・unit・omp/ホスト設定のレビューでは追加の具体的不具合なし。コード変更・コミット・switch・実機操作なし。判定REVIEW_NG。
+
+## エージェントの結果(2026-11-14 17:13)
+
+実装レビュー(gpt-6.1-sol)
+
+修正が必要な不具合が2件あります。
+
+1. **[P2] GPU温度取得失敗時の全開が保証されない**  
+   `scripts/install-case-fan-control-ubuntu.sh:202-204`  
+   `CASE_FAN_GPU_CURVE="45:30 83:65"` を拒否せず、末尾をPWM 166として生成します。GPU取得失敗で100℃が入力されても、[固定版の補間処理](https://github.com/markusressel/fan2go/blob/0.15.0/internal/util/math.go)は末尾値に固定するため、CPU側が低温なら65%止まりです。末尾デューティを100%必須にするか、異常時の全開を通常曲線から独立させる必要があります。
+
+2. **[P2] 文書で許可された「GPUのみ」の構成を導入できない**  
+   `scripts/install-case-fan-control-ubuntu.sh:284-285`  
+   `CASE_FAN_CPU_CURVE` が空だと、`maximum` 曲線の参照が `gpu_curve` 1本になります。しかし、[fan2go 0.15.0の検証](https://github.com/markusressel/fan2go/blob/0.15.0/internal/configuration/validation.go)は2本以上を要求するため、`write_config` で失敗します。CPU曲線がない場合はGPU曲線を直接使う必要があります。
+
+偽hwmonで `--print-config` を実行し、両方の生成結果を確認。既存24試験は成功しましたが、実fan2goの検証は通していません。コード変更・コミット・実機操作なし。結果は `task_log(nix-config#4)` に記録済みです。
+
+REVIEW_NG
