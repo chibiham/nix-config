@@ -213,6 +213,17 @@ if [[ -n "$LLM_CUDA_DEVICES" ]]; then
 Environment=CUDA_VISIBLE_DEVICES=$LLM_CUDA_DEVICES
 "
 fi
+# 使われないモデル（Routerの子プロセス）を sleeping にしてVRAMを空ける（次の要求で読み込み直す）。
+# 空なら書かない（chibihamuntu）。qwen38.service・qwen38-dual.service の両方に効く
+sleep_idle_line=""
+if [[ -n "$QWEN_SLEEP_IDLE_SECONDS" ]]; then
+  if [[ ! "$QWEN_SLEEP_IDLE_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "QWEN_SLEEP_IDLE_SECONDS は正の整数（秒）で書いてください: $QWEN_SLEEP_IDLE_SECONDS" >&2
+    exit 1
+  fi
+  sleep_idle_line="  --sleep-idle-seconds $QWEN_SLEEP_IDLE_SECONDS \\
+"
+fi
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=Qwen3.8 model router (llama.cpp)
@@ -233,7 +244,7 @@ ${llm_cuda_lines}ExecStart=$HOME/.nix-profile/bin/llama-server \\
   --cache-type-k q8_0 \\
   --cache-type-v q8_0 \\
   --parallel 1 \\
-  --jinja \\
+${sleep_idle_line}  --jinja \\
   --agent
 Restart=on-failure
 RestartSec=5
@@ -274,7 +285,7 @@ ExecStart=$HOME/.nix-profile/bin/llama-server \\
   --cache-type-k q8_0 \\
   --cache-type-v q8_0 \\
   --parallel 1 \\
-  --jinja \\
+${sleep_idle_line}  --jinja \\
   --agent
 Restart=on-failure
 RestartSec=5

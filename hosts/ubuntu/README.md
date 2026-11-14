@@ -39,7 +39,9 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 | `CASE_FAN_CPU_HWMON` | `k10temp` | install-case-fan-control | CPU の温度の hwmon の name（Intel なら `coretemp`） |
 | `CASE_FAN_CPU_TEMP_CHANNEL` | `1` | install-case-fan-control | `temp<N>_input` の N（k10temp の 1 は Tctl） |
 | `CASE_FAN_ACPI_LAX` | `0` | install-case-fan-control | 1なら GRUB に `acpi_enforce_resources=lax` を足す（`/etc/default/grub.d/60-case-fan-acpi-lax.cfg`。再起動が要る）。0 に戻して流すと外す |
-| `COMFY_CUDA_DEVICES` | 空 | install-comfyui | comfyui.serviceの `CUDA_VISIBLE_DEVICES` |
+| `COMFY_CUDA_DEVICES` | 空 | install-comfyui | comfyui.serviceの `CUDA_VISIBLE_DEVICES`。複数を書くと最初のGPUが既定のデバイス（`cuda:0`）になり、ほかのGPUはノード（`Select CLIP Device` など）で指定したときだけ使われる（dekahamuntu は `0,1`） |
+| `COMFY_REF` | 空 | update-comfyui, install-comfyui | ComfyUIの版（タグかcommit）。update-comfyui が `git checkout --detach` する（`--ref` が優先）。空なら `git pull --ff-only`（master）。install-comfyui は新しく clone するときだけ使う |
+| `H3_IMAGE_MODELS` | 空 | install-minimax-h3-image | 置く MiniMax H3 Image の DiT の版（空白区切り: `int8` `w4a8` `gguf-q5` `gguf-q4`）。空で引数もなければ何もしない |
 | `ART_STUDIO_COMFYUI_URL` | 空 | configure-art-studio | art-studio の unit の drop-in に書く `COMFYUI_URL`（空なら書かない） |
 | `ART_STUDIO_CUDA_DEVICES` | 空 | configure-art-studio | art-studio（モザイクの YOLO）の `CUDA_VISIBLE_DEVICES`（空なら書かない） |
 | `COMFY_EXTRA_ARGS` | 空 | install-comfyui | comfyui.serviceの main.py に足す起動オプション（例: `--fast fp16_accumulation`。どちらのホストも付けない） |
@@ -52,6 +54,7 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 | `APPLIO_CONFLICTS` | `comfyui.service qwen38.service` | install-applio | applio.serviceの `Conflicts=` |
 | `QWEN_WANTED_BY` | `comfyui.service` | install-qwen38 | qwen38.serviceを何と一緒に起動するか |
 | `QWEN_STOP_COMFY_ON_INSTALL` | `1` | install-qwen38 | 導入時にComfyUIを止めるか |
+| `QWEN_SLEEP_IDLE_SECONDS` | 空 | install-qwen38 | 空でなければ qwen38.service・qwen38-dual.service の llama-server に `--sleep-idle-seconds <値>` を付ける（その秒数だけ使われなかったモデルを sleeping にしてVRAMを空け、次の要求で戻す） |
 | `QWEN_INSTALL_27B` | `1` | install-qwen38 | Qwen3.8-27B（dense）を取得するか |
 | `QWEN_FLASH_N_CPU_MOE` など | 38 / 35 | install-qwen38 | Flash-Nextのエキスパートを置くRAMの層数 |
 

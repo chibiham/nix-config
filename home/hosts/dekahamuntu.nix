@@ -8,23 +8,30 @@
 let
   # GPU 0 = ComfyUI、GPU 1 = Qwen（qwen38.service）を既定にし、
   # 必要なときだけ2枚を束ねたQwen（qwen38-dual.service）に切り替える。
+  # ComfyUIには2枚とも見せていて、MiniMax H3 Image のテキストエンコーダーは GPU 1 に置く（Select CLIP Device、issue 5）。
+  # GPU 1 は Qwen とそのテキストエンコーダーで取り合うので、手で空ける:
+  #   split は ComfyUI のモデルを降ろして Qwen に空け、image-dual は Qwen のモデルを降ろして ComfyUI に空ける。
   # unitのGPUの割り当てと Conflicts= は scripts/install-*-ubuntu.sh が hosts/ubuntu/dekahamuntu.env から書く。
   ai-mode = pkgs.writeShellScriptBin "ai-mode" ''
     set -euo pipefail
 
     usage() {
       cat >&2 <<'EOF'
-    usage: ai-mode {split|llm-dual|applio|stop|status}
-      split     GPU 0 = ComfyUI、GPU 1 = Qwen（既定。再起動後もこの形）
-      llm-dual  ComfyUIとQwen（1枚）を止め、2枚を束ねたQwenを起動
-      applio    GPU 0 でApplioを起動（ComfyUIは止まる。GPU 1 のQwenはそのまま）
-      stop      すべて停止（LoRA学習は止めない）
-      status    各サービスと学習の状態
+    usage: ai-mode {split|image-dual|llm-dual|applio|stop|status}
+      split       GPU 0 = ComfyUI、GPU 1 = Qwen（既定。再起動後もこの形）。
+                  ComfyUIが載せているモデルを降ろさせる（GPU 1 のH3 Imageのテキストエンコーダーを空ける）
+      image-dual  splitの形にしたうえでQwenのモデルを降ろし、GPU 1 をComfyUI（H3 Imageのテキストエンコーダー）に空ける
+                  （Routerは止めない。次にQwenへ問うと読み込み直す）
+      llm-dual    ComfyUIとQwen（1枚）を止め、2枚を束ねたQwenを起動
+      applio      GPU 0 でApplioを起動（ComfyUIは止まる。GPU 1 のQwenはそのまま）
+      stop        すべて停止（LoRA学習は止めない）
+      status      各サービスと学習の状態
     EOF
       exit 2
     }
 
-    # 束ねたQwenのロード済みモデルを下ろしてから止める（VRAMを早く空ける）
+    # Router（qwen38・qwen38-dual のどちらか、8080）のロード済みモデルを降ろす（loaded・sleeping・loading）。
+    # 束ねたQwenを止める前（VRAMを早く空ける）と image-dual で使う
     unload_models() {
       local models model
       models=$(${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:8080/models 2>/dev/null \
@@ -34,6 +41,15 @@ let
         ${pkgs.curl}/bin/curl -fsS --max-time 30 -H 'Content-Type: application/json' \
           -d "{\"model\":\"$model\"}" http://127.0.0.1:8080/models/unload >/dev/null || true
       done
+    }
+
+    # ComfyUIが載せているモデルを降ろさせる。実行中のものが終わってから降ろす（キューは消えない）。
+    # 応答しなくても（止まっている・起動中）続ける
+    free_comfy() {
+      echo "ComfyUIのモデルを降ろします" >&2
+      ${pkgs.curl}/bin/curl -fsS --max-time 10 -X POST -H 'Content-Type: application/json' \
+        -d '{"unload_models":true,"free_memory":true}' http://127.0.0.1:8188/free >/dev/null \
+        || echo "ComfyUIが応答しませんでした（続けます）" >&2
     }
 
     # LoRA学習（~/ai/scripts/lora-train）はGPUを使うunitとConflicts=で排他にしている。
@@ -54,6 +70,17 @@ let
           systemctl --user stop qwen38-dual.service
         fi
         systemctl --user start comfyui.service qwen38.service
+        # H3 Image のテキストエンコーダーが GPU 1 に載ったままだと、Qwen が読み込めない
+        free_comfy
+        ;;
+      image-dual)
+        guard_training
+        if systemctl --user is-active --quiet qwen38-dual.service; then
+          unload_models
+          systemctl --user stop qwen38-dual.service
+        fi
+        systemctl --user start comfyui.service qwen38.service
+        unload_models
         ;;
       llm-dual)
         guard_training

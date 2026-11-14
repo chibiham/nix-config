@@ -67,10 +67,16 @@ unset _ubuntu_host_repo
 # 1 なら GRUB に acpi_enforce_resources=lax を足す（ACPI が Super I/O を握っていて掴めないときだけ）
 : "${CASE_FAN_ACPI_LAX:=0}"
 
-# GPUの割り当て（CUDA_VISIBLE_DEVICES）。空ならunitに書かない（すべてのGPUが見える）
+# GPUの割り当て（CUDA_VISIBLE_DEVICES）。空ならunitに書かない（すべてのGPUが見える）。
+# 複数を書くと、最初のGPUがComfyUIの既定のデバイス（cuda:0）になる
 : "${COMFY_CUDA_DEVICES:=}"
 # comfyui.serviceの main.py に足す起動オプション（例: --fast fp16_accumulation）。空なら足さない
 : "${COMFY_EXTRA_ARGS:=}"
+# ComfyUIの版（タグかcommit）。update-comfyui-ubuntu.sh はこれを checkout --detach する。
+# 空なら今までどおり git pull --ff-only（master に追従）。install-comfyui-ubuntu.sh は新しく clone するときだけ使う
+: "${COMFY_REF:=}"
+# MiniMax H3 Image の DiT の版（install-minimax-h3-image-ubuntu.sh。空白区切り: int8 w4a8 gguf-q5 gguf-q4）。空なら置かない
+: "${H3_IMAGE_MODELS:=}"
 # art-studio（~/ai）の unit に drop-in で足す値（configure-art-studio-ubuntu.sh）。両方とも空なら drop-in を書かない
 : "${ART_STUDIO_COMFYUI_URL:=}"
 : "${ART_STUDIO_CUDA_DEVICES:=}"
@@ -90,6 +96,9 @@ unset _ubuntu_host_repo
 : "${QWEN_WANTED_BY:=comfyui.service}"
 # 導入時にComfyUIを止めるか（同じGPUを取り合う構成だけ1）
 : "${QWEN_STOP_COMFY_ON_INSTALL:=1}"
+# llama-server（Router）の --sleep-idle-seconds。この秒数だけ使われなかったモデルを降ろしてVRAMを空ける
+# （次の要求で読み込み直す）。空ならunitに書かない
+: "${QWEN_SLEEP_IDLE_SECONDS:=}"
 # Applioを排他にするunit
 : "${APPLIO_CONFLICTS:=comfyui.service qwen38.service}"
 
