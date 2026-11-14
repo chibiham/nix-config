@@ -199,9 +199,12 @@ check_settings() {
     mapfile -t cpu_points <<<"$out"
     [[ ${#cpu_points[@]} -ge 2 ]] || die "CASE_FAN_CPU_CURVE は2点以上"
   fi
-  local last_temp
-  read -r last_temp _ <<<"${gpu_points[-1]}"
+  # fan2go 0.15.0 の線形の曲線は、最後の点より上では最後の値のまま。読めないときの ${GPU_FAILSAFE_C}℃ で全開にするには、
+  # 最後の点が ${GPU_FAILSAFE_C}℃ より下で、かつ 100%（curve_points の丸めで 100% だけが 255 になる）であること。CPU の曲線には求めない
+  local last_temp last_pwm
+  read -r last_temp last_pwm <<<"${gpu_points[-1]}"
   ((GPU_FAILSAFE_C > last_temp)) || die "GPU の曲線の最後の温度（${last_temp}℃）は ${GPU_FAILSAFE_C}℃ より低くすること（読めないときに全開にするため）"
+  ((last_pwm == 255)) || die "CASE_FAN_GPU_CURVE の最後の点は 100% にすること（いまは PWM ${last_pwm}/255）。GPU が読めないとき（${GPU_FAILSAFE_C}℃ を出す）に全開にするため"
   min_pwm=$(((CASE_FAN_MIN_DUTY * 255 + 50) / 100))
 }
 
@@ -218,9 +221,15 @@ render_curve() {
 render_config() {
   local pair pwm rpm expected="${NVIDIA_EXPECTED_GPUS:-0}"
   [[ "$expected" =~ ^[0-9]+$ ]] || expected=0
+  # ファンが指す曲線。fan2go 0.15.0 の function の曲線は 2 本以上が要るので、CPU の曲線がなければ GPU の曲線を直に指す
+  local fan_curve=gpu_curve how="GPU の曲線（CPU の曲線なし）"
+  if [[ ${#cpu_points[@]} -gt 0 ]]; then
+    fan_curve=case_fans
+    how="max(GPU の曲線, CPU の曲線)"
+  fi
   cat <<EOF
 # install-case-fan-control-ubuntu.sh が hosts/ubuntu/$UBUNTU_HOST.env（CASE_FAN_*）から書く。手で直さない（入れ直すと上書きされる）
-# fan2go $FAN2GO_VERSION。ケースファン = max(GPU の曲線, CPU の曲線)。曲線の値は PWM（0..255）そのもの（useUnscaledCurveValues）
+# fan2go $FAN2GO_VERSION。ケースファン = $how。曲線の値は PWM（0..255）そのもの（useUnscaledCurveValues）
 dbPath: /var/lib/fan2go/fan2go.db
 runFanInitializationInParallel: false
 # 温度は 1 秒ごとに読み、直近 10 回の平均で曲線を引く（GPU の温度の細かい上下でファンが揺れないように）
@@ -241,7 +250,7 @@ EOF
       platform: $CASE_FAN_HWMON
       rpmChannel: $rpm
       pwmChannel: $pwm
-    curve: case_fans
+    curve: $fan_curve
     # 止めない。最低は CASE_FAN_MIN_DUTY（$CASE_FAN_MIN_DUTY%）。初回の解析（PWM と RPM の関係を測る）の結果より、ここの値が勝つ
     neverStop: true
     minPwm: $min_pwm
@@ -281,8 +290,6 @@ EOF
   if [[ ${#cpu_points[@]} -gt 0 ]]; then
     render_curve cpu_curve cpu "${cpu_points[@]}"
     printf '  - id: case_fans\n    function:\n      type: maximum\n      curves:\n        - gpu_curve\n        - cpu_curve\n'
-  else
-    printf '  - id: case_fans\n    function:\n      type: maximum\n      curves:\n        - gpu_curve\n'
   fi
   cat <<EOF
 

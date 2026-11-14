@@ -59,6 +59,7 @@ unset _ubuntu_host_repo
 # 最低のデューティ（%）。止めない
 : "${CASE_FAN_MIN_DUTY:=30}"
 # 曲線（「温度:デューティ%」を空白区切り）。ケースファン = max(GPU, CPU)。CPU を空にすると GPU だけ
+# GPU の曲線の最後の点は 100%・100℃ 未満（GPU が読めないときに全開にするため。そうでなければ止まる）
 : "${CASE_FAN_GPU_CURVE:=45:30 60:45 70:65 78:85 83:100}"
 : "${CASE_FAN_CPU_CURVE:=}"
 : "${CASE_FAN_CPU_HWMON:=k10temp}"

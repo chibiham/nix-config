@@ -34,7 +34,7 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 | `CASE_FAN_HWMON` | 空 | install-case-fan-control | 操る hwmon の name（例: `nct6799`）。同じ name が2つあれば止まる |
 | `CASE_FAN_CHANNELS` | 空 | install-case-fan-control | 操る pwm のチャネル（空白区切り。fan の番号が違えば `pwm:rpm`、例 `2 3` / `2:4`）。CPU_FAN は入れない |
 | `CASE_FAN_MIN_DUTY` | `30` | install-case-fan-control | 最低のデューティ（%、10〜100）。止めない（3pin のファンは高めにする） |
-| `CASE_FAN_GPU_CURVE` | `45:30 60:45 70:65 78:85 83:100` | install-case-fan-control | GPU の温度（全 GPU の最大、℃）→ デューティ（%）。最初の点より下は最初の値、最後の点より上は最後の値。最後の温度は 100℃ 未満（読めないときに全開にするため） |
+| `CASE_FAN_GPU_CURVE` | `45:30 60:45 70:65 78:85 83:100` | install-case-fan-control | GPU の温度（全 GPU の最大、℃）→ デューティ（%）。最初の点より下は最初の値、最後の点より上は最後の値。最後の温度は 100℃ 未満、最後の点は 100%（GPU が読めないときに全開にするため。そうでなければ入れるスクリプトが止まる） |
 | `CASE_FAN_CPU_CURVE` | 空 | install-case-fan-control | CPU の温度 → デューティ。ケースファン = max(GPU, CPU)。空なら GPU だけ |
 | `CASE_FAN_CPU_HWMON` | `k10temp` | install-case-fan-control | CPU の温度の hwmon の name（Intel なら `coretemp`） |
 | `CASE_FAN_CPU_TEMP_CHANNEL` | `1` | install-case-fan-control | `temp<N>_input` の N（k10temp の 1 は Tctl） |

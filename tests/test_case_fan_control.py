@@ -81,7 +81,13 @@ class PrintConfigTests(unittest.TestCase):
         for step in ["- 45: 77", "- 60: 115", "- 70: 166", "- 78: 217", "- 83: 255"]:
             self.assertIn(step, y)
         self.assertNotIn("cpu_curve", y)
-        self.assertIn("type: maximum", y)
+        # fan2go 0.15.0 は function の曲線に 2 本以上を要る。CPU の曲線がなければ function を出さず、ファンが GPU の曲線を直に指す
+        self.assertNotIn("function:", y)
+        self.assertNotIn("type: maximum", y)
+        self.assertNotIn("case_fans", y)
+        self.assertEqual(y.count("    curve: gpu_curve\n"), 2)
+        self.assertIn("ケースファン = GPU の曲線（CPU の曲線なし）", y)
+        self.assertNotIn("max(GPU の曲線, CPU の曲線)", y)
 
     def test_cpu_curve_is_combined_with_maximum(self):
         r = self.run_print(CASE_FAN_CPU_CURVE="60:30 95:100")
@@ -136,6 +142,20 @@ class PrintConfigTests(unittest.TestCase):
         r = self.run_print(CASE_FAN_GPU_CURVE="45:30 100:100")
         self.assertNotEqual(r.returncode, 0)
 
+    def test_gpu_curve_must_end_at_full_duty(self):
+        # fan2go の線形の曲線は最後の点より上で最後の値のまま。100% でなければ、GPU が読めないときに全開にならない
+        for curve in ["45:30 83:65", "45:30 83:99"]:
+            with self.subTest(curve=curve):
+                r = self.run_print(CASE_FAN_GPU_CURVE=curve)
+                self.assertNotEqual(r.returncode, 0)
+                self.assertEqual(r.stdout, "")
+                self.assertIn("最後の点は 100%", r.stderr)
+
+    def test_cpu_curve_need_not_end_at_full_duty(self):
+        r = self.run_print(CASE_FAN_CPU_CURVE="60:30 95:65")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("- 95: 166", r.stdout)
+
     def test_min_duty_bounds(self):
         r = self.run_print(CASE_FAN_MIN_DUTY="5")
         self.assertNotEqual(r.returncode, 0)
@@ -154,6 +174,12 @@ case "$2" in
 esac
 [ "$(stat -c %a "$2")" = 644 ] || { echo "bad mode" >&2; exit 4; }
 grep -q '^fans:' "$2" || exit 5
+# 本物（internal/configuration/validation.go）と同じく、function の曲線は 2 本以上を要る
+awk '/^      curves:$/ { n = 0; inside = 1; next }
+     inside && /^        - / { n++; next }
+     inside { if (n < 2) bad = 1; inside = 0 }
+     END { if (inside && n < 2) bad = 1; exit bad }' "$2" ||
+  { echo "function curves must reference at least 2 other curves" >&2; exit 6; }
 exit "${FAKE_EXIT:-0}"
 """
 
@@ -193,6 +219,11 @@ class WriteConfigTests(unittest.TestCase):
         self.assertIn("platform: nct6799", (self.etc / "fan2go.yaml").read_text())
         self.assertEqual(oct((self.etc / "fan2go.yaml").stat().st_mode & 0o777), "0o644")
         self.assertEqual(sorted(p.name for p in self.etc.iterdir()), ["fan2go.yaml"])
+
+    def test_validates_with_cpu_curve(self):
+        r = self.run_write(CASE_FAN_CPU_CURVE="60:30 95:100")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("- cpu_curve", (self.etc / "fan2go.yaml").read_text())
 
     def test_rejected_config_keeps_the_old_one_and_leaves_nothing(self):
         (self.etc / "fan2go.yaml").write_text("old\n")

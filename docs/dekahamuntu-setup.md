@@ -307,7 +307,7 @@ ls /sys/class/powercap/                                                  # intel
 | 揺れを抑える | 温度は 1 秒ごとに読み、直近 10 回の平均で曲線を引く。PWM は 1 回（200ms）に 3 まで動かす（0→255 に約 17 秒） |
 | 止めない | `neverStop`。最低は `CASE_FAN_MIN_DUTY`（30%） |
 | 止めたとき・落ちたとき | BIOS の制御に戻す。fan2go 自身（`controlMode.onExit: restore`）と、unit の `ExecStopPost`（`case-fan-restore-bios`。入れたときに読んだ `pwmN_enable` の値に戻す。強制終了のときの保険） |
-| GPU の温度が読めないとき | `nvidia-smi` の失敗・1.2 秒で返らない（TERM を無視しても 0.3 秒後に KILL。fan2go の cmd センサーの時間切れ 2 秒より手前で終える）・枚数が `NVIDIA_EXPECTED_GPUS`（2）でない・数でない値のとき、100℃ を出す。曲線は 83℃ で 100% なので全開になる |
+| GPU の温度が読めないとき | `nvidia-smi` の失敗・1.2 秒で返らない（TERM を無視しても 0.3 秒後に KILL。fan2go の cmd センサーの時間切れ 2 秒より手前で終える）・枚数が `NVIDIA_EXPECTED_GPUS`（2）でない・数でない値のとき、100℃ を出す。曲線は 83℃ で 100% なので全開になる。GPU の曲線の最後の点が 100% でなければ、入れるスクリプトが止まる（2026-11-14、実装レビューの指摘で足した。dekahamuntu の設定で作られる YAML は変わっていないので、入れ直しは要らない） |
 | 値の置き場所 | `hosts/ubuntu/dekahamuntu.env` の `CASE_FAN_*`（意味は `hosts/ubuntu/README.md`）。スクリプトの既定は切（`CASE_FAN_CONTROL=0`）。dekahamuntu は 1 |
 
 曲線（たたき台。`CASE_FAN_GPU_CURVE`・`CASE_FAN_CPU_CURVE`。「温度:デューティ%」）:
