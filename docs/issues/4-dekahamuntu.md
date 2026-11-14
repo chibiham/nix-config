@@ -111,3 +111,30 @@ REVIEW_NG
 作業ログに記録済み。コード変更・コミット・switch・実機操作なし。
 
 REVIEW_OK
+
+## エージェントの結果(2026-11-14 17:22)
+
+実装レビューの指摘 2 件を直して commit し、develop の最新に載せ直しました（agent/4 は 19 コミットが一直線、先頭は `1bfcdbb`）。実機に入っている設定は変わらないので、dekahamuntu の入れ直しは要りません。
+
+## 直したこと（`scripts/install-case-fan-control-ubuntu.sh`）
+
+- **GPU の曲線の最後の点が 100% でないと止める**: 最後が 65% のような曲線を通していました。fan2go 0.15.0 は最後の点より上の温度で最後の値のままにするので、GPU が読めずに 100℃ が入っても全開になりませんでした。CPU の曲線にはこの制約を付けていません。
+- **CPU の曲線がないときは、ファンが GPU の曲線を直に指す**: `maximum` に 1 本だけ並べる設定を作っていました。fan2go 0.15.0 の検査は 2 本以上を求めるので、「GPU だけ」の構成は入れられない状態でした。
+- **文書**: `hosts/ubuntu/README.md`・`scripts/lib/ubuntu-host.sh`・`docs/dekahamuntu-setup.md` に、最後の点は 100% が要ることを足しました。
+
+## 確かめたこと
+
+- **dekahamuntu の設定で作られる YAML**: 直す前とあとで差がありません（138 行、同じハッシュ）。
+- **試験**: 27 件通ります（3 件足しました。末尾が 100% でない曲線を拒否する、CPU の曲線は 100% でなくてよい、CPU の曲線があるときも書き込みの検査を通る）。
+- **にせの fan2go**: 曲線が 2 本未満なら落ちる、という検査のまねを足しました。直す前の「GPU だけ」の出力はこれで落ち、直したあとは通ります。
+- **そのほか**: `bash -n`、shellcheck（warning なし）、4 つの構成の評価（変わらず）。
+- **載せ直し**: develop との差のうち issue のファイルは、ファンの枝の作業ログ 5 行だけです。
+
+## 通していないもの
+
+本物の fan2go 0.15.0 の `config validate` は、Linux のバイナリなのでこの Mac では流していません。fan2go のソースの該当箇所（検査と補間）は、要約を通して読んだもので、生のファイルを手元で開いてはいません。「GPU だけ」の構成を実機で入れるときは、インストーラの中の validate が最初の本物の検査になります。
+
+## 執事へ（前回と同じ）
+
+- **Mac の switch**: `nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#chibiham@mac-mini`（sudo は要りません）。あとで `~/.omp/agent/models.yml` に `qwen-dekahamuntu` があることと、`omp models qwen-dekahamuntu` が 2 つのモデルを返すことを見てください。
+- **dekahamuntu**: develop に切り替えて pull するまで、`install-qwen38-ubuntu.sh` を流し直さないでください（いまの作業ツリーの env は古い値です）。
