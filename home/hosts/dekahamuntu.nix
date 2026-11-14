@@ -8,9 +8,10 @@
 let
   # GPU 0 = ComfyUI、GPU 1 = Qwen（qwen38.service）を既定にし、
   # 必要なときだけ2枚を束ねたQwen（qwen38-dual.service）に切り替える。
-  # ComfyUIには2枚とも見せていて、MiniMax H3 Image のテキストエンコーダーは GPU 1 に置く（Select CLIP Device、issue 5）。
-  # GPU 1 は Qwen とそのテキストエンコーダーで取り合うので、手で空ける:
-  #   split は ComfyUI のモデルを降ろして Qwen に空け、image-dual は Qwen のモデルを降ろして ComfyUI に空ける。
+  # ComfyUIには2枚とも見せていて、MiniMax H3 Image のテキストエンコーダーの計算は GPU 1 で回す（Select CLIP Device = gpu:1、issue 5）。
+  # 重みは RAM に置かれ、GPU 1 はエンコードのあいだだけ約 1.2〜1.5GB 使う（本番で確かめた、2026-11-14）。
+  # Qwen のモデルが GPU 1 に載っているとその計算が OutOfMemoryError（device 1）になるので、image-dual で Qwen のモデルを降ろす。
+  # split は ComfyUI のモデルを降ろし、主に ComfyUI が RAM に持っている重みを Qwen（Flash-Next は RAM に約 52GB）に空ける。
   # unitのGPUの割り当てと Conflicts= は scripts/install-*-ubuntu.sh が hosts/ubuntu/dekahamuntu.env から書く。
   ai-mode = pkgs.writeShellScriptBin "ai-mode" ''
     set -euo pipefail
@@ -19,9 +20,9 @@ let
       cat >&2 <<'EOF'
     usage: ai-mode {split|image-dual|llm-dual|applio|stop|status}
       split       GPU 0 = ComfyUI、GPU 1 = Qwen（既定。再起動後もこの形）。
-                  ComfyUIが載せているモデルを降ろさせる（GPU 1 のH3 Imageのテキストエンコーダーを空ける）
-      image-dual  splitの形にしたうえでQwenのモデルを降ろし、GPU 1 をComfyUI（H3 Imageのテキストエンコーダー）に空ける
-                  （Routerは止めない。次にQwenへ問うと読み込み直す）
+                  ComfyUIが載せているモデルを降ろさせる（RAMの重みをQwenに空ける）
+      image-dual  splitの形にしたうえでQwenのモデルを降ろし、GPU 1 をH3 Imageのテキストエンコーダーの計算
+                  （Select CLIP Device = gpu:1）に空ける（Routerは止めない。次にQwenへ問うと読み込み直す）
       llm-dual    ComfyUIとQwen（1枚）を止め、2枚を束ねたQwenを起動
       applio      GPU 0 でApplioを起動（ComfyUIは止まる。GPU 1 のQwenはそのまま）
       stop        すべて停止（LoRA学習は止めない）
@@ -70,7 +71,7 @@ let
           systemctl --user stop qwen38-dual.service
         fi
         systemctl --user start comfyui.service qwen38.service
-        # H3 Image のテキストエンコーダーが GPU 1 に載ったままだと、Qwen が読み込めない
+        # ComfyUI が RAM に持っている重み（H3 Image のテキストエンコーダーなど）を降ろし、Qwen の RAM を空ける
         free_comfy
         ;;
       image-dual)

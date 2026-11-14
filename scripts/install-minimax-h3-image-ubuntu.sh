@@ -5,7 +5,9 @@
 #
 # - いつも置く: VAE、テキストエンコーダー（Qwen3-VL 32B NVFP4。H3 の動画と同じファイル）
 # - DiT の版は引数（なければ hosts/ubuntu/<ホスト名>.env の H3_IMAGE_MODELS、空白区切り）で選ぶ。
-#   どちらも空なら使い方を出して止まる（chibihamuntu で流しても何もしない）
+#   どちらも空なら使い方を出して止まる（chibihamuntu で流しても何もしない）。dekahamuntu の既定は int8 w4a8
+# - GGUF（gguf-q5・gguf-q4）は選択肢として残すが、既定には入れていない。公式の版の約 3 倍遅く（本番で 32〜46 秒。
+#   int8 は 11 秒）、第三者の重みと第三者の拡張（ComfyUI-GGUF）が要る
 # - --with-expander: 任意のプロンプト拡張（Qwen3.5 9B W4A8）も置く
 # - --verify: すでにあるファイルの sha256 も確かめる（既定は大きさだけ）。合わなければ消さずに失敗する
 #
@@ -60,8 +62,8 @@ usage: install-minimax-h3-image-ubuntu.sh [--verify] [--with-expander] [int8|w4a
   DiT の版（ひとつ以上）:
     int8      公式 pruned int8 convrot（20.9GB）
     w4a8      公式 pruned W4A8（12.5GB）
-    gguf-q5   第三者 GGUF Q5_K_M（14.1GB。ComfyUI-GGUF も置く）
-    gguf-q4   第三者 GGUF Q4_K_M（11.6GB。ComfyUI-GGUF も置く）
+    gguf-q5   第三者 GGUF Q5_K_M（14.1GB。ComfyUI-GGUF も置く。公式の約 3 倍遅い）
+    gguf-q4   第三者 GGUF Q4_K_M（11.6GB。ComfyUI-GGUF も置く。公式の約 3 倍遅い）
   引数がなければ H3_IMAGE_MODELS（hosts/ubuntu/<ホスト名>.env）を使う。どちらも空なら何もしない
   VAE とテキストエンコーダー（NVFP4、15.7GB）はいつも置く
   --with-expander  プロンプト拡張（Qwen3.5 9B W4A8、7.3GB）も置く
