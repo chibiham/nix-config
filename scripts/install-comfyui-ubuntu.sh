@@ -4,7 +4,9 @@
 #
 #   install-comfyui-ubuntu.sh               apt・clone・venv・PyTorch・依存・unit・linger（sudo が要る）
 #   install-comfyui-ubuntu.sh --unit-only [--force]
-#       CUDA動作確認と unit の書き出しだけ（sudo なし）。unit が変わったときだけ daemon-reload と restart をする。
+#       CUDA動作確認と unit の書き出しだけ（sudo なし）。unit が変わったとき・前回の適用が途中で終わったとき
+#       （~/.local/state/comfyui-update/unit-apply-pending が残っている）・comfyui.service が動いていないときだけ、
+#       daemon-reload・restart・起動の待ちをする。途中で失敗したら終了コード 1 で、流し直せば続きから適用する。
 #       restart の前に ComfyUI のキューが空かを確かめる（--force で飛ばす）。
 #
 # 新しく clone するときだけ、COMFY_REF（空でなければ）の版を checkout する。取得済みなら触らない（更新は update-comfyui-ubuntu.sh）。
@@ -174,24 +176,50 @@ EOF
 }
 
 if [[ "$unit_only" == 1 ]]; then
+  # 適用の途中であることの印。unit を書く直前に置き、daemon-reload・restart・起動の待ちが全部通ったら消す。
+  # 途中で失敗すると残り、流し直したときにファイルが同じでも続きから適用する
+  pending_file="${XDG_STATE_HOME:-$HOME/.local/state}/comfyui-update/unit-apply-pending"
+  unit_same=0
   if [[ -f "$SERVICE_FILE" ]] && cmp -s <(write_unit) "$SERVICE_FILE"; then
-    ok "$SERVICE_FILE は変わりません。何もしません"
+    unit_same=1
+  fi
+  service_active=0
+  if systemctl --user is-active --quiet comfyui.service; then
+    service_active=1
+  fi
+  if [[ "$unit_same" == 1 && ! -e "$pending_file" && "$service_active" == 1 ]]; then
+    ok "$SERVICE_FILE は変わらず、comfyui.service は動いています。何もしません"
     exit 0
   fi
-  if [[ -f "$SERVICE_FILE" ]]; then
+  if [[ "$unit_same" == 0 && -f "$SERVICE_FILE" ]]; then
     diff -u "$SERVICE_FILE" <(write_unit) || true
   fi
-  # 書き換える前に確かめる（書いてから止まると、次に流したとき「変わらない」で起動し直されない）
+  if [[ -e "$pending_file" ]]; then
+    warn "前回の適用が途中で終わっています（$pending_file、$(cat "$pending_file" 2>/dev/null)）。続きから適用します"
+  fi
+  if [[ "$service_active" == 0 ]]; then
+    warn "comfyui.service が動いていません。起動し直します"
+  fi
+  # 書き換える前に確かめる
   if [[ "$force" == 1 ]]; then
     warn "ComfyUI のキューを確かめません（--force）"
   else
     comfy_queue_is_idle 8188 || exit 1
   fi
-  write_unit > "$SERVICE_FILE"
-  systemctl --user daemon-reload
-  systemctl --user restart comfyui.service
-  comfy_wait_ready 8188 "${COMFY_READY_TIMEOUT:-180}"
-  ok "unit を書き直して ComfyUI を起動し直しました"
+  unit_apply_failed() {
+    echo "失敗した段: $1。原因を直して同じコマンドを流し直せば、続きから適用します（印: $pending_file）" >&2
+    exit 1
+  }
+  mkdir -p "$(dirname "$pending_file")"
+  date -u +%Y-%m-%dT%H:%M:%SZ > "$pending_file"
+  if [[ "$unit_same" == 0 ]]; then
+    write_unit > "$SERVICE_FILE" || unit_apply_failed "unit の書き出し"
+  fi
+  systemctl --user daemon-reload || unit_apply_failed "systemctl --user daemon-reload"
+  systemctl --user restart comfyui.service || unit_apply_failed "systemctl --user restart comfyui.service"
+  comfy_wait_ready 8188 "${COMFY_READY_TIMEOUT:-180}" || unit_apply_failed "起動の待ち"
+  rm -f "$pending_file"
+  ok "unit を適用して ComfyUI を起動し直しました"
   exit 0
 fi
 

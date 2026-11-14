@@ -7,11 +7,14 @@
 # 版は hosts/ubuntu/<ホスト名>.env の COMFY_REF（--ref が優先）。空なら git pull --ff-only（master に追従）、
 # 値があれば git fetch --tags origin のあと、その commit を git checkout --detach する。
 #
-# 変える前に、いまの commit・git describe・uv pip freeze を
+# 変える前に、いまの commit・git describe・uv pip freeze・対象の ComfyUI の場所（comfy_dir）を
 # ${COMFY_SNAPSHOT_DIR:-~/.local/state/comfyui-update}/<UTC時刻>-<短いcommit>/ に控え、終わりに戻すコマンドを表示する。
+# 戻すコマンドには、今回の対象と方針を引き継ぐ（COMFY_DIR・COMFY_PORT が既定でなければ頭に付け、--no-restart なら付ける）。
 # --restore は控えの commit に戻し、freeze.txt で依存を入れ直す（戻す前にも控えを取るので、戻しを戻せる）。
+# 控えの comfy_dir がいまの COMFY_DIR と違えば、何も変えずに止まる（写しの控えで本番を戻さない）。
 #
 # 起動し直す前に ComfyUI のキュー（/queue）が空かを確かめ、空でなければ何も変えずに止まる（--force で飛ばす）。
+# 進むのは、つながらない（止まっている）ときだけ。タイムアウトや HTTP の誤りでは止まる。
 # 起動し直したあと /system_stats が返るまで待ち（既定 180 秒）、comfyui_version を表示する。
 # --no-restart は git と venv だけを変え、systemctl を呼ばない（キューも確かめない。サービスでない写しで試す用）。
 #
@@ -74,6 +77,10 @@ if ! command -v uv >/dev/null; then
   exit 1
 fi
 
+# 対象の ComfyUI の場所（symlink を解いた絶対パス）。控えに残し、--restore で照らす
+COMFY_DIR_REAL="$(cd "$COMFY_DIR" && pwd -P)"
+DEFAULT_COMFY_DIR_REAL="$(cd "$HOME/ComfyUI" 2>/dev/null && pwd -P || true)"
+
 if [[ -n "$restore_dir" ]]; then
   restore_dir="$(cd "$restore_dir" 2>/dev/null && pwd)" || { echo "控えのディレクトリがありません: $restore_dir" >&2; exit 1; }
   for f in commit freeze.txt; do
@@ -82,6 +89,17 @@ if [[ -n "$restore_dir" ]]; then
       exit 1
     fi
   done
+  # git・キュー・新しい控えより前に照らす（別の場所の控えで、いまの COMFY_DIR を変えない）
+  if [[ -s "$restore_dir/comfy_dir" ]]; then
+    snapshot_comfy_dir="$(cat "$restore_dir/comfy_dir")"
+    if [[ "$snapshot_comfy_dir" != "$COMFY_DIR_REAL" ]]; then
+      echo "この控えは $snapshot_comfy_dir のものです。いまの COMFY_DIR は $COMFY_DIR_REAL です。何も変えずに止めます" >&2
+      echo "その場所を戻すなら、COMFY_DIR=$(printf %q "$snapshot_comfy_dir") を付けて流してください" >&2
+      exit 1
+    fi
+  else
+    warn "控えに comfy_dir がありません（この確かめを足す前の控え）。$COMFY_DIR_REAL のものとして戻します"
+  fi
 fi
 
 # 未追跡のファイル（例: dekahamuntu の .chibihamuntu-freeze.txt）は checkout の邪魔にならないので見ない
@@ -119,6 +137,7 @@ take_snapshot() {
     fi
   done
   printf '%s\n' "$commit" > "$snapshot_dir/commit"
+  printf '%s\n' "$COMFY_DIR_REAL" > "$snapshot_dir/comfy_dir"
   git -C "$COMFY_DIR" describe --tags --always > "$snapshot_dir/describe"
   uv pip freeze --python "$PYTHON" > "$snapshot_dir/freeze.txt"
   ok "控え: $snapshot_dir（$(cat "$snapshot_dir/describe")）"
@@ -135,7 +154,18 @@ step "いまの状態を控える"
 snapshot_dir=""
 take_snapshot
 
-restore_cmd="$SCRIPT_DIR/update-comfyui-ubuntu.sh --restore $snapshot_dir"
+# 戻すコマンド（シェルに貼って安全なように %q で引用する）。今回の対象と方針を引き継ぐ
+restore_cmd=""
+if [[ "$COMFY_DIR_REAL" != "$DEFAULT_COMFY_DIR_REAL" ]]; then
+  restore_cmd+="COMFY_DIR=$(printf %q "$COMFY_DIR_REAL") "
+fi
+if [[ "$COMFY_PORT" != 8188 ]]; then
+  restore_cmd+="COMFY_PORT=$(printf %q "$COMFY_PORT") "
+fi
+restore_cmd+="$(printf %q "$SCRIPT_DIR/update-comfyui-ubuntu.sh") --restore $(printf %q "$snapshot_dir")"
+if [[ "$restart" == 0 ]]; then
+  restore_cmd+=" --no-restart"
+fi
 
 if [[ -n "$restore_dir" ]]; then
   step "控えに戻す: $restore_dir（$(cat "$restore_dir/describe" 2>/dev/null || echo '?')）"

@@ -4,18 +4,25 @@
 
 # comfy_queue_is_idle <port>
 # キュー（/queue）に実行中・待ちがなければ 0。あれば 1（何を止めるかは呼び出し側が決める）。
-# ComfyUIが応答しない（止まっている）ときは、止める仕事がないので 0。
+# 止まっているとみなして 0 を返すのは、つながらなかった（curl の終了コード 7）ときだけ。
+# タイムアウト（28）・HTTP の誤り（22）などは、生成中で応答が遅いだけかもしれないので、確かめられなかったとして 1。
 # art-studio のループは項目の合間にキューが空になる。止め方の手順は docs に書く。
 comfy_queue_is_idle() {
-  local port="$1" url body counts running pending
+  local port="$1" url body counts running pending rc=0
   url="http://127.0.0.1:$port/queue"
   if ! command -v curl >/dev/null; then
     echo "curl がないので ComfyUI のキューを確かめられません（確かめずに進めるなら --force）" >&2
     return 1
   fi
-  if ! body="$(curl -fsS --max-time 5 "$url" 2>/dev/null)"; then
-    echo "ComfyUI（$url）が応答しないので、止まっているものとして進みます"
+  body="$(curl -fsS --max-time 5 "$url" 2>/dev/null)" || rc=$?
+  if ((rc == 7)); then
+    echo "ComfyUI（$url）につながらないので、止まっているものとして進みます"
     return 0
+  fi
+  if ((rc != 0)); then
+    echo "ComfyUI のキュー（$url）を確かめられませんでした（curl の終了コード $rc。28 はタイムアウト、22 は HTTP の誤り）。" >&2
+    echo "何も変えずに止めます。確かめずに進めるなら --force" >&2
+    return 1
   fi
   if command -v jq >/dev/null; then
     counts="$(jq -r '"\(.queue_running | length) \(.queue_pending | length)"' <<<"$body" 2>/dev/null)" || counts=""

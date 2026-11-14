@@ -267,7 +267,8 @@ unitだけを書き直す場合（`COMFY_CUDA_DEVICES`・`COMFY_EXTRA_ARGS` を�
 ```
 
 - CUDAの動作確認とunitの書き出しだけをする（apt・clone・venv・PyTorch・依存・lingerは飛ばす）。導入済みの `~/ComfyUI/.venv` がなければ止まる
-- 今のunitと同じなら何もしない。違えば差（`diff -u`）を表示し、ComfyUIのキューが空なのを確かめてから書き、`daemon-reload` と `restart` をして、起動を待つ（下の「更新」と同じ確かめ。`--force` でキューを確かめない）
+- 何もしないのは、今のunitと同じで、前回の適用の途中の印がなく、`comfyui.service` が動いているときだけ。どれかが欠ければ（unitが違えば差（`diff -u`）を表示し）、ComfyUIのキューが空なのを確かめてから、印を置き、（違えば）書き、`daemon-reload` と `restart` をして、起動を待ち、印を消す（下の「更新」と同じ確かめ。`--force` でキューを確かめない）
+- 途中（書き出し・`daemon-reload`・`restart`・起動の待ち）で失敗したら、失敗した段を表示して終了コード 1 で止まり、印 `~/.local/state/comfyui-update/unit-apply-pending`（`XDG_STATE_HOME` があればその下）が残る。原因を直して同じコマンドを流し直せば、ファイルが同じでも続きから適用する
 
 ### ComfyUIの更新と戻し
 
@@ -280,10 +281,11 @@ ComfyUIは自動では更新しない。上げるときは明示的に流す。
 
 - **版**: ホストの設定の `COMFY_REF`（タグかcommit）。空なら今までどおり `git pull --ff-only`（masterに追従）。値があれば `git fetch --tags origin` のあと、そのcommitを `git checkout --detach` する。chibihamuntuは空（master）、dekahamuntuは `v0.45.2`（[dekahamuntu-setup.md の 2-9](dekahamuntu-setup.md#2-9-comfyui-の更新v0452と-minimax-h3-image)）。dekahamuntuは2026-11-14にv0.45.2へ上げたので、2台の版は分かれている
 - HEADがブランチから外れている（`COMFY_REF`・`--ref`・`--restore` で固定した）ときに `COMFY_REF` を空にして流すと、pullせずに止まる。masterに追従し直すなら `git -C ~/ComfyUI checkout master`
-- **控え**: 変える前に、いまの状態を `~/.local/state/comfyui-update/<UTC時刻>-<短いcommit>/` に控える（`commit`・`describe`（`git describe --tags --always`）・`freeze.txt`（`uv pip freeze`））。置き場所は `COMFY_SNAPSHOT_DIR` で変えられる。終わりに（起動の待ちで失敗したときも）戻すコマンドを表示する
+- **控え**: 変える前に、いまの状態を `~/.local/state/comfyui-update/<UTC時刻>-<短いcommit>/` に控える（`commit`・`describe`（`git describe --tags --always`）・`freeze.txt`（`uv pip freeze`）・`comfy_dir`（対象のComfyUIの絶対パス））。置き場所は `COMFY_SNAPSHOT_DIR` で変えられる。終わりに（起動の待ちで失敗したときも）戻すコマンドを表示する
+- 戻すコマンドは今回の対象と方針を引き継ぐ: `COMFY_DIR`・`COMFY_PORT` が既定（`~/ComfyUI`・8188）でなければ `COMFY_DIR=…` などを頭に付け、`--no-restart` で流したなら `--no-restart` を付ける（写しで流したときに表示されたコマンドをそのまま貼っても、本番を変えない）
 - 追跡しているファイルに未コミットの変更があれば、何もせずに止まる。未追跡のファイル（例: dekahamuntuの `~/ComfyUI/.chibihamuntu-freeze.txt`）では止まらない（前の版は止まっていた）
 - 依存は `requirements.txt`（あれば `manager_requirements.txt` も）を `uv pip install` する
-- **キューの確かめ**: 起動し直す前に、ComfyUIのキュー（`/queue`）に実行中・待ちがないことを確かめ、あれば何も変えずに止まる（`--force` で確かめない）。ComfyUIが応答しないときは、止まっているものとして進む
+- **キューの確かめ**: 起動し直す前に、ComfyUIのキュー（`/queue`）に実行中・待ちがないことを確かめ、あれば何も変えずに止まる（`--force` で確かめない）。進むのは、ComfyUIにつながらない（止まっている。curl の終了コード 7）ときだけ。タイムアウト（生成中で応答が遅い）やHTTPの誤り、読めない応答では、何も変えずに止まる
 - スクリプトが見るのはキューだけ。art-studioのループは項目の合間にキューが空になるので、流す前に、art-studioに実行待ち・実行中のループがないことを自分で確かめる（art-studioの画面のループの一覧か、`~/.local/share/art-studio/studio.db` の `loops` に `state` が `running`・`stopping` のものがないこと）
 - **起動の待ち**: 起動し直したあと、`/system_stats` が返るまで待ち（既定180秒、`COMFY_READY_TIMEOUT`）、`comfyui_version` を表示する。返らなければ戻すコマンドを表示して失敗する
 - `--no-restart`: gitとvenvだけを変え、systemctlを呼ばない（キューも確かめない）。サービスでない写し（`COMFY_DIR` で別の場所を指す）で試す用
@@ -302,6 +304,7 @@ sqlite3 ~/.local/share/art-studio/studio.db "select count(*) from loops where st
 
 - 控えのcommitに `checkout --detach` し、`freeze.txt` で依存を入れ直す。freezeにはPyTorchのindexにしかない `torch==…+cu130` とPyPIにしかない版が混ざるので、`--extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match` を付けている（付けないと「certifi was found on …/whl/cu130, but not at the requested version」で失敗する。dekahamuntuで見た）
 - 戻す前にも控えを取るので、戻しを戻せる。`--force`・`--no-restart` は更新と同じ
+- 控えの `comfy_dir` がいまの `COMFY_DIR` と違えば、git・キュー・新しい控えより前に、何も変えずに止まる（「この控えは <dir> のもの」と表示する。その場所を戻すなら `COMFY_DIR=<dir>` を付けて流す）。`comfy_dir` のない控え（この確かめを足す前のもの。dekahamuntu の `20261114T222702Z-e3bee7ffc`）は、警告を出していまの `COMFY_DIR` のものとして戻す
 - 戻らないもの: `freeze.txt` にない（新しい版で足された）パッケージは消さない。ComfyUIの `user/`（設定・ワークフロー）は触らない（拡張の `custom_nodes/` とモデルもスクリプトは触らない）
 - 戻したままにするなら、ホストの設定の `COMFY_REF` も戻した版に直す（直さないと、次の `update-comfyui-ubuntu.sh` でまた `COMFY_REF` の版に上がる）
 

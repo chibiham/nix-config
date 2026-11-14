@@ -311,7 +311,7 @@ scripts/install-comfyui-ubuntu.sh --unit-only
 scripts/install-minimax-h3-image-ubuntu.sh
 ```
 
-2. と 3. はそれぞれ ComfyUI を起動し直す（どちらもキューを確かめる）。dekahamuntu の `~/ComfyUI` には未追跡の `.chibihamuntu-freeze.txt` があり、前の `update-comfyui-ubuntu.sh` は「未コミットの変更」で止まった。新しい版は未追跡のファイルでは止まらない。
+2. と 3. はそれぞれ ComfyUI を起動し直す（どちらもキューを確かめる。進むのはキューが空か、ComfyUI につながらないときだけ。タイムアウトや HTTP の誤りでは止まる）。3. が途中で失敗したら、原因を直して同じコマンドを流し直せば続きから適用する（印 `~/.local/state/comfyui-update/unit-apply-pending`）。dekahamuntu の `~/ComfyUI` には未追跡の `.chibihamuntu-freeze.txt` があり、前の `update-comfyui-ubuntu.sh` は「未コミットの変更」で止まった。新しい版は未追跡のファイルでは止まらない。
 
 本番での実績（2026-11-14 UTC。日本時間は +9 時間で 11-15）:
 
@@ -332,7 +332,8 @@ scripts/update-comfyui-ubuntu.sh --restore ~/.local/state/comfyui-update/2026111
 COMFY_CUDA_DEVICES=0 scripts/install-comfyui-ubuntu.sh --unit-only
 ```
 
-- 控え `~/.local/state/comfyui-update/20261114T222702Z-e3bee7ffc` は戻すのに要るので残してある
+- 控え `~/.local/state/comfyui-update/20261114T222702Z-e3bee7ffc` は戻すのに要るので残してある。この控えには `comfy_dir` がない（確かめを足す前に取った）ので、`--restore` は警告を 1 行出して `~/ComfyUI` のものとして戻す。いまのスクリプトで取る控えには `comfy_dir` が入り、別の場所の控えでは止まる
+- 写し（`COMFY_DIR=~/issue5-stage/ComfyUI … --no-restart`）で流したときに表示される戻すコマンドには、`COMFY_DIR=…` と `--no-restart` が付く（そのまま貼っても本番は変わらない）
 - 戻したままにするなら、`hosts/ubuntu/dekahamuntu.env` の `COMFY_REF`・`COMFY_CUDA_DEVICES` も直す（直さないと、次に流したとき v0.45.2・`0,1` に戻る）
 - `--sleep-idle-seconds` を外すなら、env の `QWEN_SLEEP_IDLE_SECONDS` の行を空にして `install-qwen38-ubuntu.sh`。env は `: "${VAR:=値}"` なので、環境変数で空を渡しても 600 になる（空の値も上書きされる）
 - 戻しで戻らないもの: `freeze.txt` にない（新しい版で足された）パッケージは消さない。ComfyUI の `user/`（設定・ワークフロー）は触らない。新しいフロントエンドで保存し直したワークフローを古いフロントエンドで開けるかは確かめていない
