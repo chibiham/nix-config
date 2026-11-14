@@ -76,6 +76,7 @@ goal:
 - 2026-11-15 08:32 [agent] レビュー結論はREVIEW_NG、修正3件。(P1) update-comfyui:138 の復元コマンドがCOMFY_DIRと--no-restartを保持せず、写しの確認後に表示どおり実行すると本番~/ComfyUIを復元・再起動する。(P1) lib/comfyui:16-18 のキュー取得失敗が再起動許可になる。(P2) install-comfyui:177-179 はunit書換え後のdaemon-reload/restart失敗から再実行しても一致判定で成功し、未適用状態を回復しない。後2種類の更新経路も使い捨て環境の再現で確認。モデル取得担当は固定元データ・manifest互換性・正常/不一致時の挙動に修正必須の不具合なし。変更したshell6ファイルのbash -n通過。コード・コミット・実機設定は変更していない。
 - 2026-11-15 08:32 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合は3件。
 - 2026-11-15 08:33 [agent] 実装レビューの差し戻し(1/3)を受けた。指摘 3 件を直す: (1) 写しで流した update-comfyui の「戻すなら」に COMFY_DIR と --no-restart を引き継ぎ、控えに対象のディレクトリを残して別の場所への --restore は止める (2) キューの確かめは、つながらないときだけ「止まっている」とし、タイムアウト・HTTP の誤りでは止まる (3) --unit-only は適用の途中の印と is-active を見て、失敗のあと流し直せば続きから適用する。サブエージェントに依頼中
+- 2026-11-15 08:43 [agent] レビューの指摘 3 件を直した(agent/5 の 6339c60。載せ直しで前の commit は fd80022・cb4a669・7c99324・84124be になっている)。(1) 「戻すなら」に COMFY_DIR(と COMFY_PORT)・--no-restart を引き継ぎ、控えに comfy_dir を残して、別の場所の控えでの --restore は何も変えずに止まる (2) キューの確かめは curl の終了コード 7(つながらない)のときだけ進み、タイムアウト(28)・HTTP の誤り(22)では止まる (3) --unit-only は適用の途中の印(~/.local/state/comfyui-update/unit-apply-pending)と is-active を見て、失敗のあと流し直すと続きから適用する。確かめ: にせのコマンドの試験 30 件 + 前からの 33 件が通過(本物の curl と 6 秒遅れるサーバーでも 28 で止まる)、bash -n・shellcheck、chibihamuntu と dekahamuntu の引数なしの unit・preset は変わらず、nix eval は 4 つとも変わらず。実機: 本番で --unit-only は「変わらず、動いています。何もしません」、写しで流した update の「戻すなら」に COMFY_DIR=…/issue5-stage/ComfyUI と --no-restart が入り、その控えを COMFY_DIR なしで --restore すると rc=1 で止まって本番の HEAD(v0.45.2)も控えのフォルダも変わらなかった
 
 ## エージェントの結果(2026-11-15 08:32)
 
