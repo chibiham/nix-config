@@ -61,3 +61,4 @@ assignee: agent
 ## 作業ログ
 
 - 2026-11-15 02:19 [me] 完了条件の案を有効にした(ゴールのタスクにした)
+- 2026-11-15 02:28 [agent] 着手。実機で確かめた: (1) art-studio のループ 227 が実行中(残り約 400 組、1 組 約 15 秒)なので ComfyUI はまだ止めていない。終わるのを待つ (2) ComfyUI 0.45 系の本体に Select CLIP Device(gpu:N)があり、第三者の拡張なしで B が組める。上げる先は v0.45.2(v0.45.3 は公開から72時間未満) (3) 手元の NVFP4 のテキストエンコーダーは Comfy-Org/MiniMax-H3-Image のものと sha256 が同じ (4) llama-server 0.6.0 の Router で --sleep-idle-seconds が効く(別ポートの試験: 放置 45 秒で GPU 1 が 14,474 → 166MiB、次の問いで約 11 秒で戻る)。本番の Router に約 7 時間載ったままだった Uncensored 版は降ろした (5) 公式に 12.5GB の w4a8 版(minimax_h3_image_pruned_w4a8)があるので比べる対象に足す。スクリプトの変更はサブエージェントに依頼中
