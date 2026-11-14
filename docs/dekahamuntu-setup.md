@@ -176,9 +176,9 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 
 > docs/dekahamuntu-setup.md の「PCIe の帯域」の節のコマンドで、2 枚の PCIe の世代・幅（Gen5 x8 の見込み）、`nvidia-smi topo -m`、P2P の可否を読んで、結果を docs/dekahamuntu-setup.md の「実機で確かめた値」に書いて。設定は何も変えないで。
 
-### 2-4. ComfyUI（GPU 0）
+### 2-4. ComfyUI（既定のデバイスは GPU 0）
 
-> docs/ubuntu-server.md の「ComfyUI」の章に従って `scripts/install-comfyui-ubuntu.sh` を流して（apt と linger に sudo が要るので、その部分は私が流すコマンドを出して）。dekahamuntu.env の `COMFY_CUDA_DEVICES=0` で GPU 0 だけを使う。終わったら `scripts/configure-tailscale-serve-ubuntu.sh` で tailnet に公開して（`TAILSCALE_SERVE`）。モデルは自動で取らない。どのモデルを置くかは docs/ai-server-placement.md の案を私と決めてから。
+> docs/ubuntu-server.md の「ComfyUI」の章に従って `scripts/install-comfyui-ubuntu.sh` を流して（apt と linger に sudo が要るので、その部分は私が流すコマンドを出して）。dekahamuntu.env の `COMFY_CUDA_DEVICES=0,1` で 2 枚とも見せる（既定のデバイスは GPU 0 で、今までのワークフローは GPU 0 だけを使う。GPU 1 は MiniMax H3 Image のテキストエンコーダーの計算を回すためだけ。2-9）。版は `COMFY_REF`（v0.45.2）。終わったら `scripts/configure-tailscale-serve-ubuntu.sh` で tailnet に公開して（`TAILSCALE_SERVE`）。モデルは自動で取らない。どのモデルを置くかは docs/ai-server-placement.md の案を私と決めてから。
 
 `~/ai`（private repo）は `gh repo clone chibiham/chibiham-ai ~/ai -- -b develop`（https。`gh auth login` 済みであること）。
 
@@ -189,6 +189,8 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 3. モデル（`~/ComfyUI/models`、約 427GB）は chibihamuntu から rsync で写し、`~/ai/scripts/models check --hash` で確かめた
 4. art-studio: `~/ai/scripts/install-art-studio`（unit 本体）と `scripts/configure-art-studio-ubuntu.sh`（このホストの drop-in。`ART_STUDIO_COMFYUI_URL`・`ART_STUDIO_CUDA_DEVICES`）。モザイクの `.venv` は `~/ai/apps/art-studio` の README の手順。作品と DB は chibihamuntu から写した
 5. Tailscale Serve は本人が sudo で `443 → 8188`、`4520 → 4520` を設定した（いまは `configure-tailscale-serve-ubuntu.sh` で同じ形になる）
+
+このときの unit は GPU 0 だけ（`CUDA_VISIBLE_DEVICES=0`）、本体は `e3bee7ff`。v0.45.2 への更新と、GPU 1 も見せる変更（2026-11-14）は「[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)」。
 
 ### 2-5. Qwen（GPU 1。束ねるときは 2 枚）
 
@@ -210,6 +212,7 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 6. いまの形（本人の決め、2026-11-13）: `ai-mode split` が既定。GPU 0 = ComfyUI、GPU 1 = Flash-Next の Router を常駐（モデルは最初の問いで読み込む）。束ね（`ai-mode llm-dual`）は必要なときに切り替える
 7. ComfyUI で画像（Anima、Qwen-Image 2.1）を 1 枚ずつ続けて作りながら計った（2026-11-14 の本人の依頼）: 長い問いの温まったあとの生成は UD-Q3_K_XL 20.62〜22.26、Uncensored 版 22.15〜25.79 tok/s（単独より 1〜2 割遅い）、画像の 1 枚あたりは +1〜2%。SSD の大きな読み直しは起きなかった。細かい値は [ai-server-placement.md の「ComfyUI で画像を作りながらの同居」](ai-server-placement.md#comfyui-で画像を作りながらの同居dekahamuntu2026-11-14)
 8. 本人が 4. の `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080` を流した（2026-11-14）。確かめた（2026-11-13 19:06 UTC = 日本時間 11-14 4:06）: `tailscale serve status` に 443 → 8188、4520 → 4520、8443 → 8080 の 3 つ（どれも tailnet only）。Mac から tailnet 経由で 8443 の `/health` が 200、`/models` に 2 つのモデルが出て、`/v1/chat/completions`（Uncensored 版、「1+1 は？数字だけで答えて。」）に「2」が返った。そのあとモデルをアンロードした（2 つとも unloaded、Router は常駐、ComfyUI は `/system_stats` 200）。これで第2段の Qwen（常駐の qwen38.service と tailnet への公開）は通った
+9. 2026-11-14: 使い終わったモデルを 600 秒で降ろすようにした（`QWEN_SLEEP_IDLE_SECONDS=600` → `--sleep-idle-seconds 600`。`install-qwen38-ubuntu.sh` を流し直した）。Qwen のモデルが GPU 1 に載ったままだと、MiniMax H3 Image のテキストエンコーダーの計算（GPU 1）が OutOfMemoryError になるため。確かめた値は「[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)」の「llama との同居」
 
 ### 2-6. 学習・Applio（必要になったら）
 
@@ -222,6 +225,213 @@ subako の `subako.config.json` の `machines` に dekahamuntu を足すと、GP
 ### 2-8. ケースファンを GPU の温度で回す
 
 本人が順に流す（sudo が要る）。中身と手順は下の「[ケースファン](#ケースファンgpu-の温度で回す)」。
+
+### 2-9. ComfyUI の更新（v0.45.2）と MiniMax H3 Image
+
+issue 5（docs/issues/5-dekahamuntu-minimax-h3-image.md）。作業は 2026-11-14 UTC（日本時間 11-15 の未明〜朝）。本人の依頼（2026-11-15 日本時間、原文）:
+
+> Bで構成しよう。comfy更新もやろう。flash nextはあんまり使わなそうなので大丈夫なんだけど、llamaから呼び出しなければメモリ取り合わない？llama停止しなくても大丈夫なのかな。
+
+（B = テキストエンコーダーを GPU 1、絵の本体（DiT）を GPU 0 に分けて、プロンプトが変わっても本体の入れ替えが起きない形。ほかの案は A = GPU 0 だけで入れ替える、C = chibihamuntu の 3090。比べた値は [ai-server-placement.md の「実測（2026-11-14）: MiniMax H3 Image」](ai-server-placement.md#実測2026-11-14-minimax-h3-imagedekahamuntu)。）
+
+#### 構成（B）
+
+| | GPU 0 | GPU 1 |
+|---|---|---|
+| ComfyUI | 既定のデバイス（`cuda:0`）。今までのワークフロー全部と、H3 Image の本体（DiT）・VAE。本体はプロンプトを変えても降りない | H3 Image のテキストエンコーダー（Qwen3-VL 32B NVFP4）の**計算だけ**。ノード `Select CLIP Device`（`gpu:1`）で回す。重み（約 15GB）は RAM に置かれ、GPU 1 を使うのはエンコードのあいだだけ（最大 1.5〜1.6GB、終わると 336〜348MiB） |
+| Qwen | — | `qwen38.service`（Router）。モデルが載っているあいだは、H3 Image（B）のエンコードが OutOfMemoryError になる（下の「llama との同居」） |
+| art-studio のモザイク（YOLO） | GPU 0 のまま（`ART_STUDIO_CUDA_DEVICES=0` は変えていない） | — |
+
+- ComfyUI に 2 枚を見せる（`COMFY_CUDA_DEVICES=0,1`、unit の `CUDA_DEVICE_ORDER=PCI_BUS_ID`）。v0.45.2 の本体は、ノードで指定しない限り既定のデバイスしか使わない（コードで確かめた: テキストエンコーダー・VAE・本体とも `get_torch_device()`）。本番でも、2 枚見せたあとの主なレシピ 5 つは GPU 1 を使わなかった（GPU 1 は 138MiB のまま。下の「確かめたこと」）
+- テキストエンコーダーを GPU 1 で回すのは、本体のノード `Select CLIP Device`（`SelectCLIPDevice`、category advanced/multigpu）。第三者の拡張（ComfyUI-MultiGPU など）は入れていない。このノードは `e3bee7ff` にもあったが、H3 Image への対応は 0.45.0 から。GPU が 1 枚しか見えないときは `gpu:N` の選択肢が出ず、指定があっても素通しになる。本番で 2 枚を見せたあとの選択肢は `default / cpu / gpu:0 / gpu:1`
+- B の実際の動き（v0.45.2、本番で見た）: `gpu:1` にしても、テキストエンコーダーは GPU 1 の VRAM に常駐しない。ログは「Creating deepclone of MiniMaxH3TEModel_ for cuda:1.」「Model MiniMaxH3TEModel_ prepared for dynamic VRAM loading. 14956MB Staged.」で、重みは RAM に置かれる（ComfyUI の RSS は A の 8〜13GB に対して B は 23〜28GB）。エンコードの 1 秒ほど GPU 1 の使用率が 87% になる。1 枚目はテキストエンコーダーの用意に約 17 秒かかる回があった（GPU 1 に 1,072MiB、使用率 4〜20% の時間が続く）。2 回目からは約 1 秒
+- ワークフローのノード: `UNETLoader` → `KSampler`（6 steps・cfg 1・euler / simple・denoise 1）、`CLIPLoader`（type `minimax`）→ `Select CLIP Device`（`gpu:1`）→ `MiniMaxH3ImageConditioning`（prompt・width・height。positive と latent を出す）→ `ConditioningZeroOut`（negative）、`VAELoader` → `VAEDecode`
+- テキストエンコーダーは、公式の文書（docs.comfy.org）が挙げる int8 版（27.1GB）ではなく、同じ公式リポジトリにある NVFP4 版（15.7GB。H3 の動画と同じファイルで、前から置いてあった）を使う。H3 Image で使えた（Blackwell は NVFP4 をそのまま計算できる。ログに `Native ops: … nvfp4`）
+- 既定は **公式 int8 を B の形で**。w4a8 も置き、Qwen を載せたまま使うとき・GPU 1 を空けておきたいとき・4096² を速く出したいときに A の形（`Select CLIP Device` なし）で使う。GGUF は使わない。エージェントの決め（2026-11-14）で、本人が spec の絵を見て変えるかもしれない。理由は [ai-server-placement.md の「決定」](ai-server-placement.md#dekahamuntu-の-minimax-h3-image2026-11-15-日本時間)
+- ComfyUI の画面用のワークフロー: `~/ComfyUI/user/default/workflows/MiniMax-H3-Image/minimax_h3_image_t2i_dual_gpu.json`（公式 int8、`Select CLIP Device` = `gpu:1`、2048²、6 steps、SaveImage の prefix は `minimax_h3_image/h3`、使い方の注記つき）。dekahamuntu では `user/default/workflows` が `~/ai/comfyui/workflows` への symlink なので、実体は `~/ai/comfyui/workflows/MiniMax-H3-Image/` の未追跡のファイル（`~/ai` には commit していない）。art-studio のレシピ・台帳（`~/ai` の `models.lock.toml`）・拡張の一覧への書き込みと、このワークフローの扱いは chibiham-ai#74 でやる
+
+#### 入れたもの
+
+| もの | 版・値 | 本番 | 作り直すもの |
+|---|---|---|---|
+| ComfyUI の本体 | v0.45.2（`6e8488ef986067631e9c86e2a14360644b105663`、タグの日付 2026-11-11T02:25:54Z）。前は `e3bee7ff`（`git describe` は v0.42.0-7-ge3bee7ffc、2026-10-20） | 上げた（2026-11-14 22:27 UTC = 日本時間 11-15 7:27） | `COMFY_REF=v0.45.2` と `update-comfyui-ubuntu.sh` |
+| Python のパッケージ | 下の 8 つが変わった | 同上 | 同上 |
+| comfyui.service | `CUDA_VISIBLE_DEVICES=0,1`（前は `0`。unit の差はこの 1 行） | 書き換えた（22:30 UTC = 日本時間 7:30） | `COMFY_CUDA_DEVICES=0,1` と `install-comfyui-ubuntu.sh --unit-only`（sudo なし） |
+| H3 Image の重み | 下の表 | 置いた（2026-11-14 17:29〜17:31 UTC = 日本時間 11-15 2:29〜2:31、約 300MiB/s） | `install-minimax-h3-image-ubuntu.sh`（`H3_IMAGE_MODELS=int8 w4a8` か引数） |
+| ComfyUI-GGUF（city96、GGUF の本体を読む第三者の拡張） | commit `6ea2651e7df66d7585f6ffee804b20e92fb38b8a`（2026-01-12）、依存で `gguf==0.19.0` が入った | **入れていない**（比べるために写しにだけ入れた） | 使わない。`install-minimax-h3-image-ubuntu.sh gguf-q5`（か `gguf-q4`）を引数で選んだときだけ `custom_nodes/ComfyUI-GGUF` に置く |
+| qwen38.service・qwen38-dual.service | `--sleep-idle-seconds 600`（unit の差はどちらもこの 1 行。preset は変わらない） | 入れた（2026-11-14、`install-qwen38-ubuntu.sh`） | `QWEN_SLEEP_IDLE_SECONDS=600` と `install-qwen38-ubuntu.sh` |
+| `ai-mode image-dual`、`split` での ComfyUI の `/free` | `home/hosts/dekahamuntu.nix` | **まだ古い**（home-manager switch は本人がやる） | home-manager switch |
+
+v0.45.0 以上が要る（H3 Image の対応が 0.45.0 から）。v0.45.3（2026-11-12T20:58:31Z）は、作業した時点で公開から 72 時間たっていなかったので使わない（このリポジトリの「公開から 72 時間未満のものは使わない」に合わせた）。chibihamuntu は触らない（ComfyUI は disable 済みで、H3 の動画を手で使うときだけ起こす）ので、**2 台で版が分かれた**（chibihamuntu は `e3bee7ff`、`COMFY_REF` は空で master を pull）。
+
+更新で変わった Python のパッケージ（本番の `uv pip freeze` との差。torch 2.13.0+cu130 などは変わらない。更新のあとの `/system_stats` の版もこのとおり）:
+
+| パッケージ | e3bee7ff | v0.45.2 |
+|---|---|---|
+| comfyui-frontend-package | 1.55.18 | 1.58.5 |
+| comfyui-workflow-templates | 0.11.89 | 0.11.106 |
+| comfyui-workflow-templates-core | 0.3.380 | 0.3.397 |
+| comfyui-workflow-templates-json | 0.1.115 | 0.1.132 |
+| comfyui-workflow-templates-media-assets-02 | 0.1.17 | 0.1.31 |
+| comfyui-embedded-docs | 0.5.14 | 0.5.16 |
+| comfy-aimdo | 0.5.6 | 0.6.0 |
+| comfy-kitchen | 0.2.39 | 0.2.41 |
+
+H3 Image の重み（`~/ComfyUI/models/` の下。URL は `https://huggingface.co/<リポジトリ>/resolve/<revision>/<パス>`）:
+
+| 置き場所 | 大きさ（bytes） | sha256 | 取得元 |
+|---|---|---|---|
+| `vae/minimax_h3_image_vae_fp16.safetensors` | 1168505312 | `d80e9c2e5cfc9844869961ff5a58c9a9e52182df6bfb30b26018dd7f348721af` | Comfy-Org/MiniMax-H3-Image @ `0bb149f51e3156ed4b90dd45d5620346bfe1df8f` |
+| `diffusion_models/minimax_h3_image_pruned_int8_convrot.safetensors`（既定） | 20979314802 | `83eb140f1ff95c068f8a6886e6d3f3d0d4ab2e07bb2fe6d2ef992a51146ee622` | 同上 |
+| `diffusion_models/minimax_h3_image_pruned_w4a8.safetensors` | 12549794530 | `517cc19b85348386f4df7c806dce80d839d0899e7cdaa3e1dbb09de964381dbb` | 同上（公式。issue を書いた時点では知られていなかった 12.5GB の版） |
+| `diffusion_models/MiniMax-H3-Image-Pruned-Q5_K_M.gguf`（使わない。消してよい候補） | 14077892224 | `f4e139d7aa5cd67727b6645a5b1c17d1c931f7289d46a3b1ea183d7a9b8ce44b` | Abiray/MiniMax-H3-Image-GGUF @ `fec7ec774db49d0c785bdc2174a488576b7396dd`（第三者） |
+| `diffusion_models/MiniMax-H3-Image-Pruned-Q4_K_M.gguf`（使わない。消してよい候補） | 11573106304 | `e545379320e533f9d60e2d831a9489d94889158e88cd681ea7940da47882015f` | 同上 |
+| `text_encoders/qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors`（前からあった。取り直していない） | 15687142551 | `35a88d51044231fe332301d7a62aa81e3f2cba62febeb446e2c1e3e0ef76f2c6` | Comfy-Org/MiniMax-H3-Image の同じ revision にあるものと sha256 が同じ（H3 の動画の Comfy-Org/MiniMax-H3 と同じファイル） |
+| `text_encoders/qwen3.5_9b_w4a8_gptq.safetensors`（前からあった。任意のプロンプト拡張） | 7343591088 | `4cc6a1543ad2061806da46f35f90cadb4801dcba246c44782cf42ec0feb6407c` | 同上。sha256 一致 |
+
+- Comfy-Org/MiniMax-H3-Image のファイルの upload は 2026-11-10、リポジトリの最後の commit は 2026-11-11T12:10Z。Abiray の GGUF は 2026-11-10〜11（最後の commit 2026-11-11T14:28Z）。どちらも取得の時点で 72 時間を過ぎていた
+- `install-minimax-h3-image-ubuntu.sh` は revision・大きさ・sha256 を固定している。`--verify` で置いたファイルの sha256 が一致し、新しい場所への取得（VAE・テキストエンコーダー・w4a8、29GB を 85 秒）も通った。終わりに、台帳（`~/ai` の `models.lock.toml`）に写す `[[model]]` の行を出す。`~/ai` のリポジトリは書き換えていない
+- VAE とテキストエンコーダーはいつも置く。プロンプト拡張は `--with-expander` のときだけ
+- 引数なしで流すと `H3_IMAGE_MODELS`（dekahamuntu は `int8 w4a8`）を置く。GGUF も ComfyUI-GGUF も置かない
+
+#### 手順（本番で流したもの）
+
+ComfyUI を起動し直す前に、ComfyUI のキューが空で、art-studio に実行待ち・実行中のループがないことを確かめる（本人の決め。issue の「進め方」）。スクリプトが見るのはキューだけなので、art-studio のループは自分で見る（[ubuntu-server.md の「ComfyUIの更新と戻し」](ubuntu-server.md#comfyuiの更新と戻し)）。
+
+```bash
+cd ~/.config/nix-config   # この変更（スクリプトと hosts/ubuntu/dekahamuntu.env）が入っていること
+# 1. キューと art-studio のループ（どちらも 0 であること）
+curl -fsS http://127.0.0.1:8188/queue | jq '[.queue_running, .queue_pending] | map(length)'
+sqlite3 ~/.local/share/art-studio/studio.db "select count(*) from loops where state in ('running','stopping');"
+# 2. 本体を v0.45.2 へ（COMFY_REF。控えを取り、終わりに戻すコマンドを表示する）
+scripts/update-comfyui-ubuntu.sh
+# 3. GPU 1 も見せる（unit の差を表示してから書き、起動し直す）
+scripts/install-comfyui-ubuntu.sh --unit-only
+# 4. 重み（置いてあれば大きさだけ確かめる。--verify で sha256 も）
+scripts/install-minimax-h3-image-ubuntu.sh
+```
+
+2. と 3. はそれぞれ ComfyUI を起動し直す（どちらもキューを確かめる）。dekahamuntu の `~/ComfyUI` には未追跡の `.chibihamuntu-freeze.txt` があり、前の `update-comfyui-ubuntu.sh` は「未コミットの変更」で止まった。新しい版は未追跡のファイルでは止まらない。
+
+本番での実績（2026-11-14 UTC。日本時間は +9 時間で 11-15）:
+
+1. 本人の art-studio のループ（231・233、計 1,200 組）が 22:14 に済み、キューもループも空の状態が 10 分続いたのを確かめてから始めた（22:24:22）
+2. 22:25〜22:27: 更新の前（`e3bee7ff`）の本番で、主なレシピ 5 つを 1 枚ずつ作った（比べる元）
+3. 22:27:02〜22:27:14: `update-comfyui-ubuntu.sh`。実機の `~/.config/nix-config` は develop のままで触らず、このブランチのスクリプトを `~/issue5-stage/nix-config/` に写して流した（値は写した dekahamuntu.env の `COMFY_REF=v0.45.2`）。控えは `~/.local/state/comfyui-update/20261114T222702Z-e3bee7ffc`（describe は v0.42.0-7-ge3bee7ffc）。8 つのパッケージが入れ替わり、起動し直しから 9 秒で応答して `comfyui_version 0.45.2`
+4. 22:30:17〜22:30:26: `install-comfyui-ubuntu.sh --unit-only`。出力に「ComfyUIに見せるGPU: 0,1」「既定のデバイス: cuda:0 = NVIDIA GeForce RTX 5060 Ti」。unit の差は `CUDA_VISIBLE_DEVICES=0` → `0,1` の 1 行。6 秒で応答し、`/system_stats` の devices に cuda:0・cuda:1 が出た
+5. 22:33:17〜22:50:31: H3 Image の A/B。22:51〜23:00: Qwen との同居の確かめ。23:01〜23:13: GGUF の A/B（写しを 2 枚見せる形で起動して計った。本番の ComfyUI のモデルは降ろしておいた）
+6. 4. の重みは 17:29〜17:31 UTC に置いてあった（ここでは流し直していない）
+7. 計測のあいだの温度の最大は 74℃（GPU 0、4096²）、電力の最大 183W、fan2go は全部の回で active（failsafe なし）。83℃ には届いていない。sudo は使っていない。chibihamuntu には触っていない
+
+#### 戻し方
+
+```bash
+# 本体と依存を e3bee7ff の控えに戻す
+scripts/update-comfyui-ubuntu.sh --restore ~/.local/state/comfyui-update/20261114T222702Z-e3bee7ffc
+# GPU 0 だけに戻す
+COMFY_CUDA_DEVICES=0 scripts/install-comfyui-ubuntu.sh --unit-only
+```
+
+- 控え `~/.local/state/comfyui-update/20261114T222702Z-e3bee7ffc` は戻すのに要るので残してある
+- 戻したままにするなら、`hosts/ubuntu/dekahamuntu.env` の `COMFY_REF`・`COMFY_CUDA_DEVICES` も直す（直さないと、次に流したとき v0.45.2・`0,1` に戻る）
+- `--sleep-idle-seconds` を外すなら、env の `QWEN_SLEEP_IDLE_SECONDS` の行を空にして `install-qwen38-ubuntu.sh`。env は `: "${VAR:=値}"` なので、環境変数で空を渡しても 600 になる（空の値も上書きされる）
+- 戻しで戻らないもの: `freeze.txt` にない（新しい版で足された）パッケージは消さない。ComfyUI の `user/`（設定・ワークフロー）は触らない。新しいフロントエンドで保存し直したワークフローを古いフロントエンドで開けるかは確かめていない
+- 置いた重みは戻しても残る（消すなら手で消す）
+
+戻しは先に、本番に触れない写しで確かめた（`~/issue5-stage/ComfyUI`。本番の `~/ComfyUI` を `git clone` し、本番の `uv pip freeze` から venv を作った。作り直した venv の freeze は本番と一致した）。写しで、新しい `update-comfyui-ubuntu.sh --no-restart`（`COMFY_REF=v0.45.2`）→ `update-comfyui-ubuntu.sh --restore <控え> --no-restart` と流し、戻したあとの commit が `e3bee7ff`、`uv pip freeze` が本番の freeze と 1 行も違わないことを確かめた。`--restore` の `uv pip install -r freeze.txt` は、`--extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match` を付けないと「certifi was found on …/whl/cu130, but not at the requested version」で失敗した（実機で見た。スクリプトには入っている）。本番では戻していない。
+
+#### llama との同居
+
+決めたこと: Router（`qwen38.service`）は止めない。
+
+1. **使い終わったモデルは自動で降ろす**: `QWEN_SLEEP_IDLE_SECONDS=600`（dekahamuntu.env）→ unit の `--sleep-idle-seconds 600`。Qwen は使い終わって 10 分で降りるので、ふだんは「Qwen が載ったまま H3 Image（B）を投げる」状態にならない
+2. **Qwen が載っているときに H3 Image を使うなら**: `ai-mode image-dual` で Qwen のモデルを降ろす（switch の前は下の `/models/unload` の curl）か、A の形（`Select CLIP Device` なし、か `default`。w4a8 が速い）のワークフローを使う
+3. **載ったまま B を投げると、黙って遅くなるのではなく、OutOfMemoryError（device 1）で止まる**（1 枚目は通ることがある）。Qwen は落ちない
+4. H3 Image（B）を使ったあとは、何もしなくても Qwen を読み込める（`ai-mode split` は要らない）
+
+| `ai-mode` | 動く unit | すること |
+|---|---|---|
+| `split`（既定） | comfyui・qwen38 | ComfyUI に `/free`（モデルを降ろさせる。実行中のものが終わってから）。B のテキストエンコーダーの重みは RAM にあるので、これは主に RAM を Qwen（Flash-Next は RAM に約 52GB）に空ける意味になる |
+| `image-dual` | comfyui・qwen38 | Qwen のモデルを `/models/unload` で降ろす（Router は止めない。次に問うと読み込み直す）。GPU 1 を H3 Image のエンコードに空ける |
+| `llm-dual` | qwen38-dual | 2 枚を束ねた Qwen（前と同じ） |
+
+`image-dual` と `split` の `/free` は `home/hosts/dekahamuntu.nix` に入れたが、home-manager switch をしていないので、実機の `ai-mode` はまだ古い（switch は本人がやる）。それまでの手での代わり（どちらも実機で使って確かめた）:
+
+```bash
+# Qwen のモデルを降ろす（image-dual の代わり）
+curl -fsS -H 'Content-Type: application/json' -d '{"model":"<モデル名>"}' http://127.0.0.1:8080/models/unload
+# ComfyUI のモデルを降ろす（split の /free の代わり）
+curl -fsS -X POST -H 'Content-Type: application/json' -d '{"unload_models":true,"free_memory":true}' http://127.0.0.1:8188/free
+```
+
+sleep-idle で確かめたこと（2026-11-14 UTC）:
+
+- 入れる前: 一度読み込んだモデルは自分では降りなかった（本人が試した Uncensored 版が約 7 時間、GPU 1 に 14.5GB 載ったままだった。最後の問いは 10:23 UTC = 日本時間 19:23）
+- 別のポートの試し（`--sleep-idle-seconds 45`）: Router の引数が子プロセスに渡り、放置 45〜60 秒で子が sleeping になった。GPU 1 は 14,474 → 166MiB、子の RSS は 22.6GB → 0.9GB。次の問いは 11.4 秒で答えが返った。Router の `/models` の status は `sleeping`。`/models` を 12 秒おきに見ていても sleeping になった（見るだけでは放置の時計は戻らない）
+- 本番の unit（`install-qwen38-ubuntu.sh` を流した。最後の Tailscale Serve の段は前と同じく「Access denied」で、公開は前のまま 8443 → 8080）: 18:05:21 UTC（日本時間 11-15 3:05）に UD-Q3_K_XL へ「1+1 は？」→「2」（読み込み込み 47 秒、GPU 1 14,903MiB）。そのまま 30 秒おきに見て、570 秒まで loaded、600 秒で `sleeping`・GPU 1 299MiB。次の問い「2+3 は？」→「5」が 8 秒。`/models/unload` で 138MiB（138MiB は写しの ComfyUI の分）
+
+本番の B の形での同居（22:51〜23:00 UTC = 日本時間 7:51〜8:00）:
+
+1. H3 Image（B）を使ったあと（GPU 1 に 336MiB）、何もせずに Qwen へ問う → 読み込めて答えた。UD-Q3_K_XL は「1+1 は？」→「2」、読み込み込み 46 秒、GPU 1 は 15,103MiB。Uncensored 版は 39 秒、14,807MiB
+2. Qwen が GPU 1 に載ったまま（空き約 1.2〜1.5GB）、H3 Image（B）をプロンプトを変えて続けて投げる → 不安定だった。どれもノードは `MiniMaxH3ImageConditioning`、誤りは `torch.OutOfMemoryError: Allocation on device 1 would exceed allowed memory. (out of memory)`
+   - UD-Q3_K_XL が載っているとき: 1 枚目は通った（26.0 秒）、2 枚目は 4.9 秒で誤り
+   - Uncensored 版が載っているとき: 1 枚目は 11.9 秒で通り、2 枚目は 0.6 秒で誤り
+   - int8 でも 1 枚目は 32.6 秒で通り、2・3 枚目は 0.3 / 3.9 秒で誤り
+   - Qwen が答えている最中に投げると、0.3〜1.5 秒で誤り
+   - 誤りのあと、ComfyUI は GPU 0 のモデルも降ろす（次は読み込みから）
+3. そのあいだも Qwen は落ちず、誤りのあとの問い（「2+3 は？」→「5」）に 4〜18 秒で答えた
+4. Qwen を載せたまま A の形（`Select CLIP Device` なし、w4a8）なら 4 枚とも通った: 21.3（1 枚目）/ 18.7 / 18.6 秒、Qwen が長い答えを書いている最中は 28.1 秒。GPU 1 は 15,071MiB のまま動かない。Qwen なしの A（12.0 秒）より遅いのは、RAM を Qwen（約 52GB）が使い、ComfyUI が重みを RAM に持てず（RSS 約 6GB）、プロンプトを変えるたびに読み直すため（GPU 0 の最小 4.2〜4.3GB）
+5. RAM: B の ComfyUI は RSS 23〜28GB、Flash-Next は約 52GB を RAM に置く（64GB の機械）。両方を載せると片方のページキャッシュが追い出されて読み直しが起きる（4. の遅さ、1. の読み込み 46 秒）
+
+写しでの取り合いの試し（1 枚の GPU にテキストエンコーダーも本体も載せたときの結果。B の形ではない）:
+
+- Qwen（Uncensored 版、14,817MiB）が載っている GPU で H3 Image を投げると、1.2 秒で `MiniMaxH3ImageConditioning` が `torch.OutOfMemoryError: Allocation on device 0 would exceed allowed memory. (out of memory)` で止まった（写しは GPU 1 だけを見せて動かしたので、ここの device 0 は GPU 1）
+- 逆に、写しの ComfyUI がその GPU に 15.5GB 載せているときに Qwen に問うと、1 秒で HTTP 500 `{"error":{"code":500,"message":"model name=… failed to load","type":"server_error"}}`（journal に `cudaMalloc failed: out of memory`）。Router は落ちず、空けたあとの問いには答えた。本番の B では ComfyUI が GPU 1 に重みを載せたままにしないので、この形にはならなかった（上の 1.）
+
+気をつけること:
+
+- Qwen が載っているあいだ（最後の問いから 600 秒）は、B のワークフローが OutOfMemoryError で止まることがある。H3 Image を続けて作るなら、先に `ai-mode image-dual`（か `/models/unload`）
+- 何も載せていないときの ComfyUI は、GPU 0・GPU 1 とも 138MiB（CUDA のコンテキスト）。一度 GPU 1 を使ったあとは 304〜348MiB 残る。この状態で Flash-Next（UD-Q3_K_XL・Uncensored 版）は今の n-cpu-moe のまま GPU 1 に読み込めた（上の 1.）
+- RAM は取り合う。Qwen と H3 Image（B）を同時に重く使うと、どちらかが読み直しで遅くなる
+
+#### 確かめたこと
+
+更新の前後で絵が変わらないか（art-studio の主なレシピ 5 つ、同じ種、1 枚ずつ）:
+
+- レシピの設定は art-studio のループが実際に投げた形（`studio.db` の `loops.prompt`）を使い、プロンプトだけ風景・静物に替えた。保存は inbox の外
+- 写し（`~/issue5-stage/ComfyUI`、GPU 1）で先に確かめ、本番で同じことをした。本番は、更新の前（`e3bee7ff`）、更新のあと GPU 0 だけ、2 枚見せたあと、の 3 回
+
+本番（秒は実行時間、読み込み込み）:
+
+| レシピ | モデル | e3bee7ff | v0.45.2（GPU 0 だけ） | v0.45.2（2 枚見せたあと） | 絵 |
+|---|---|---|---|---|---|
+| SDXL（ChibihamRecipeSDXL、hires あり） | rinFlanimeIllustrious_v50 | 23.7 | 23.8 | 24.2 | 3 つとも画素が同じ（差の最大 0） |
+| Anima（ChibihamRecipeAnima） | anima_turboV11 | 12.8 | 14.6 | 14.7 | 同じ |
+| Anima 2.9B | Anima-2.9B-preview-v1 | 30.6 | 31.2 | 31.2 | 同じ |
+| Qwen-Image 2.1（qwen-image スキルと同じワークフロー） | — | 23.1 | 23.1 | 23.0 | 同じ |
+| MOSS-Image（moss-image スキルと同じワークフロー） | — | 25.9 | 25.9 | 25.8 | e3bee7ff と v0.45.2 で差の平均 0.195/255・最大 7（写しと同じ。見た目は同じ）。v0.45.2 の 2 つは同じ |
+
+- 本番は画素で比べた（取り出した PNG が保存ノードのものかプレビューのものかでメタデータが違うことがあるため）。写しでは SDXL・Anima・Anima 2.9B・Qwen-Image の PNG がバイト単位で同じ（sha256 一致）だった
+- MOSS の差は、上流で MOSS のコードが変わったため（「Lower peak MOSS memory a bit (#17338)」など）
+- 2 枚見せたあと、5 つとも GPU 1 は 138MiB のまま（最小・最大・終わったあとが同じ）。GPU 0 だけを使った
+- 写しの秒（v0.45.2 / e3bee7ff）: SDXL 24.1 / 24.3、Anima 14.6 / 15.6、Anima 2.9B 32.2 / 32.2、Qwen-Image 23.9 / 22.8、MOSS 26.0 / 22.1（GPU 0 では本人のループが回っていた）。どれも 1 回ずつ
+
+拡張と画面（本番、更新のあと）:
+
+- `IMPORT FAILED` は 0 件（`--enable-manager` 付き）。読み込めた拡張: chibiham-image-prompt・chibiham-llm-prompt・chibiham-lora-meta・chibiham-recipe・chibiham-save-meta、ComfyUI-Anima-3.8B-LoRA-Bridge、comfyui-anima-3-8B、comfyui-custom-scripts、comfyui-easy-use、comfyui-image-saver、comfyui-impact-pack、comfyui-impact-subpack、comfyui-kjnodes、comfyui-lora-manager、comfyui-wd14-tagger、comfyui_ipadapter_plus、comfyui_smznodes、comfyui_ultimatesdupscale、rgthree-comfy。`[smZNodes] Failed to install compel.` は前の版の本番のログにも出ている（更新とは関係ない）
+- `/object_info` に 1,854 ノード（ChibihamRecipeAnima・ChibihamRecipeSDXL・ChibihamSaveImageMeta・MiniMaxH3ImageConditioning・SelectCLIPDevice がある）
+- art-studio は `http://127.0.0.1:4520/` が 307 → `/?st=inbox` で 200
+
+H3 Image（本番、B）: テキストエンコーダーを GPU 1 で回し、本体を GPU 0 に載せて 2048²〜4096² で出た。プロンプトを変えた 2 枚目以降で GPU 0 の VRAM は 15,470〜15,502MiB から下がらず、本体の入れ替えは起きなかった（A では 3.2〜3.7GB まで下がる）。秒数・VRAM・RAM の表は [ai-server-placement.md](ai-server-placement.md#実測2026-11-14-minimax-h3-imagedekahamuntu)。
+
+#### 残っているもの
+
+消してよいかは本人が決める。
+
+- 写し `~/issue5-stage/`（約 7GB。このブランチのスクリプトの写し `~/issue5-stage/nix-config/` を含む）、`/tmp/issue5/`（計測の道具 `comfybench.py`・記録・絵）
+- GGUF の 2 ファイル（`~/ComfyUI/models/diffusion_models/MiniMax-H3-Image-Pruned-Q5_K_M.gguf`・`…Q4_K_M.gguf`、14,077,892,224 + 11,573,106,304 bytes = 約 25.7GB）。使わないので消してよい候補。消すなら `rm ~/ComfyUI/models/diffusion_models/MiniMax-H3-Image-Pruned-Q{5,4}_K_M.gguf`
+- 控え `~/.local/state/comfyui-update/20261114T222702Z-e3bee7ffc`（戻すのに要るので残す）
+- 計測の絵と表は spec（`docs/specs/5/h3-image/index.html`。git に入らない使い捨て）にある
 
 ---
 
@@ -244,8 +454,8 @@ GPU の割り当て（`hosts/ubuntu/dekahamuntu.env`）:
 
 | unit | GPU | 備考 |
 |---|---|---|
-| comfyui.service | 0 | 既定で起動 |
-| qwen38.service | 1 | 既定で起動（ComfyUI とは独立） |
+| comfyui.service | 0,1 | 既定で起動。既定のデバイス（`cuda:0`）は GPU 0 で、今までのワークフローは GPU 0 だけを使う。GPU 1 はノードで指定したもの（MiniMax H3 Image のテキストエンコーダーの計算、`Select CLIP Device`。重みは RAM に置かれ、GPU 1 はエンコードのあいだだけ使う）だけ（[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)）。2026-11-14 に `0` から `0,1` にした |
+| qwen38.service | 1 | 既定で起動（ComfyUI とは独立）。600 秒問いのなかったモデルを降ろす（`QWEN_SLEEP_IDLE_SECONDS`）。モデルが載っているあいだは、H3 Image（B）のエンコードが GPU 1 で OutOfMemoryError になる（`ai-mode image-dual` で降ろす） |
 | qwen38-dual.service | 0,1 | `ai-mode llm-dual`（既定にしない。`ai-mode split` で戻す）。comfyui・qwen38 と排他。`--split-mode layer --tensor-split 39,10`（UD-Q3_K_XL の n-cpu-moe 33 と組。1,1 は後ろの GPU に寄って落ちる） |
 | applio.service | 0 | comfyui・qwen38-dual と排他 |
 | diffusion-pipe の学習 | 0 | `TRAIN_CUDA_DEVICES=0,1` にすると 2 枚のデータ並列（`--num_gpus=2`） |
@@ -498,7 +708,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 
 ## dekahamuntu の状態（2026-11-12）
 
-実機を読むだけで洗い出した（値・鍵の中身は書かない。あるかと場所だけ）。「再現」は、入れ直したときに同じ状態を作るもの。
+実機を読むだけで洗い出した（値・鍵の中身は書かない。あるかと場所だけ）。「再現」は、入れ直したときに同じ状態を作るもの。ComfyUI・Qwen・MiniMax H3 Image の行は 2026-11-14 の作業のあとに直した（[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)）。
 
 ### スクリプト・Nix で再現するもの
 
@@ -507,7 +717,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | OS・ユーザー | Ubuntu 24.04.5、ホスト名 `dekahamuntu`、ユーザー `chibiham`（`sudo`・`power` グループ） | インストーラ（第1段の 1.）。`hosts/ubuntu/dekahamuntu.env` の `UBUNTU_USER`、`power` は RAPL のスクリプト |
 | apt の基礎 | `ca-certificates`・`curl`・`git`・`openssh-server`・`sqlite3`・`xz-utils` | `bootstrap-ubuntu.sh` |
 | sshd | `ssh` が有効。設定はインストーラの `sshd_config.d/50-cloud-init.conf` のまま | インストーラと `bootstrap-ubuntu.sh` |
-| Nix・Home Manager | `chibiham@dekahamuntu`（`~/.ssh/config`、`~/.secrets/env.tpl`、`ai-mode`、nix-gc.timer など） | `bootstrap-ubuntu.sh`（`home-manager switch`）。実機の世代は 2026-11-11 のもの（この枝の後の commit はまだ switch していない） |
+| Nix・Home Manager | `chibiham@dekahamuntu`（`~/.ssh/config`、`~/.secrets/env.tpl`、`ai-mode`、nix-gc.timer など） | `bootstrap-ubuntu.sh`（`home-manager switch`）。実機の世代は 2026-11-11 のもの（この枝の後の commit はまだ switch していない。`ai-mode image-dual` も入っていない） |
 | mise | Node.js 24、Python 3.12 | `bootstrap-ubuntu.sh` |
 | シークレット | `~/.secrets/.env`（Service Account のトークン）、`~/.secrets/.env.secrets`（`update-secrets` の出力） | `bootstrap-ubuntu.sh`（トークンは本人が貼る） |
 | Tailscale | `tailscale`（apt）、名前 `dekahamuntu`、operator は未設定 | `install-tailscale-ubuntu.sh`（いまの版は `--operator=$USER` も設定する） |
@@ -517,10 +727,11 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | RAPL | `power` グループ、`/etc/udev/rules.d/99-rapl-power.rules` | `install-rapl-power-access-ubuntu.sh`（`configure-ubuntu-hardware.sh` から） |
 | ComfyUI の apt | `build-essential`・`python3.12-dev`・`ffmpeg`・`git-lfs` | `install-comfyui-ubuntu.sh` |
 | linger | `Linger=yes` | `install-comfyui-ubuntu.sh`（`loginctl enable-linger`） |
-| comfyui.service | GPU 0（`CUDA_DEVICE_ORDER=PCI_BUS_ID`・`CUDA_VISIBLE_DEVICES=0`）、`CC=/usr/bin/cc`、`--fast` なし。enabled | `install-comfyui-ubuntu.sh`（`COMFY_CUDA_DEVICES=0`、`COMFY_EXTRA_ARGS` は空）。まねのコマンドで流し、実機の unit と同じになることを確かめた |
+| comfyui.service | GPU 0,1（`CUDA_DEVICE_ORDER=PCI_BUS_ID`・`CUDA_VISIBLE_DEVICES=0,1`。2026-11-14 に `0` から変えた）、`CC=/usr/bin/cc`、`--fast` なし。enabled | `install-comfyui-ubuntu.sh`（`COMFY_CUDA_DEVICES=0,1`、`COMFY_EXTRA_ARGS` は空）。導入済みなら `--unit-only`。`0` のときの unit は、まねのコマンドで流し、実機の unit と同じになることを確かめた（2026-11-12）。`0,1` との差は `CUDA_VISIBLE_DEVICES` の 1 行 |
 | art-studio.service | unit 本体（PORT=4520、`ART_STUDIO_INBOX`、mise の node 24）。enabled | `~/ai/scripts/install-art-studio`。まねのコマンドで流し、実機の unit と同じになることを確かめた |
 | art-studio の drop-in | `art-studio.service.d/dekahamuntu.conf`（`COMFYUI_URL=http://127.0.0.1:8188`、GPU 0） | `configure-art-studio-ubuntu.sh`（`ART_STUDIO_COMFYUI_URL`・`ART_STUDIO_CUDA_DEVICES`）。実機と同じ中身になることを確かめた |
-| Qwen の unit（2026-11-13 に入れた） | `qwen38.service`（GPU 1、Router、ポート 8080。enabled、`WantedBy=default.target`）、`qwen38-dual.service`（GPU 0,1、`--split-mode layer --tensor-split 39,10`、`Conflicts=qwen38.service comfyui.service`。enable しない） | `install-qwen38-ubuntu.sh`（`LLM_CUDA_DEVICES`・`LLM_DUAL_*`・`QWEN_WANTED_BY`） |
+| Qwen の unit（2026-11-13 に入れ、2026-11-14 に流し直した） | `qwen38.service`（GPU 1、Router、ポート 8080。enabled、`WantedBy=default.target`）、`qwen38-dual.service`（GPU 0,1、`--split-mode layer --tensor-split 39,10`、`Conflicts=qwen38.service comfyui.service`。enable しない）。どちらも `--sleep-idle-seconds 600`（2026-11-14 に足した） | `install-qwen38-ubuntu.sh`（`LLM_CUDA_DEVICES`・`LLM_DUAL_*`・`QWEN_WANTED_BY`・`QWEN_SLEEP_IDLE_SECONDS`） |
+| MiniMax H3 Image の重み（2026-11-14 に置いた） | `~/ComfyUI/models/` の `vae/` に 1 つ、`diffusion_models/` に 4 つ（公式 int8・w4a8、GGUF Q5_K_M・Q4_K_M。GGUF の 2 つは使わず、消してよい候補）。テキストエンコーダー（NVFP4）とプロンプト拡張は前からあった。ComfyUI-GGUF は入れていない | `install-minimax-h3-image-ubuntu.sh`（`H3_IMAGE_MODELS=int8 w4a8`。revision・sha256 を固定。GGUF は置かない）。台帳への記入は chibiham-ai#74 |
 | Qwen のプリセット（2026-11-13 に入れた） | `~/.config/llama.cpp/qwen38-models.ini`（n-cpu-moe 45 / 42）、`qwen38-dual-models.ini`（33 / 31）、`qwen38-flash-chat-template.jinja` | `install-qwen38-ubuntu.sh`（`QWEN_*_N_CPU_MOE`） |
 | Qwen のモデル（2026-11-13 に取った） | `~/models/qwen3.8-flash-next`（UD-Q3_K_XL・Uncensored 版 i1-IQ3_M と各 mmproj）。27B はない | `install-qwen38-ubuntu.sh`（`QWEN_INSTALL_27B=0`） |
 | ケースファン（2026-11-13 に入れた） | fan2go 0.15.0（`fan2go.service`、active (running)）、`/etc/fan2go/fan2go.yaml`・`case-fan-restore.conf`、`/etc/modules-load.d/case-fan-control.conf`（`nct6775`）。チャネル 1・3・4・6 | `install-case-fan-control-ubuntu.sh`（`CASE_FAN_*`） |
@@ -530,8 +741,8 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | 項目 | 実機の状態 | 再現するもの |
 |---|---|---|
 | `~/ai` | `gh repo clone` の https の clone（develop）。`lora/` の `lora.json`・`art-studio.json` は chibihamuntu から写した（学習のデータ本体は無い） | `gh repo clone chibiham/chibiham-ai ~/ai -- -b develop`。LoRA の配布の仕組みは chibiham-ai の issue の候補 |
-| ComfyUI の本体とカスタムノード | `e3bee7ff`。カスタムノードは chibihamuntu から写したもの、`chibiham-*` は `~/ai/comfyui/custom_nodes` への symlink | `~/ai` の README（`custom-nodes.snapshot.json` と `cm-cli restore-snapshot`、symlink） |
-| ComfyUI の venv | mise の Python 3.12.16、torch 2.13.0+cu130。パッケージは chibihamuntu の freeze と同じ版 | `install-comfyui-ubuntu.sh` は最新の torch を入れる（版は揃わない）。揃えるなら chibihamuntu の `uv pip freeze` を使う |
+| ComfyUI の本体とカスタムノード | 本体は v0.45.2（2026-11-14 に `e3bee7ff` から上げた。[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)）。カスタムノードは chibihamuntu から写したもの、`chibiham-*` は `~/ai/comfyui/custom_nodes` への symlink | 本体の版は `COMFY_REF` と `update-comfyui-ubuntu.sh`（このリポジトリ）。カスタムノードは `~/ai` の README（`custom-nodes.snapshot.json` と `cm-cli restore-snapshot`、symlink） |
+| ComfyUI の venv | mise の Python 3.12.16、torch 2.13.0+cu130。パッケージは chibihamuntu の freeze と同じ版から、v0.45.2 への更新で 8 つ変わった（2-9） | `install-comfyui-ubuntu.sh` は最新の torch を入れる（版は揃わない）。揃えるなら chibihamuntu の `uv pip freeze` を使う。更新の前の freeze は `update-comfyui-ubuntu.sh` の控え（`~/.local/state/comfyui-update/20261114T222702Z-e3bee7ffc/freeze.txt`）に残る |
 | art-studio のビルドとモザイクの `.venv` | `node_modules`・`dist`（npm ci・build）、`.venv`（torch 2.14.1+cu130、ultralytics） | `install-art-studio`（npm は safe-chain のシム経由にする変更の案がある）と、art-studio の README の `.venv` の手順 |
 | モデル | `~/ComfyUI/models`（約 427GB） | `~/ai/scripts/models restore`（R2・Civitai・HF。`update-secrets` の鍵を使う）と `models check --hash` |
 
@@ -553,4 +764,5 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 
 - `~/ComfyUI/models`（chibihamuntu から rsync、sha256 で確かめた）
 - `~/.local/share/art-studio`（作品の `library/`・`thumbs/` と `studio.db`。2026-11-12 に chibihamuntu から切り替えた）
+- issue 5 の作業の残り（消してよいかは本人が決める）: `~/issue5-stage/`（ComfyUI の写し、約 7GB）、`/tmp/issue5/`、GGUF の 2 ファイル（約 25.7GB）。控え `~/.local/state/comfyui-update/20261114T222702Z-e3bee7ffc` は戻すのに要るので残す（[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image) の「残っているもの」）
 - 作業の残り（消してよい）: `~/.local/share/art-studio/studio.db.test-20261112`、`~/.local/share/art-studio-test-20261112/`、`~/ai.rsync-20261112/`、`~/ComfyUI/output/dekahamuntu-test/`、`~/.triton/cache.nixgcc-*`、空の `~/.config/systemd/user/comfyui.service.d/`、`~/.cache/dk-*`

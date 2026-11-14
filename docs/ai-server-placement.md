@@ -1,6 +1,6 @@
 # どのモデルをどちらのマシンで動かすか（叩き台）
 
-状態: 叩き台（2026-11-11）。Flash-Next の実測を足した（2026-11-13）。chibihamuntu の XMP（3,200 MT/s）のあとの計り直しを足した（2026-11-14）。dekahamuntu の Flash-Next の置き方は本人が決めた（2026-11-13。「[決定](#決定)」）。ほかは決めるのは本人。決まったら「決定」の節に書き、各ホストの設定（`hosts/ubuntu/*.env`、`~/ai` のモデル台帳）に反映する。
+状態: 叩き台（2026-11-11）。Flash-Next の実測を足した（2026-11-13）。chibihamuntu の XMP（3,200 MT/s）のあとの計り直しを足した（2026-11-14）。dekahamuntu の Flash-Next の置き方は本人が決めた（2026-11-13。「[決定](#決定)」）。dekahamuntu の MiniMax H3 Image（画像）の実測と、既定の版の決め（エージェント。本人が変えるかもしれない）を足した（2026-11-14）。ほかは決めるのは本人。決まったら「決定」の節に書き、各ホストの設定（`hosts/ubuntu/*.env`、`~/ai` のモデル台帳）に反映する。
 
 本人の案（2026-11-11）: dense の LLM と LoRA 学習は chibihamuntu、画像生成と MoE の LLM は dekahamuntu。
 
@@ -72,8 +72,8 @@ Flash-Next（UD-Q3_K_XL）は RAM 64GB に収まる（2026-11-13 の実測）。
 | マシン | 動かすもの | 理由 |
 |---|---|---|
 | chibihamuntu | Qwen3.8-27B（dense、4 種）、LoRA 学習（anima・sdxl の自動の学習、`lora-train`）、Applio、MiniMax H3（動画） | dense は帯域の広い 1 枚 24GB が速い。学習は VRAM に余裕がいる。MiniMax H3 は 16GB には全く載らない |
-| dekahamuntu GPU 0 | ComfyUI（SDXL・Anima・Qwen-Image・MOSS・Krea2・ACE-Step）、art-studio | 画像生成を学習と分けられる（chibihamuntu の学習中も絵を作れる）。FP8・NVFP4 をハードウェアで扱える |
-| dekahamuntu GPU 1 | Qwen3.8-Flash-Next（MoE、Router） | ComfyUI と独立に常駐できる |
+| dekahamuntu GPU 0 | ComfyUI（SDXL・Anima・Qwen-Image・MOSS・Krea2・ACE-Step、MiniMax H3 Image の本体）、art-studio | 画像生成を学習と分けられる（chibihamuntu の学習中も絵を作れる）。FP8・NVFP4 をハードウェアで扱える |
+| dekahamuntu GPU 1 | Qwen3.8-Flash-Next（MoE、Router）。MiniMax H3 Image のテキストエンコーダーの計算（ComfyUI。重みは RAM。Qwen のモデルが載っているあいだはエンコードが OutOfMemoryError になる） | ComfyUI と独立に常駐できる。H3 Image は 2 枚に分けると本体の入れ替えが起きない（下の「[実測（2026-11-14）: MiniMax H3 Image](#実測2026-11-14-minimax-h3-imagedekahamuntu)」） |
 | dekahamuntu GPU 0+1 | Flash-Next を束ねて（`ai-mode llm-dual`） | 長い作業で速さが要るとき。ComfyUI は止まる |
 
 効くこと:
@@ -340,6 +340,82 @@ RAM・swap・ディスク（同居のとき）:
   - (c) chibihamuntu に残す。生成は 1 枚の dekahamuntu より約 1 割遅く、chibihamuntu の学習と 1 枚を取り合う形が続く
 - 余裕を取るなら、束ねは n-cpu-moe 34（空き 1.9GB / 1.5GB、速さの差は約 1%）。画像の入力（mmproj）で GPU 0 の VRAM が足りるかは確かめていない
 
+## 実測（2026-11-14）: MiniMax H3 Image（dekahamuntu）
+
+issue 5。MiniMax H3 Image（Comfy-Org、ComfyUI 0.45.0 以上が要る）を dekahamuntu でどう使うかの比べ。案は 3 つ: **A** = GPU 0 だけでテキストエンコーダーと本体を入れ替える、**B** = 2 枚で、テキストエンコーダー（Qwen3-VL 32B）を GPU 1・本体（DiT）を GPU 0 に分ける、**C** = chibihamuntu の 3090。本人は B を選んだ（下の「決定」）。構成・入れたもの・戻し方・Qwen との同居は [dekahamuntu-setup.md の 2-9](dekahamuntu-setup.md#2-9-comfyui-の更新v0452と-minimax-h3-image)。
+
+絵と表は spec（`docs/specs/5/h3-image/index.html`。git に入らない使い捨て）にある。
+
+### 計り方（本番）
+
+- 計ったのは 2026-11-14 22:33:17〜22:50:31 UTC（日本時間 11-15 の 7:33〜7:50）。本番の ComfyUI（v0.45.2、2 枚見える）。本人の art-studio のループは始める前（22:14 UTC）に済んでいた
+- A = `Select CLIP Device` なし（テキストエンコーダーも GPU 0）。B = `Select CLIP Device` `gpu:1`。同じ ComfyUI で、ノードの有無だけを変えた
+- 同じ絵・同じ設定: 2048²（と 2880²・4096²）、6 steps、cfg 1、euler / simple、種 20261115（種だけ変える回は 20261116）。テキストエンコーダーは `qwen3vl_32b_minimax_h3_nvfp4_awq`（NVFP4、15.7GB）、VAE は `minimax_h3_image_vae_fp16`。プロンプトは静物・湖・机の 3 つ（どれも絵の中に文字を入れる）
+- 「1 枚目」= ComfyUI のモデルを `/free` で降ろした直後（読み込み込み。ファイルはページキャッシュに載っていることが多い）。「替え」= 直前とプロンプトを変えた回。「種だけ」= プロンプトを変えず種だけ変えた回（テキストエンコーダーを使わない）
+- 秒は ComfyUI の実行時間（history の execution_start〜success）。VRAM・RAM は 1 秒おきの nvidia-smi と /proc。各 1 回ずつ（繰り返していない）。計測の道具は `/tmp/issue5/comfybench.py`（使い捨て。リポジトリに入れていない）
+- GGUF は 23:01〜23:13 UTC（日本時間 8:01〜8:13）に、写し（`~/issue5-stage/ComfyUI`。第三者の拡張 ComfyUI-GGUF（city96、`6ea2651e`）の `Unet Loader (GGUF)` を入れた）を 2 枚見せる形で起動して計った。本番の ComfyUI のモデルは降ろしておいた。本番の `custom_nodes` には ComfyUI-GGUF を入れていない
+- 計測のあいだの温度の最大は 74℃（GPU 0、4096²）、電力の最大 183W、fan2go は全部の回で active（failsafe なし）
+- 各版のファイル・revision・sha256 は [dekahamuntu-setup.md の 2-9](dekahamuntu-setup.md#2-9-comfyui-の更新v0452と-minimax-h3-image) の「入れたもの」
+
+### 結果（本番）
+
+2048²（秒）:
+
+| 本体の版 | 構成 | 1 枚目 | 替え（2 枚目 / 3 枚目） | 種だけ | GPU 0 の VRAM（替えの回の最小 / 最大、MiB） | GPU 1（最大 / 終わったあと、MiB） | ComfyUI の RSS の最大（MiB） | MemAvailable の最小（MiB） |
+|---|---|---|---|---|---|---|---|---|
+| 公式 int8（21.0GB） | A | 24.7 | 20.5 / 20.4 | 9.7 | 3,238〜3,654 / 15,590 | 148 / 148 | 13,024 | 48,042 |
+| 公式 int8 | B | 35.3 | 16.3 / 11.0 | 9.7 | 15,470〜15,502 / 15,566 | 1,594 / 346 | 24,552 | 49,683 |
+| 公式 w4a8（12.5GB） | A | 16.7 | 12.0 / 11.9 | 9.8 | 8,578〜8,770 / 15,618 | 304 / 304 | 8,171 | 53,735 |
+| 公式 w4a8 | B | 12.9 | 11.2 / 11.1 | 9.8 | 13,186 / 13,778 | 1,584 / 336 | 23,307 | 52,384 |
+| GGUF Q5_K_M（14.1GB、第三者。写し 2 枚） | A | 51.8 | 43.1 / 39.2 | 34.4 | 4,279〜4,919 / 15,319 | 437 / 437 | 19,654 | 39,414 |
+| GGUF Q5_K_M（写し 2 枚） | B | 37.7 | 35.7 / 35.6 | 34.4 | 14,295 / 15,479 | 1,883 / 635 | 23,144 | 39,402 |
+| GGUF Q4_K_M（11.6GB、第三者。写し 2 枚） | A | 40.5 | 35.8 / 35.8 | 31.5 | 3,895〜4,279 / 15,143 | 635 / 603 | 35,637 | 37,306 |
+| GGUF Q4_K_M（写し 2 枚） | B | 34.7 | 32.8 / 32.7 | 31.5 | 12,535 / 13,607 | 1,883 / 635 | 34,392 | 48,278 |
+
+- GGUF の行の GPU の値には、止めていない本番の ComfyUI の分（GPU 0 に 322MiB、GPU 1 に 304MiB ほど）が含まれる
+- B の int8 の「1 枚目 35.3」には、GPU 1 用にテキストエンコーダーをもう一度用意する分が入る（1 枚目は用意に約 17 秒かかる回があった。2 回目からは約 1 秒）。B の int8 の最初の替え 16.3 秒は 1 回だけの値で、3 枚目からは 11.0 秒
+- B では本体が GPU 0 に載ったままで、プロンプトを変えても降りない（替えの回の GPU 0 の最小が 15,470〜15,502MiB。A では 3.2〜3.7GB まで下がる）
+- B でもテキストエンコーダーは GPU 1 の VRAM に常駐しない。重み（約 15GB）は RAM に置かれ（ComfyUI の RSS は A の 8〜13GB に対して B は 23〜28GB）、GPU 1 を使うのはエンコードのあいだだけ（最大 1.5〜1.6GB、終わると 336〜348MiB）
+
+大きい絵（秒）:
+
+| 本体の版 | 構成 | 2880²（1 枚目 / 替え） | 4096²（替え 2 回） |
+|---|---|---|---|
+| 公式 int8 | A | 28.7 / 23.5 | 60.2 / 60.2 |
+| 公式 int8 | B | 26.3 / 22.7 | 59.3 / 59.4 |
+| 公式 w4a8 | A | 23.0 / 22.4 | 51.1 / 51.2 |
+| 公式 w4a8 | B | 23.3 / 21.7 | 50.5 / 50.5 |
+
+- 4096² まで、どの組み合わせも落ちずに出た（GPU 0 の最大 15.3〜15.6GB）。大きい絵では A と B の差は 1 秒ほどになる（サンプリングの時間が大半）
+
+絵:
+
+- A と B（同じ版・同じプロンプト・同じ種）: int8 は画素が同じ（差の最大 0）、w4a8 は差の最大 1〜2/255（見た目は同じ）。写しの A と本番の A も同じか、差の最大 2/255
+- 4 つの版とも破綻なく、指定した文字（「MORNING TEA」「LAKE TRAIL 2 km」「ISSUE 5」）も正しく出た（写しで確かめた）。同じ種でも版ごとに構図は少し変わる（量子化の違い）。版のあいだの優劣は付けていない
+
+### 写し（GPU 1 だけ）での先の値
+
+本番の前に、写し（`~/issue5-stage/ComfyUI`、v0.45.2）を **GPU 1 だけ**で動かして計った（1 枚で入れ替えるので A の形）。2026-11-14 17:45〜17:57 UTC（日本時間 11-15 の 2:45〜2:57）で、GPU 0 では本人の art-studio のループが回っていた。2048²・6 steps・同じ種（秒、1 回ずつ）:
+
+| 本体の版 | 1 枚目（読み込み込み） | 替え（2 枚目 / 3 枚目） | 種だけ | 2880² | 4096² |
+|---|---|---|---|---|---|
+| 公式 int8 | 20.9 | 14.6 / 13.5 | 10.4 | 30.4 / 24.0 | 61.1 / 60.3 |
+| 公式 w4a8 | 16.8 | 12.5 / 12.5 | 10.4 | 25.3 / 23.0 | 51.1 / 51.1 |
+| GGUF Q5_K_M | 45.7 | 40.6 / 39.6 | 35.3 | 計っていない | 計っていない |
+| GGUF Q4_K_M | 43.7 | 37.5 / 36.4 | 32.2 | 計っていない | 計っていない |
+
+- VRAM の最大は GPU 1 で約 15.6GB（どの版も）。温度の最大 73℃、電力 181W、fan2go は active のまま
+- 0.45 系は「dynamic VRAM」で読み込む（ログ: `Model MiniMaxH3Image prepared for dynamic VRAM loading. 19999MB Staged`）。16GB に載らない int8（21GB）も、追加の設定なしで動いた
+- GGUF は ComfyUI-GGUF の読み込み（`loaded completely` の従来の経路）で遅い
+- 写しの int8 の替えは 13.5〜14.6 秒だったが、本番の A では 20.4〜20.5 秒だった（w4a8 は写しも本番も 12.0 前後で同じ）。本番の A の int8 では、テキストエンコーダーを使うたびに本体が GPU 0 から 3.2〜3.7GB まで降ろされ、約 12GB を読み直している（替えの上乗せは、写しの int8 と w4a8 で 2〜4 秒、本番の A の int8 で約 11 秒）。違いの理由は分かっていない（1 回ずつの計測）
+
+### 見立て
+
+- B で効くのは、本体の大きい int8 だけ。int8 の替えは A 20.4〜20.5 秒 → B 11.0 秒で、w4a8（A 12.0、B 11.1）と並ぶ。w4a8 の A では、替えの回も GPU 0 に 8.6〜8.8GB が残り、B との差は 1 秒ほど
+- 大きい絵（2880²・4096²）では A と B の差は 1 秒ほどで、サンプリングの時間が大半。4096² は w4a8 が int8 より約 9 秒速い（50.5 対 59.3 秒、B）
+- B の代わりに引き受けること: 1 枚目が遅い（int8 で 35 秒）、ComfyUI が RAM を 23〜28GB 使う（テキストエンコーダーの重みが RAM に載る）、Qwen のモデルが GPU 1 に載っているあいだはエンコードが OutOfMemoryError（device 1）になる（[dekahamuntu-setup.md の 2-9](dekahamuntu-setup.md#2-9-comfyui-の更新v0452と-minimax-h3-image) の「llama との同居」）
+- GGUF の 2 つは、公式の 2 つの約 3 倍かかる（2048² の替えで 32.7〜43.1 秒）。ファイルも w4a8（12.5GB）より小さいのは Q4_K_M（11.6GB）だけ。速さでも大きさでも選ぶ理由がない
+
 ## 決定
 
 ### dekahamuntu の Flash-Next（2026-11-13）
@@ -355,6 +431,25 @@ RAM・swap・ディスク（同居のとき）:
 - GPU 2 枚での画像の並列生成（案 C）は今回やらない
 - dekahamuntu に常駐を足した（`install-qwen38-ubuntu.sh` を流した。「[入れた unit での確かめ](#入れた-unit-での確かめdekahamuntu)」）。chibihamuntu の Flash-Next はそのまま（chibihamuntu から外すか、27B だけにするかは本人がまだ決めていない）
 - Tailscale Serve の 8443（tailnet への Qwen の公開）は、本人が sudo で流した（2026-11-14。`sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080`）。tailnet から答えが返るのを確かめた（[dekahamuntu-setup.md の 2-5](dekahamuntu-setup.md)）
+
+### dekahamuntu の MiniMax H3 Image（2026-11-15 日本時間）
+
+本人の決め（2026-11-15 日本時間、原文）:
+
+> Bで構成しよう。comfy更新もやろう。flash nextはあんまり使わなそうなので大丈夫なんだけど、llamaから呼び出しなければメモリ取り合わない？llama停止しなくても大丈夫なのかな。
+
+形:
+
+- B: テキストエンコーダーの計算を GPU 1、本体を GPU 0。ComfyUI に 2 枚を見せ（`COMFY_CUDA_DEVICES=0,1`）、テキストエンコーダーは本体のノード `Select CLIP Device`（`gpu:1`）で GPU 1 に回す。既定のデバイスは GPU 0 のままで、今までのワークフローは変わらない（本番で確かめた）
+- ComfyUI を更新するのは dekahamuntu だけ（v0.45.2、`COMFY_REF`。2026-11-14 22:27 UTC に上げた）。chibihamuntu は `e3bee7ff` のままで、2 台の版が分かれた
+- Qwen の Router は止めない。使い終わったモデルは 600 秒で自動で降りる（`QWEN_SLEEP_IDLE_SECONDS`）。Qwen が載っているときに H3 Image を使うなら、`ai-mode image-dual`（switch の前は `/models/unload` の curl）で降ろすか、A の形（w4a8）を使う。載ったまま B を投げると、黙って遅くなるのではなく OutOfMemoryError（device 1）で止まる（1 枚目は通ることがある）。H3 Image のあとに Qwen を使うときは、何もしなくても読み込める
+
+既定にする本体の版（エージェントの決め、2026-11-14。本人が spec の絵を見て変えるかもしれない）:
+
+- **既定は公式 int8 を B の形で**。理由: (1) B なら int8 でもプロンプトを変えた 1 枚が 11.0 秒で、w4a8（11.1 秒）と変わらない (2) 公式のテンプレートが使う版で、重みが 8bit（w4a8 は 4bit） (3) 第三者の重みも拡張も要らない。弱み: 1 枚目が 35 秒、ComfyUI が RAM を 24〜28GB 使う、4096² は w4a8 より約 9 秒遅い（59 対 50 秒）
+- **w4a8 も置いておく**（12.5GB）。A の形でも 12.0 秒で出るので、Qwen を載せたまま使うとき・GPU 1 を空けておきたいとき・4096² を速く出したいときに使う。絵は int8 と比べて破綻はなく文字も正しいが、同じ種でも構図が変わる（優劣は付けていない）
+- **GGUF（Q5_K_M・Q4_K_M）は使わない**。同じ絵に 32〜43 秒（公式の版の約 3 倍）。第三者の重みで、読むのに第三者の拡張（ComfyUI-GGUF）が要る。本番には拡張を入れていない。ファイル 2 つ（約 25.7GB）は `~/ComfyUI/models/diffusion_models/` に残してあり、消してよい候補（本人が決める）
+- `H3_IMAGE_MODELS` は `int8 w4a8` にした（`hosts/ubuntu/dekahamuntu.env`）。引数なしの `install-minimax-h3-image-ubuntu.sh` は GGUF も ComfyUI-GGUF も置かない
 
 ### 同居の心配（RAM。設定は変えていない）
 
@@ -376,3 +471,7 @@ RAM・swap・ディスク（同居のとき）:
 4. 決まったら、モデルを置き直す（`~/ai/scripts/models` の台帳と restore。数百 GB の転送になる）
 5. Mac の codex・pi の設定（`home/common.nix`）は chibihamuntu の 8443 番を指している。dekahamuntu の LLM を使うなら、そのプロファイルを足す
    - omp には dekahamuntu の Router を `qwen-dekahamuntu` として足した（2026-11-14。反映は Mac の home-manager switch のあと）
+6. dekahamuntu の MiniMax H3 Image（issue 5）の残り:
+   - 本人: dekahamuntu の home-manager switch（`ai-mode image-dual` と `split` の `/free`）、取り込みのあとで実機の `~/.config/nix-config` を pull、spec の絵を見て既定の版を変えるか、GGUF の 2 ファイル・写し（`~/issue5-stage/`）・`/tmp/issue5/` を消すか
+   - chibiham-ai#74: 台帳（`models.lock.toml`）・拡張の一覧・art-studio のレシピ、`~/ai/comfyui/workflows/MiniMax-H3-Image/` の未追跡のワークフローの扱い
+   - 案（未検証）: Flash-Next の n-cpu-moe を 1 つ上げて GPU 1 に約 1GB の余裕を作れば、Qwen を載せたまま B が通る見込み

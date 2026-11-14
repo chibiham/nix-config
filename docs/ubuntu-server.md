@@ -207,11 +207,11 @@ NVIDIAドライバの再起動後、専用uv環境へComfyUIを導入する。
 
 インストーラは次を行う。
 
-- `~/ComfyUI`へ公式リポジトリをclone
+- `~/ComfyUI`へ公式リポジトリをclone（ホストの設定の `COMFY_REF` が空でなければ、cloneしたあとその版を `checkout --detach` する。取得済みなら触らない）
 - Python 3.12の`.venv`を作成
 - NVIDIA向けPyTorchとComfyUI依存を導入
-- PyTorchからGPUの名前・世代（sm_86 / sm_120）とVRAMを確認
-- ホストの設定に `COMFY_CUDA_DEVICES` があれば、unitに `CUDA_VISIBLE_DEVICES` を書いてそのGPUだけを使う（chibihamuntuでは書かない）
+- PyTorchからGPUの名前・世代（sm_86 / sm_120）とVRAM、既定のデバイス（`cuda:0`）を確認
+- ホストの設定に `COMFY_CUDA_DEVICES` があれば、unitに `CUDA_VISIBLE_DEVICES` を書いてそのGPUだけを使う（chibihamuntuでは書かない）。複数を書くと最初のGPUが既定のデバイスになり、ほかのGPUはノード（`Select CLIP Device` など）で指定したときだけ使われる（dekahamuntuは `0,1`。[dekahamuntu-setup.md の 2-9](dekahamuntu-setup.md#2-9-comfyui-の更新v0452と-minimax-h3-image)）
 - `comfyui.service`をsystemd user serviceとして登録・起動
 - lingerを有効にし、ログイン前から自動起動
 
@@ -255,15 +255,57 @@ systemctl --user status comfyui --no-pager
 journalctl --user -u comfyui -f
 ```
 
-ComfyUIを明示的に更新する場合:
-
-```bash
-~/.config/nix-config/scripts/update-comfyui-ubuntu.sh
-```
-
 モデルはインストール時には自動取得しない。チェックポイントは`~/ComfyUI/models/checkpoints/`へ配置する。
 Civitaiのモデルは`civitai-download <URL>`（Claude Codeからは`civitai-download` skill）で、
 種別に応じた`~/ComfyUI/models/`以下へ取得できる。`CIVITAI_TOKEN`は上記のchibihamuntu Vaultから展開する。モデルごとにVAE、text encoder、diffusion modelなどの配置先が異なる場合は、そのモデルの公式手順に従う。
+MiniMax H3 Image（画像）の重みは `scripts/install-minimax-h3-image-ubuntu.sh` が revision と sha256 を固定して置く（版はホストの設定の `H3_IMAGE_MODELS` か引数。[dekahamuntu-setup.md の 2-9](dekahamuntu-setup.md#2-9-comfyui-の更新v0452と-minimax-h3-image)）。
+
+unitだけを書き直す場合（`COMFY_CUDA_DEVICES`・`COMFY_EXTRA_ARGS` を変えたとき。sudoなし）:
+
+```bash
+~/.config/nix-config/scripts/install-comfyui-ubuntu.sh --unit-only
+```
+
+- CUDAの動作確認とunitの書き出しだけをする（apt・clone・venv・PyTorch・依存・lingerは飛ばす）。導入済みの `~/ComfyUI/.venv` がなければ止まる
+- 今のunitと同じなら何もしない。違えば差（`diff -u`）を表示し、ComfyUIのキューが空なのを確かめてから書き、`daemon-reload` と `restart` をして、起動を待つ（下の「更新」と同じ確かめ。`--force` でキューを確かめない）
+
+### ComfyUIの更新と戻し
+
+ComfyUIは自動では更新しない。上げるときは明示的に流す。
+
+```bash
+~/.config/nix-config/scripts/update-comfyui-ubuntu.sh                 # COMFY_REF の版（空なら master を pull）
+~/.config/nix-config/scripts/update-comfyui-ubuntu.sh --ref <タグ|commit>  # 版を指定（COMFY_REF より優先）
+```
+
+- **版**: ホストの設定の `COMFY_REF`（タグかcommit）。空なら今までどおり `git pull --ff-only`（masterに追従）。値があれば `git fetch --tags origin` のあと、そのcommitを `git checkout --detach` する。chibihamuntuは空（master）、dekahamuntuは `v0.45.2`（[dekahamuntu-setup.md の 2-9](dekahamuntu-setup.md#2-9-comfyui-の更新v0452と-minimax-h3-image)）。dekahamuntuは2026-11-14にv0.45.2へ上げたので、2台の版は分かれている
+- HEADがブランチから外れている（`COMFY_REF`・`--ref`・`--restore` で固定した）ときに `COMFY_REF` を空にして流すと、pullせずに止まる。masterに追従し直すなら `git -C ~/ComfyUI checkout master`
+- **控え**: 変える前に、いまの状態を `~/.local/state/comfyui-update/<UTC時刻>-<短いcommit>/` に控える（`commit`・`describe`（`git describe --tags --always`）・`freeze.txt`（`uv pip freeze`））。置き場所は `COMFY_SNAPSHOT_DIR` で変えられる。終わりに（起動の待ちで失敗したときも）戻すコマンドを表示する
+- 追跡しているファイルに未コミットの変更があれば、何もせずに止まる。未追跡のファイル（例: dekahamuntuの `~/ComfyUI/.chibihamuntu-freeze.txt`）では止まらない（前の版は止まっていた）
+- 依存は `requirements.txt`（あれば `manager_requirements.txt` も）を `uv pip install` する
+- **キューの確かめ**: 起動し直す前に、ComfyUIのキュー（`/queue`）に実行中・待ちがないことを確かめ、あれば何も変えずに止まる（`--force` で確かめない）。ComfyUIが応答しないときは、止まっているものとして進む
+- スクリプトが見るのはキューだけ。art-studioのループは項目の合間にキューが空になるので、流す前に、art-studioに実行待ち・実行中のループがないことを自分で確かめる（art-studioの画面のループの一覧か、`~/.local/share/art-studio/studio.db` の `loops` に `state` が `running`・`stopping` のものがないこと）
+- **起動の待ち**: 起動し直したあと、`/system_stats` が返るまで待ち（既定180秒、`COMFY_READY_TIMEOUT`）、`comfyui_version` を表示する。返らなければ戻すコマンドを表示して失敗する
+- `--no-restart`: gitとvenvだけを変え、systemctlを呼ばない（キューも確かめない）。サービスでない写し（`COMFY_DIR` で別の場所を指す）で試す用
+
+```bash
+# キューと art-studio のループを先に見る（どちらも 0 であること）
+curl -fsS http://127.0.0.1:8188/queue | jq '[.queue_running, .queue_pending] | map(length)'
+sqlite3 ~/.local/share/art-studio/studio.db "select count(*) from loops where state in ('running','stopping');"
+```
+
+戻す（控えのパスは更新の最後に表示される）:
+
+```bash
+~/.config/nix-config/scripts/update-comfyui-ubuntu.sh --restore ~/.local/state/comfyui-update/<控え>
+```
+
+- 控えのcommitに `checkout --detach` し、`freeze.txt` で依存を入れ直す。freezeにはPyTorchのindexにしかない `torch==…+cu130` とPyPIにしかない版が混ざるので、`--extra-index-url https://download.pytorch.org/whl/cu130 --index-strategy unsafe-best-match` を付けている（付けないと「certifi was found on …/whl/cu130, but not at the requested version」で失敗する。dekahamuntuで見た）
+- 戻す前にも控えを取るので、戻しを戻せる。`--force`・`--no-restart` は更新と同じ
+- 戻らないもの: `freeze.txt` にない（新しい版で足された）パッケージは消さない。ComfyUIの `user/`（設定・ワークフロー）は触らない（拡張の `custom_nodes/` とモデルもスクリプトは触らない）
+- 戻したままにするなら、ホストの設定の `COMFY_REF` も戻した版に直す（直さないと、次の `update-comfyui-ubuntu.sh` でまた `COMFY_REF` の版に上がる）
+
+chibihamuntu（`COMFY_REF` が空）では、`git pull --ff-only` → 依存 → restart の流れは前と同じ。足されたのは、控えを取る・キューを確かめる・起動を待つ・未追跡のファイルで止まらない、の4つ。
 
 ## Qwen3.8（27B / Flash-Next）
 
@@ -300,6 +342,8 @@ Qwen Router（`qwen38.service`）の親プロセスはモデル未ロードな�
 `WantedBy=comfyui.service`でComfyUIと同時に動かす。ComfyUIのノードからLLMを使うときは、
 ノードがComfyUI側のモデルを退避 → `/models/load` → 生成 → `/models/unload` の順に
 VRAMを受け渡す（ノード自体は private repo 側）。チャット等でQwenを専有するときは`ai-mode qwen`。
+
+Routerは、一度読み込んだモデルを自分では降ろさない。ホストの設定の `QWEN_SLEEP_IDLE_SECONDS` に秒数を書くと、`qwen38.service`・`qwen38-dual.service` の llama-server に `--sleep-idle-seconds <秒>` を付け、その秒数だけ問いのなかったモデルを降ろす（Routerの `/models` の status が `sleeping` になり、次の問いで読み込み直す）。chibihamuntuは空（付けない。unitは前と同じ）、dekahamuntuは `600`（Qwenのモデルが GPU 1 に載ったままだと、MiniMax H3 Image のテキストエンコーダーの計算（GPU 1）がOutOfMemoryErrorになるため。[dekahamuntu-setup.md の 2-9](dekahamuntu-setup.md#2-9-comfyui-の更新v0452と-minimax-h3-image)）。
 
 ```bash
 ai-mode qwen    # ComfyUIを止めてQwenを専有
