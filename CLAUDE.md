@@ -161,7 +161,7 @@ macOSのセキュリティ制約により自動化できないもの:
   Piは `~/.pi/agent/models.json`（Nix管理）でchibihamuntuのQwen3.8（tailnet経由）を既定モデルにする
 - Oh My Pi（omp）: flake input `omp`（fork `chibiham/oh-my-pi` の honest-oauth をコミット固定）のHome Managerモジュールで導入。
   Anthropic OAuthはClaude Codeを装わない（偽装は `PI_ANTHROPIC_OAUTH_CLAUDE_CODE_FINGERPRINT=1` のときだけ）。
-  `~/.omp/agent/models.yml`（Nix管理）でchibihamuntuを宣言（Macのローカルllama.cppはメモリ不足になるので無効）。Claude/ChatGPTは `/login` で各自認証
+  `~/.omp/agent/models.yml`（Nix管理）でchibihamuntu（`qwen-ubuntu`）とdekahamuntu（`qwen-dekahamuntu`。Flash-Nextの2つ）を宣言（Macのローカルllama.cppはメモリ不足になるので無効）。Claude/ChatGPTは `/login` で各自認証
 - Aikido Safe Chain: 公式リリースのバイナリをNixでハッシュ固定導入（common.nix）。
   npm/npx/pnpm/pnpx/yarn/bun/bunx/rush/rushx/pip/pip3/uv/uvx/poetry/pipx/pdm を
   PATH先頭のラッパー（非対話シェルや `npm run` の子プロセスにも効く）と対話zshの関数で包み、マルウェアと公開72時間未満の版を拒否

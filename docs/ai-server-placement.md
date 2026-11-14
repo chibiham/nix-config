@@ -335,3 +335,4 @@ RAM・swap・ディスク（同居のとき）:
 3. chibihamuntu の学習と Applio の VRAM を計る（`nvidia-smi --query-gpu=memory.used --format=csv -l 5` を学習中に流す）
 4. 決まったら、モデルを置き直す（`~/ai/scripts/models` の台帳と restore。数百 GB の転送になる）
 5. Mac の codex・pi の設定（`home/common.nix`）は chibihamuntu の 8443 番を指している。dekahamuntu の LLM を使うなら、そのプロファイルを足す
+   - omp には dekahamuntu の Router を `qwen-dekahamuntu` として足した（2026-11-14。反映は Mac の home-manager switch のあと）

@@ -991,13 +991,22 @@ in
   };
 
   # ローカルのllama.cpp。モデルはサーバーから自動で列挙する（Qwen系はopenai-completions）。
-  # - qwen-ubuntu: tailnet内のchibihamuntuのRouter
+  # - qwen-ubuntu: tailnet内のchibihamuntuのRouter（3090）
+  # - qwen-dekahamuntu: tailnet内のdekahamuntuのRouter（GPU 1に常駐。Flash-NextのUD-Q3_K_XLとUncensored。
+  #   --models-max 1 なので、選んだモデルに載せ替わる）
+  # 既存のqwen-ubuntuと同じく4台すべてに入れる（1つのattrsetから作るのでOSでは分けない）。
   # Macでモデルを動かすとメモリが足りなくなるので、このマシンのllama-serverは使わない
   # （ompが既定で足す127.0.0.1:8080のllama.cppはsettingsのdisabledProvidersで止める）。
   # ompはmodels.ymlを書き換えないのでNix Storeへのリンクでよい。
   home.file.".omp/agent/models.yml".source = (pkgs.formats.yaml { }).generate "omp-models.yml" {
     providers.qwen-ubuntu = {
       baseUrl = "https://chibihamuntu.tailded45d.ts.net:8443";
+      api = "openai-completions";
+      auth = "none";
+      discovery.type = "llama.cpp";
+    };
+    providers.qwen-dekahamuntu = {
+      baseUrl = "https://dekahamuntu.tailded45d.ts.net:8443";
       api = "openai-completions";
       auth = "none";
       discovery.type = "llama.cpp";
