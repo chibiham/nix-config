@@ -69,6 +69,7 @@ goal:
 - 2026-11-14 17:17 [agent] 実装レビューの指摘 2 件を直した（agent/4。scripts/install-case-fan-control-ubuntu.sh）: (1) GPU の曲線の最後の点が 100% でないと止める（fan2go 0.15.0 の線形の曲線は最後の点より上で最後の値のままなので、GPU が読めないときの 100℃ でも全開にならない設定を通していた）。(2) CASE_FAN_CPU_CURVE が空のとき maximum に 1 本だけ並べていたのをやめ、ファンが GPU の曲線を直に指す形にした（fan2go 0.15.0 の検査は function の曲線に 2 本以上を求める）。確かめ: dekahamuntu の設定で作られる YAML は直す前とあとで diff なし（138 行。入れ直しは要らない）、試験 27 件 OK（3 件足した。にせの fan2go に 2 本未満で落ちる検査のまねを足した）、bash -n、shellcheck（warning なし）、4 つの構成の評価は変わらず。本物の fan2go の config validate は通していない（Linux のバイナリ）。develop の最新に載せ直した（19 コミット、一直線）
 - 2026-11-14 17:18 [agent] 再レビュー開始。git log と git diff develop..agent/4 を確認（19コミット・18ファイル）。前回指摘2件の修正を含め、現在の範囲全体を読むだけでレビューし、実機反映・コード変更・コミットは行わない。
 - 2026-11-14 17:20 [agent] 前回指摘2件の修正を確認。偽hwmonで--print-configを実行し、CPU曲線なしはgpu_curve直接参照・functionなし、GPU末尾65%/99%は終了1、100%はPWM255を出力。nvidia-smi終了15ではセンサーが終了0・100000を返すことも実行確認。Bash5/coreutils/LC_ALL=Cで既存27試験すべて成功。固定版fan2goのvalidateCurves・線形曲線・cmdセンサーの上流実装と照合中。実機操作なし。
+- 2026-11-14 17:22 [agent] 再レビュー完了（develop..agent/4、19コミット）。前回2件は修正済みで、追加の具体的な正しさの不具合は見つからずREVIEW_OK。fan2go 0.15.0の検証・cmd出力処理・曲線・復帰処理、systemd unit、ホスト設定と既存呼び出し元、omp providerを確認。既存27試験成功と--print-config/センサー失敗時のスモークを実行。実fan2goでのconfig validate、実機の停止/SIGKILL時のBIOS復帰・再起動後の自動起動・GPU取得失敗時の全開は今回未検証。コード変更・コミット・switch・実機操作なし。
 
 ## エージェントの結果(2026-11-14 17:13)
 
