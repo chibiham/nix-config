@@ -2,18 +2,18 @@
 status: doing
 created: 2026-11-15
 updated: 2026-11-15
+assignee: agent
 goal:
   - text: dekahamuntu の ComfyUI が 0.45.0 以上で動き、入っている拡張が読み込めて、art-studio が使う主なレシピ(SDXL・Anima・Anima 2.9B・Qwen-Image・MOSS)で1枚ずつ出るのを確かめてある。前の版へ戻す手順が文書にある
     done: false
   - text: dekahamuntu で MiniMax H3 Image が、テキストエンコーダーを GPU 1・本体を GPU 0 に載せた形で1枚出て、プロンプトを変えた2枚目で入れ替えが起きない(各 GPU の VRAM で確かめる)。今までのワークフローは GPU 0 のまま動く
-    done: false
+    done: true
   - text: qwen38.service(Router)を止めずに同居できる。Flash-Next が GPU 1 に載っているときの扱い(自動で降ろす・前に降ろす・分かる形で失敗する)が決まっていて、実機で確かめてある
     done: false
   - text: A(GPU 0 だけで入れ替え)と B の秒数・VRAM・RAM、本体の版(公式 int8 と GGUF)の速さと絵の差を計った表があり、既定にする版とその理由が書いてある。結果の絵を画像つきの spec(docs/specs/5/<名前>/index.html)に並べる
     done: false
   - text: 実機に入れた設定が hosts/ubuntu/dekahamuntu.env とスクリプトから作り直せ、chibihamuntu の設定と挙動が変わっていない。構成・計測・戻し方が docs に書いてある
     done: false
-assignee: agent
 ---
 # dekahamuntu の ComfyUI を更新し、MiniMax H3 Image を2枚の GPU に分けて使えるようにする
 
@@ -65,3 +65,4 @@ assignee: agent
 - 2026-11-15 02:40 [agent] ファイルの取得が済んだ(公式 int8・w4a8・VAE、第三者の GGUF Q5_K_M・Q4_K_M。revision 固定、5 つとも sha256 一致。手元の NVFP4 のテキストエンコーダーも sha256 一致)。本番に触れない写し(~/issue5-stage、GPU 1 だけ、port 4560、v0.45.2)で先に確かめた: 本番の freeze から venv を作り直すと freeze が一致(uv は --index-strategy unsafe-best-match が要る)、拡張は全部読み込めた(IMPORT FAILED なし)、H3 Image は NVFP4 のテキストエンコーダーで 2048² が出た。1 枚の GPU で入れ替える形(A)の粗い値(ループが GPU 0 で回っている最中): int8 は 1 枚目 約 24 秒、プロンプトを変えた 2 枚目 12〜15 秒、変えないと約 10 秒。w4a8 もほぼ同じ。GGUF Q5_K_M は 46 / 41 / 35 秒で 3 倍以上遅い。B の得は 1 枚あたり数秒の見込み(正式な計測はループが済んでから)
 - 2026-11-15 03:06 [agent] スクリプトを agent/5 に入れた(5d44e65・84a3b15。update-comfyui の版の固定・控え・--restore、install-comfyui --unit-only、install-minimax-h3-image、QWEN_SLEEP_IDLE_SECONDS、ai-mode image-dual)。写しで確かめた: (1) 新しい update-comfyui で e3bee7ff → v0.45.2 → --restore で戻すと、commit と freeze が本番と一致 (2) 主なレシピ 5 つが v0.45.2 で出て、SDXL・Anima・Anima 2.9B・Qwen-Image は前の版と PNG がバイト単位で同じ、MOSS は差の平均 0.2/255・最大 7(上流の MOSS の変更。見た目は同じ) (3) 1 枚の GPU の形(A)の粗い値: int8 2048² は 1 枚目 21 秒・プロンプト替え 13〜15 秒・替えなし 10 秒、w4a8 は 17 / 12.5 / 10 秒、GGUF Q5 は 46 / 40 / 35 秒、Q4 は 44 / 37 / 32 秒。4096² は int8 60 秒・w4a8 51 秒 (4) 取り合い: LLM が GPU 1 に載っているとき H3 Image は 1 秒で OutOfMemoryError、ComfyUI が GPU 1 を使っているとき LLM は 1 秒で HTTP 500「failed to load」(Router は落ちない)。本番の qwen38.service には --sleep-idle-seconds 600 をスクリプトで入れた(unit の差はその 1 行だけ)。本番の ComfyUI は、本人が art-studio のループ(231、残り約 310 組)を回しているのでまだ触っていない
 - 2026-11-15 03:32 [agent] 待ち: 本番の ComfyUI の更新・GPU 2 枚への切り替え・A/B の計測は、art-studio のループ(231 と 233、残り約 1,000 組、いまの速さで 3〜4 時間)が済み、10 分静かになってから始める(起動し直しが 2 回、計測に 20〜30 分、そのあいだ本番の ComfyUI を使う)。早く進めたいときはループを止めてもらえれば、静かになって 10 分で始める。それまでに済んだこと: 本番の Router で --sleep-idle-seconds 600 を確かめた(問いのあと 600 秒で sleeping、GPU 1 が 14,903 → 299MiB、次の問いは 8 秒)。install-minimax-h3-image-ubuntu.sh を実機で流し、置いたファイル 5 つの sha256 一致と、新しい場所への取得(29GB、85 秒)を確かめた。文書の 1 回目(未 commit)と、画面用のワークフローの JSON(未配置)ができている
+- 2026-11-15 08:15 [agent] 完了条件 1 を済みにした: 本番の ComfyUI(v0.45.2、CUDA_VISIBLE_DEVICES=0,1。2026-11-14 22:30 UTC に install-comfyui-ubuntu.sh --unit-only で切り替え)で確かめた。B = 本体の Select CLIP Device(gpu:1)。公式 int8・2048² が 1 枚出て(35.3 秒)、プロンプトを変えた 2・3 枚目(16.3 / 11.0 秒)で GPU 0 の VRAM の最小が 15,470〜15,502MiB のまま(本体が降りない。同じ条件の A では 3,238〜3,654MiB まで下がって読み直し、20.4〜20.5 秒)。テキストエンコーダーは GPU 1 で計算する(エンコード中 GPU 1 の使用率 87%、memory.used の最大 1,594MiB)が、VRAM には常駐せず重みは RAM に置かれる(ComfyUI の RSS 約 24.5GB、終わると GPU 1 は 346MiB)— 0.45.2 の動きで、依頼の「GPU 1 に載せたまま」とはここが違う。w4a8 でも同じ(B 11.1〜11.2 秒、GPU 0 の最小 13,186MiB)。今までのレシピ 5 つ(SDXL・Anima・Anima 2.9B・Qwen-Image・MOSS)は 2 枚見せたあとも GPU 1 が 138MiB のまま(min=peak=after)で、絵は切り替え前と画素が同じ、秒数も同じ。計測は comfybench(1 秒おきの nvidia-smi)。記録は /tmp/issue5-work/prod.jsonl と trace
