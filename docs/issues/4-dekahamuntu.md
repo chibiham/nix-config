@@ -76,6 +76,7 @@ goal:
 - 2026-11-14 17:20 [agent] 前回指摘2件の修正を確認。偽hwmonで--print-configを実行し、CPU曲線なしはgpu_curve直接参照・functionなし、GPU末尾65%/99%は終了1、100%はPWM255を出力。nvidia-smi終了15ではセンサーが終了0・100000を返すことも実行確認。Bash5/coreutils/LC_ALL=Cで既存27試験すべて成功。固定版fan2goのvalidateCurves・線形曲線・cmdセンサーの上流実装と照合中。実機操作なし。
 - 2026-11-14 17:22 [agent] 再レビュー完了（develop..agent/4、19コミット）。前回2件は修正済みで、追加の具体的な正しさの不具合は見つからずREVIEW_OK。fan2go 0.15.0の検証・cmd出力処理・曲線・復帰処理、systemd unit、ホスト設定と既存呼び出し元、omp providerを確認。既存27試験成功と--print-config/センサー失敗時のスモークを実行。実fan2goでのconfig validate、実機の停止/SIGKILL時のBIOS復帰・再起動後の自動起動・GPU取得失敗時の全開は今回未検証。コード変更・コミット・switch・実機操作なし。
 - 2026-11-14 17:22 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正すべき不具合は見つかりませんでした。`develop..agent/4` の19コミットをレビューし、前回の指摘2件は修正済みと確認しました。
+- 2026-11-14 17:22 [agent] develop に入れた(19 件、20936fb)。worktree を片付けた
 
 ## エージェントの結果(2026-11-14 17:13)
 
