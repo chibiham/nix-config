@@ -79,6 +79,7 @@ goal:
 - 2026-11-15 08:43 [agent] レビューの指摘 3 件を直した(agent/5 の 6339c60。載せ直しで前の commit は fd80022・cb4a669・7c99324・84124be になっている)。(1) 「戻すなら」に COMFY_DIR(と COMFY_PORT)・--no-restart を引き継ぎ、控えに comfy_dir を残して、別の場所の控えでの --restore は何も変えずに止まる (2) キューの確かめは curl の終了コード 7(つながらない)のときだけ進み、タイムアウト(28)・HTTP の誤り(22)では止まる (3) --unit-only は適用の途中の印(~/.local/state/comfyui-update/unit-apply-pending)と is-active を見て、失敗のあと流し直すと続きから適用する。確かめ: にせのコマンドの試験 30 件 + 前からの 33 件が通過(本物の curl と 6 秒遅れるサーバーでも 28 で止まる)、bash -n・shellcheck、chibihamuntu と dekahamuntu の引数なしの unit・preset は変わらず、nix eval は 4 つとも変わらず。実機: 本番で --unit-only は「変わらず、動いています。何もしません」、写しで流した update の「戻すなら」に COMFY_DIR=…/issue5-stage/ComfyUI と --no-restart が入り、その控えを COMFY_DIR なしで --restore すると rc=1 で止まって本番の HEAD(v0.45.2)も控えのフォルダも変わらなかった
 - 2026-11-15 08:44 [agent] 再レビュー開始。develop..agent/5 の5コミット（先頭2a661f2）・14ファイルを対象に、前回3指摘の修正と残る正しさの不具合を確認する。コード・コミット・実機設定は変更しない。
 - 2026-11-15 08:46 [agent] 前回3指摘の修正を確認。隔離環境で、写しの復元案内は空白・引用符を含むCOMFY_DIRとCOMFY_PORT・--no-restartを保持し、別対象への復元は変更前にrc=1で停止。unitのrestart失敗後は印が残り、再実行でrestart・起動待ちが通って印が消える。実curlとローカルHTTPで、空キュー/接続拒否は許可、実行中/HTTP500/5秒タイムアウトは拒否することを確認した。実機は変更していない。
+- 2026-11-15 08:48 [agent] 計測要件の未達を確認: docs/ai-server-placement.md:404-405 は GGUF Q5_K_M/Q4_K_M の2880²・4096²を「計っていない」と明記し、大解像度のA/B表と画像specもint8/w4a8のみ。依頼5の「int8・GGUF Q5/Q4を2048²とより大きい解像度で比較」のうちGGUFの大解像度比較が欠ける。実行時のコード不具合とは区別して最終報告する。
 
 ## エージェントの結果(2026-11-15 08:32)
 
