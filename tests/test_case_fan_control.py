@@ -193,6 +193,8 @@ class IdentifyHwmonTests(unittest.TestCase):
     def identify_line(self, **env):
         full = {
             **os.environ,
+            # 流す機械の fan2go・nvidia-smi・カーネルのログに依らないように
+            "PATH": make_fake_tools(self.fx.base / "tools"),
             "UBUNTU_HOST": "no-such-host-for-tests",
             "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
             "CASE_FAN_HWMON": "",
@@ -237,6 +239,38 @@ class IdentifyHwmonTests(unittest.TestCase):
         self.assertIn("決まらない（hwmon nct6797 が1つに決まりません）", line)
 
 
+# にせの systemctl: fan2go の状態は試験が FAKE_FAN2GO_STATE で決める（既定は inactive）。流す機械の fan2go に依らないように
+FAKE_SYSTEMCTL = """#!/bin/sh
+state="${FAKE_FAN2GO_STATE:-inactive}"
+if [ "$1" = is-active ]; then
+  shift
+  quiet=false
+  [ "$1" = --quiet ] && { quiet=true; shift; }
+  [ "$1" = fan2go ] || [ "$1" = fan2go.service ] || state=inactive
+  $quiet || echo "$state"
+  [ "$state" = active ]
+  exit $?
+fi
+echo "fake systemctl: $*" >&2
+exit 1
+"""
+
+
+def make_fake_tools(directory):
+    """流す機械の状態に依らないように、--probe・--identify が呼ぶ道具のにせものを置き、PATH の先頭に足す値を返す。
+    systemctl（FAKE_FAN2GO_STATE）、nvidia-smi（1 枚、40℃）、journalctl（カーネルのログは空）"""
+    directory.mkdir(exist_ok=True)
+    tools = {
+        "systemctl": FAKE_SYSTEMCTL,
+        "nvidia-smi": "#!/bin/sh\necho '0, 00000000:01:00.0, Fake GPU, 40, 30 %, 20.00 W'\n",
+        "journalctl": "#!/bin/sh\nexit 0\n",
+    }
+    for name, text in tools.items():
+        (directory / name).write_text(text)
+        (directory / name).chmod(0o755)
+    return f"{directory}:{os.environ.get('PATH', '')}"
+
+
 @unittest.skipUnless(sys.platform.startswith("linux"), "--identify は Linux 専用")
 class IdentifyTests(unittest.TestCase):
     """--identify（全開・--stop）を、にせの hwmon の木に対して sudo なしで動かし、元に戻ることを確かめる"""
@@ -254,12 +288,15 @@ class IdentifyTests(unittest.TestCase):
         (nct / "pwm3").write_text("255\n")
         (nct / "pwm4").write_text("200\n")
         (nct / "pwm4_enable").write_text("0\n")
+        self.path = make_fake_tools(self.fx.base / "tools")
 
     def env(self, **env):
         if os.geteuid() == 0:
             self.skipTest("root では流さない（sudo なしの入口を試す）")
         return {
             **os.environ,
+            "PATH": self.path,
+            "FAKE_FAN2GO_STATE": "inactive",
             "UBUNTU_HOST": "no-such-host-for-tests",
             "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
             "CASE_FAN_HWMON": "nct6799",
@@ -289,6 +326,17 @@ class IdentifyTests(unittest.TestCase):
                 return p, lines
         p.wait(timeout=10)
         self.fail("1s: の行が出ませんでした: " + "".join(lines) + p.stderr.read())
+
+    def test_running_fan2go_is_refused(self):
+        # fan2go が動いていれば、全開でも --stop でも何も変えずに止まる
+        for args, ch, before in [(["2"], 2, ("5", "90")), (["2", "--stop"], 2, ("5", "90")),
+                                 (["3", "--stop", "--allow-pump"], 3, ("5", "255"))]:
+            with self.subTest(args=args):
+                r = self.run_identify(*args, FAKE_FAN2GO_STATE="active")
+                self.assertNotEqual(r.returncode, 0)
+                self.assertIn("fan2go が動いています", r.stderr)
+                self.assertNotIn("秒だけ", r.stdout)
+                self.assertEqual(self.state(ch), before)
 
     def test_full_speed_restores(self):
         # --stop なしは今までどおり 255 にして戻す
@@ -464,6 +512,8 @@ class ProbePumpLineTests(unittest.TestCase):
     def probe(self):
         r = subprocess.run([BASH, str(INSTALL), "--probe"], env={
             **os.environ,
+            # 流す機械の fan2go・nvidia-smi・カーネルのログに依らないように
+            "PATH": make_fake_tools(self.fx.base / "tools"),
             "UBUNTU_HOST": "no-such-host-for-tests",
             "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
             "CASE_FAN_HWMON": "",
