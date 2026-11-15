@@ -13,7 +13,7 @@ goal:
   - text: docs に、chibihamuntu のファンのつなぎ方(どのヘッダーに何がつながっているか)・入れ方・外し方が書いてある
     done: true
   - text: 本人が実機に入れたあと、fan2go.service が active で、GPU に負荷をかけるとケースファンの pwm と回転数が上がり、負荷を止めると下がるのを実機で確かめてある
-    done: false
+    done: true
 ---
 # chibihamuntu のケースファンを GPU の温度に合わせて回す
 
@@ -80,3 +80,4 @@ sudo が要るので、本人が実機で流す。執事が結果を読んでこ
 - 2026-11-15 19:45 [agent] 返事待ち: chibihamuntu で `cd ~/nix-config-issue6 && scripts/install-case-fan-control-ubuntu.sh` を流して入れ直し、終わったら知らせてください(できれば学習の合間に。途中で止まったら、出たメッセージを送ってください)。
 - 2026-11-15 21:40 [agent] 入れ直し待ち(12:39 UTC = 21:39 JST 時点でまだ: /etc/fan2go/fan2go.yaml は最初の設定のまま、pwm2 は enable=5)。fan2go は 10:09 UTC から動き続け、再起動 0 回。前の曲線での約 2 時間の記録(10:44〜12:39 UTC、10 秒ごと 662 回): 学習中(555 回)GPU 平均 66.3℃(最大 68)・Package 平均 71.1℃(最大 79)・temp9 平均 58.9℃ で pwm5 平均 147・fan5 平均 763 RPM、pwm2(BIOS)平均 153・fan2 平均 1,271 RPM。合間(11:43〜11:55 UTC、71 回)GPU 平均 42.8℃ で pwm5 平均 79・fan5 平均 548 RPM、pwm2 平均 94・fan2 平均 967 RPM。入れ直しが見えたら 40 分ぶん取る記録を、もう一度だけ裏で回している(最長 約 2 時間)。
 - 2026-11-15 23:06 [agent] 本人が入れ直した(13:59:52 UTC = 22:59:52 JST に fan2go.service 起動、再起動 0 回)。読むだけで確かめた: /etc/fan2go/fan2go.yaml の sha256 は ~/nix-config-issue6(b15ddf3)の --print-config と同じ。case-fan-restore.conf は「nct6798 5 5」「nct6798 2 5」。pwm5・pwm2 が enable=1、pwm1・4・6 は enable=5、pwm7 は 0 のまま。case_pwm5 は解析なしで 13:59:55 に controller loop 開始(見込みどおり)。rad_pwm2 の初回の解析は 1 分 42.9 秒、Min 51・Start 51・Max 255。記録(5 秒ごと)では、解析のあいだ pwm2 が 63→15→7→3→1→0 に置かれても fan2 は止まらず約 681〜684 RPM で回り続けた(約 25 秒)。そのあいだの CPU Package は 65〜72℃ で、前(67〜70℃)と変わらず。入れ直しのあと学習中(GPU 64〜65℃)は pwm5・pwm2 とも 189〜191、fan5 約 880 RPM、fan2 約 1,445 RPM(直前の 80 分は pwm5 平均 137・fan5 726 RPM・pwm2 平均 140・fan2 1,209 RPM、GPU 平均 64.4℃)。合間で下がるのを見る記録を裏で取っている。
+- 2026-11-15 23:37 [agent] 完了条件 4 を済みにした: 本人が実機に入れた(2026-11-15 19:09 JST)・入れ直した(22:59 JST。GPU の曲線を前へ寄せた版とラジエーターのファン pwm2)。ssh で読むだけで確かめた(sudo なし): fan2go.service は active・enabled、22:59:52 JST から再起動 0 回、警告・エラー 0 行(23:37 JST)。/etc/fan2go/fan2go.yaml の sha256 は最後の commit 6dd18a5 の --print-config と同じ(5742d5e1…)。10 秒前後ごとの記録で、新しい設定: 学習中(GPU 100%・64〜65℃)pwm5 平均 185・fan5 平均 863 RPM(pwm2 平均 185・fan2 1,423 RPM)→ 合間(23:19〜23:28 JST、GPU 0%・39〜42℃)pwm5 77・fan5 520〜531 RPM(pwm2 89〜103・fan2 904〜1,017 RPM)→ 学習に戻って約 4 分で pwm5 191・fan5 878 RPM。最初の曲線でも同じ上下を見た(19:13 JST 学習中 pwm5 149・fan5 776 RPM → 19:20〜19:28 合間 pwm5 77・fan5 約 540 RPM → 19:29 学習に戻って pwm5 139・fan5 737 RPM)。GPU の負荷は学習の合間の上下を使い、こちらでは負荷をかけても止めてもいない。
