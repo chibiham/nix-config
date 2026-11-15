@@ -12,6 +12,8 @@
 #
 # 落ちたとき・止めたときは、fan2go 自身（controlMode.onExit: restore）と unit の ExecStopPost
 # （case-fan-restore-bios）が BIOS の制御へ戻す。GPU の温度が読めないときは全開側に倒す（case-fan-gpu-temp）。
+# CASE_FAN_RAD_CHANNELS があれば、CPU の簡易水冷のラジエーターのファンを別の曲線（max(GPU, CPU[, CPU の保険])）で回す。
+# その CPU の曲線は BIOS の曲線より弱くしない（BIOS と同じ温度の源なら、sysfs の BIOS の曲線と比べて、弱い所があれば止まる）。
 # OS の再起動はしない。acpi_enforce_resources=lax（GRUB）は CASE_FAN_ACPI_LAX=1 のときだけ入れる。
 set -euo pipefail
 
@@ -82,6 +84,12 @@ case "${1:-}" in
     CONFIG_FILE=$CONFIG_DIR/fan2go.yaml
     CONFIG_NEW=$CONFIG_DIR/fan2go.new.yaml
     ;;
+  # 試験だけ: BIOS の pwmN_enable の記録（case-fan-restore.conf）を CASE_FAN_TEST_CONFIG_DIR に書く（sudo 不要）
+  --test-write-restore-conf)
+    mode=test-write-restore-conf
+    [[ $# -eq 1 && -n "${CASE_FAN_TEST_CONFIG_DIR:-}" ]] || usage
+    RESTORE_CONF=$CASE_FAN_TEST_CONFIG_DIR/case-fan-restore.conf
+    ;;
   *) usage ;;
 esac
 
@@ -103,7 +111,7 @@ case "$mode" in
   probe) if "$load_module"; then needs_root=true; fi ;;
 esac
 # --print-config は試験のため Linux でなくても動く
-if [[ "$mode" != print-config && "$mode" != test-write-config && "$(uname -s)" != Linux ]]; then
+if [[ "$mode" != print-config && "$mode" != test-write-config && "$mode" != test-write-restore-conf && "$(uname -s)" != Linux ]]; then
   echo "このスクリプトはLinux専用です" >&2
   exit 1
 fi
@@ -245,19 +253,119 @@ curve_points() {
   done
 }
 
-# CASE_FAN_CHANNELS（"2 3" または "pwm:rpm" の "2:2 3:4"）→ 1行に「pwm rpm」
+# CASE_FAN_CHANNELS（"2 3" または "pwm:rpm" の "2:2 3:4"）→ 1行に「pwm rpm」。
+# $1 は変数の名前（メッセージ用）、$2 は値（省けば CASE_FAN_CHANNELS）
 channel_pairs() {
-  local item
-  [[ -n "$CASE_FAN_CHANNELS" ]] || die "CASE_FAN_CHANNELS が空です（hosts/ubuntu/$UBUNTU_HOST.env。--probe の出力から決める）"
-  for item in $CASE_FAN_CHANNELS; do
+  local label="${1:-CASE_FAN_CHANNELS}" value="${2-$CASE_FAN_CHANNELS}" item
+  [[ -n "$value" ]] || die "$label が空です（hosts/ubuntu/$UBUNTU_HOST.env。--probe の出力から決める）"
+  for item in $value; do
     if [[ "$item" =~ ^([1-9][0-9]?)$ ]]; then
       printf '%s %s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[1]}"
     elif [[ "$item" =~ ^([1-9][0-9]?):([1-9][0-9]?)$ ]]; then
       printf '%s %s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
     else
-      die "CASE_FAN_CHANNELS の値が読めません: $item（例: \"2 3\" や \"2:2\"）"
+      die "$label の値が読めません: $item（例: \"2 3\" や \"2:2\"）"
     fi
   done
+}
+
+# 曲線（curve_points の出力の配列の名前 $1）を確かめる: 2 点以上、最後の点が 100%（255）。
+# $2 は変数の名前、$3 は 100% を求める理由。$4 が空でなければ、最後の温度が GPU_FAILSAFE_C より下であることも求める
+check_curve_shape() {
+  local -n _pts="$1"
+  local label="$2" reason="$3" gpu="${4:-}" last_temp last_pwm
+  [[ ${#_pts[@]} -ge 2 ]] || die "$label は2点以上"
+  read -r last_temp last_pwm <<<"${_pts[-1]}"
+  if [[ -n "$gpu" ]]; then
+    ((GPU_FAILSAFE_C > last_temp)) || die "$label の最後の温度（${last_temp}℃）は ${GPU_FAILSAFE_C}℃ より低くすること（読めないときに全開にするため）"
+  fi
+  ((last_pwm == 255)) || die "$label の最後の点は 100% にすること（いまは PWM ${last_pwm}/255）。$reason"
+}
+
+# hwmon の name $2 の temp$3_input があるか（$1 は変数の名前の頭。メッセージ用）
+check_temp_source() {
+  local label="$1" name="$2" ch="$3" dir
+  [[ "$name" =~ ^[a-z0-9_]+$ ]] || die "${label}_HWMON が使えません: ${name:-空}"
+  [[ "$ch" =~ ^[1-9][0-9]?$ ]] || die "${label}_TEMP_CHANNEL が使えません: ${ch:-空}"
+  dir="$(find_hwmon "$name")" || die "${label}_HWMON の hwmon $name が1つに決まりません"
+  [[ -e "$dir/temp${ch}_input" ]] || die "$name に temp${ch}_input がありません（${label}_TEMP_CHANNEL）"
+}
+
+# BIOS の曲線と、こちらの CPU の曲線（"温度 PWM" の行。$3 以降）を比べる。hwmon の dir $1 の pwm$2 について。
+# BIOS の曲線は pwmN_auto_pointM_temp（ミリ度）・_pwm（あるものを全部）。どちらの曲線も、点の間は直線、
+# 最初の点より下は最初の値、最後の点より上は最後の値。2 本の折れ線の差は、両方の点の温度のどこかで最小になるので、
+# 両方の点の温度の全部で比べれば足りる。cmp_msg に結果の文を入れる。
+# 返り値: 0 = どこでも BIOS 以上、1 = 弱い所がある、2 = 比べられない（源が違う・曲線のファイルがない）、3 = BIOS の曲線が読めない
+rad_bios_compare() {
+  local dir="$1" ch="$2" sel f m t p bios=() n=0
+  shift 2
+  cmp_msg=""
+  if [[ "$CASE_FAN_RAD_CPU_HWMON" != "$CASE_FAN_HWMON" ]]; then
+    cmp_msg="CPU の温度の源（$CASE_FAN_RAD_CPU_HWMON の temp$CASE_FAN_RAD_CPU_TEMP_CHANNEL）が BIOS の側の hwmon（$CASE_FAN_HWMON）と違うので、BIOS の曲線とは比べられません"
+    return 2
+  fi
+  sel="$(cat "$dir/pwm${ch}_temp_sel" 2>/dev/null)" || sel=""
+  if [[ ! "$sel" =~ ^[0-9]+$ ]]; then
+    cmp_msg="pwm${ch}_temp_sel が読めず、BIOS の温度の源が分からないので、BIOS の曲線とは比べられません"
+    return 2
+  fi
+  if [[ "$sel" != "$CASE_FAN_RAD_CPU_TEMP_CHANNEL" ]]; then
+    cmp_msg="BIOS の温度の源は temp$sel（pwm${ch}_temp_sel）で、CASE_FAN_RAD_CPU_TEMP_CHANNEL（temp$CASE_FAN_RAD_CPU_TEMP_CHANNEL）と違うので、BIOS の曲線とは比べられません"
+    return 2
+  fi
+  for f in "$dir/pwm${ch}_auto_point"[0-9]*_pwm; do
+    [[ -e "$f" ]] || continue
+    [[ "$f" =~ _auto_point([0-9]+)_pwm$ ]] || continue
+    m=${BASH_REMATCH[1]}
+    p="$(cat "$f" 2>/dev/null)" || p=""
+    t="$(cat "$dir/pwm${ch}_auto_point${m}_temp" 2>/dev/null)" || t=""
+    if [[ ! "$p" =~ ^[0-9]+$ || ! "$t" =~ ^-?[0-9]+$ ]]; then
+      cmp_msg="BIOS の曲線の点 $m（pwm${ch}_auto_point${m}_temp・_pwm）が読めません（temp=${t:-?} pwm=${p:-?}）"
+      return 3
+    fi
+    bios+=("$m $t $p")
+    n=$((n + 1))
+  done
+  if ((n == 0)); then
+    cmp_msg="BIOS の曲線（pwm${ch}_auto_point*_temp・_pwm）がないので、BIOS の曲線とは比べられません"
+    return 2
+  fi
+  local result rc=0
+  # 点の番号の順に並べ（glob は文字の順なので 10 が 2 より前に来る）、温度はミリ度のまま、こちらの温度は ×1000 で比べる
+  result="$(printf '%s\n' "${bios[@]}" | sort -n -k1,1 | awk -v ours="$(printf '%s;' "$@")" '
+    function ev(k, T, P, x,   i) {
+      if (x <= T[1]) return P[1]
+      for (i = 2; i <= k; i++)
+        if (x <= T[i]) return (T[i] == T[i-1]) ? P[i] : P[i-1] + (P[i] - P[i-1]) * (x - T[i-1]) / (T[i] - T[i-1])
+      return P[k]
+    }
+    function fmt(v) { v = sprintf("%.1f", v); sub(/\.0$/, "", v); return v }
+    { nb++; BT[nb] = $2; BP[nb] = $3
+      if (nb > 1 && BT[nb] < BT[nb-1]) { print "BIOS の曲線の温度が増えていません（点 " $1 "）"; err = 1; exit 3 } }
+    END {
+      if (err || nb == 0) exit 3
+      no = split(ours, items, ";")
+      k = 0
+      for (i = 1; i <= no; i++) if (items[i] != "") { split(items[i], a, " "); k++; OT[k] = a[1] * 1000; OP[k] = a[2] }
+      for (i = 1; i <= nb; i++) X[++nx] = BT[i]
+      for (i = 1; i <= k; i++) X[++nx] = OT[i]
+      bad = ""
+      for (i = 1; i <= nx; i++) {
+        x = X[i]
+        if (x in seen) continue
+        seen[x] = 1; nu++
+        b = ev(nb, BT, BP, x); o = ev(k, OT, OP, x)
+        if (o < b - 1e-9) bad = bad (bad == "" ? "" : "、") fmt(x / 1000) "℃ で BIOS " fmt(b) "、こちら " fmt(o)
+      }
+      if (bad != "") { print bad; exit 1 }
+      print nu
+    }')" || rc=$?
+  case "$rc" in
+    0) cmp_msg="CASE_FAN_RAD_CPU_CURVE は、BIOS の曲線（temp$sel。${n} 点）より弱い所がない（両方の点の温度 $result か所で比べた）" ;;
+    1) cmp_msg="CASE_FAN_RAD_CPU_CURVE が BIOS の曲線（temp$sel）より弱い所があります: $result（PWM 0..255）" ;;
+    *) cmp_msg="BIOS の曲線が読めません: ${result:-pwm${ch}_auto_point*}"; return 3 ;;
+  esac
+  return "$rc"
 }
 
 # 設定の値と sysfs を確かめる。通れば fan_dir・pairs・gpu_points・cpu_points・min_pwm を決める
@@ -317,6 +425,71 @@ check_settings() {
   ((GPU_FAILSAFE_C > last_temp)) || die "GPU の曲線の最後の温度（${last_temp}℃）は ${GPU_FAILSAFE_C}℃ より低くすること（読めないときに全開にするため）"
   ((last_pwm == 255)) || die "CASE_FAN_GPU_CURVE の最後の点は 100% にすること（いまは PWM ${last_pwm}/255）。GPU が読めないとき（${GPU_FAILSAFE_C}℃ を出す）に全開にするため"
   min_pwm=$(((CASE_FAN_MIN_DUTY * 255 + 50) / 100))
+  check_rad_settings
+}
+
+# ラジエーターの組（CASE_FAN_RAD_*）を確かめる。通れば rad_pairs・rad_gpu_points・rad_cpu_points・rad_backup_points・rad_min_pwm を決める。
+# CASE_FAN_RAD_CHANNELS が空なら、どれも空のまま（設定はケースファンだけ）
+check_rad_settings() {
+  rad_pairs=() rad_gpu_points=() rad_cpu_points=() rad_backup_points=() rad_min_pwm=""
+  [[ -n "$CASE_FAN_RAD_CHANNELS" ]] || return 0
+  if [[ ! "$CASE_FAN_RAD_MIN_DUTY" =~ ^[0-9]+$ ]] || ((CASE_FAN_RAD_MIN_DUTY < 10 || CASE_FAN_RAD_MIN_DUTY > 100)); then
+    die "CASE_FAN_RAD_MIN_DUTY は 10..100: $CASE_FAN_RAD_MIN_DUTY"
+  fi
+  [[ -n "$CASE_FAN_RAD_GPU_CURVE" ]] || die "CASE_FAN_RAD_GPU_CURVE が空です（ラジエーターの組を使うなら必須）"
+  # CPU のクーラーのファンを、CPU の曲線なしで操らせない
+  [[ -n "$CASE_FAN_RAD_CPU_CURVE" ]] ||
+    die "CASE_FAN_RAD_CPU_CURVE が空です（ラジエーターのファンは CPU のクーラーなので、CPU の曲線なしでは操らない）"
+  check_temp_source CASE_FAN_RAD_CPU "$CASE_FAN_RAD_CPU_HWMON" "$CASE_FAN_RAD_CPU_TEMP_CHANNEL"
+  if [[ -n "$CASE_FAN_RAD_CPU_BACKUP_CURVE" ]]; then
+    check_temp_source CASE_FAN_RAD_CPU_BACKUP "$CASE_FAN_RAD_CPU_BACKUP_HWMON" "$CASE_FAN_RAD_CPU_BACKUP_TEMP_CHANNEL"
+  elif [[ -n "$CASE_FAN_RAD_CPU_BACKUP_HWMON$CASE_FAN_RAD_CPU_BACKUP_TEMP_CHANNEL" ]]; then
+    die "CASE_FAN_RAD_CPU_BACKUP_HWMON・_TEMP_CHANNEL があるのに CASE_FAN_RAD_CPU_BACKUP_CURVE が空です（保険の曲線を使わないなら、3 つとも空にする）"
+  fi
+
+  local out pair pwm rpm case_pwms=" " seen=" "
+  for pair in "${pairs[@]}"; do
+    read -r pwm _ <<<"$pair"
+    case_pwms+="$pwm "
+  done
+  out="$(channel_pairs CASE_FAN_RAD_CHANNELS "$CASE_FAN_RAD_CHANNELS")" || exit 1
+  mapfile -t rad_pairs <<<"$out"
+  for pair in "${rad_pairs[@]}"; do
+    read -r pwm rpm <<<"$pair"
+    [[ "$case_pwms" != *" $pwm "* ]] || die "pwm$pwm が CASE_FAN_CHANNELS と CASE_FAN_RAD_CHANNELS の両方にあります（1 つのファンは 1 つの組にだけ入れる）"
+    [[ "$seen" != *" $pwm "* ]] || die "CASE_FAN_RAD_CHANNELS に pwm$pwm が2回あります"
+    seen+="$pwm "
+    [[ -e "$fan_dir/pwm$pwm" && -e "$fan_dir/pwm${pwm}_enable" ]] ||
+      die "$CASE_FAN_HWMON に pwm$pwm（と pwm${pwm}_enable）がありません（CASE_FAN_RAD_CHANNELS）"
+    [[ -e "$fan_dir/fan${rpm}_input" ]] || die "$CASE_FAN_HWMON に fan${rpm}_input がありません（CASE_FAN_RAD_CHANNELS）"
+  done
+
+  out="$(curve_points "$CASE_FAN_RAD_GPU_CURVE" CASE_FAN_RAD_GPU_CURVE)" || exit 1
+  mapfile -t rad_gpu_points <<<"$out"
+  check_curve_shape rad_gpu_points CASE_FAN_RAD_GPU_CURVE "GPU が読めないとき（${GPU_FAILSAFE_C}℃ を出す）に全開にするため" gpu
+  out="$(curve_points "$CASE_FAN_RAD_CPU_CURVE" CASE_FAN_RAD_CPU_CURVE)" || exit 1
+  mapfile -t rad_cpu_points <<<"$out"
+  check_curve_shape rad_cpu_points CASE_FAN_RAD_CPU_CURVE "CPU が熱いときにラジエーターのファンを全開にするため（BIOS の曲線も最後は全開）"
+  if [[ -n "$CASE_FAN_RAD_CPU_BACKUP_CURVE" ]]; then
+    out="$(curve_points "$CASE_FAN_RAD_CPU_BACKUP_CURVE" CASE_FAN_RAD_CPU_BACKUP_CURVE)" || exit 1
+    mapfile -t rad_backup_points <<<"$out"
+    check_curve_shape rad_backup_points CASE_FAN_RAD_CPU_BACKUP_CURVE "主の温度の源が読めなくなったときに、保険の源で全開まで上がるようにするため"
+  fi
+  rad_min_pwm=$(((CASE_FAN_RAD_MIN_DUTY * 255 + 50) / 100))
+
+  # CPU の冷却を BIOS より弱くしない: BIOS と同じ温度の源なら、BIOS の曲線と比べて弱い所があれば止まる。
+  # 比べられないとき（源が違う・曲線のファイルがない）は注意だけ（標準エラー。--print-config の出力に混ぜない）
+  local rc
+  for pair in "${rad_pairs[@]}"; do
+    read -r pwm _ <<<"$pair"
+    rc=0
+    rad_bios_compare "$fan_dir" "$pwm" "${rad_cpu_points[@]}" || rc=$?
+    case "$rc" in
+      0) echo "ラジエーターの pwm$pwm: $cmp_msg" >&2 ;;
+      2) warn "ラジエーターの pwm$pwm: $cmp_msg。CPU の曲線が BIOS より弱くないかは、自分で確かめる" >&2 ;;
+      *) die "ラジエーターの pwm$pwm: $cmp_msg。CPU の冷却を BIOS より弱くしないため、止めます（CASE_FAN_RAD_CPU_CURVE を BIOS の曲線以上にする）" ;;
+    esac
+  done
 }
 
 render_curve() {
@@ -343,6 +516,12 @@ render_config() {
     fan_curve=case_fans
     how="max(GPU の曲線, CPU の曲線)"
   fi
+  # ラジエーターの組があるときだけ、頭のコメントにその回し方を足す（組がないときの行は変えない）
+  if [[ ${#rad_pairs[@]} -gt 0 ]]; then
+    local rad_how="ラジエーターのファン = max(GPU の曲線, CPU の曲線"
+    [[ ${#rad_backup_points[@]} -eq 0 ]] || rad_how+=", CPU の保険の曲線"
+    how+="、$rad_how)"
+  fi
   cat <<EOF
 # install-case-fan-control-ubuntu.sh が hosts/ubuntu/$UBUNTU_HOST.env（CASE_FAN_*）から書く。手で直さない（入れ直すと上書きされる）
 # fan2go $FAN2GO_VERSION。ケースファン = $how。曲線の値は PWM（0..255）そのもの（useUnscaledCurveValues）
@@ -360,29 +539,13 @@ fans:
 EOF
   for pair in "${pairs[@]}"; do
     read -r pwm rpm <<<"$pair"
-    cat <<EOF
-  - id: case_pwm$pwm
-    hwmon:
-      platform: $CASE_FAN_HWMON
-      rpmChannel: $rpm
-      pwmChannel: $pwm
-    curve: $fan_curve
-    # 止めない。最低は CASE_FAN_MIN_DUTY（$CASE_FAN_MIN_DUTY%）。初回の解析（PWM と RPM の関係を測る）の結果より、ここの値が勝つ
-    neverStop: true
-    minPwm: $min_pwm
-    startPwm: $min_pwm
-    maxPwm: 255
-    pwmMap: identity
-    setPwmToGetPwmMap: identity
-    useUnscaledCurveValues: true
-    # 1 回（200ms）に 3 まで動かす（0→255 に約 17 秒）
-    controlAlgorithm:
-      direct:
-        maxPwmChangePerCycle: 3
-    controlMode:
-      active: pwm
-      onExit: restore
-EOF
+    render_fan "case_pwm$pwm" "$pwm" "$rpm" "$fan_curve" "$min_pwm" \
+      "止めない。最低は CASE_FAN_MIN_DUTY（$CASE_FAN_MIN_DUTY%）。初回の解析（PWM と RPM の関係を測る）の結果より、ここの値が勝つ"
+  done
+  for pair in "${rad_pairs[@]}"; do
+    read -r pwm rpm <<<"$pair"
+    render_fan "rad_pwm$pwm" "$pwm" "$rpm" rad_fans "$rad_min_pwm" \
+      "CPU の簡易水冷のラジエーターのファン。止めない。最低は CASE_FAN_RAD_MIN_DUTY（$CASE_FAN_RAD_MIN_DUTY%）。初回の解析の結果より、ここの値が勝つ"
   done
   cat <<EOF
 
@@ -401,11 +564,40 @@ EOF
       channel: $CASE_FAN_CPU_TEMP_CHANNEL
 EOF
   fi
+  if [[ ${#rad_pairs[@]} -gt 0 ]]; then
+    cat <<EOF
+  # ラジエーターのファンの CPU の温度（CASE_FAN_RAD_CPU_*。BIOS と同じ源を指せるように、ケースファンの cpu とは別）
+  - id: rad_cpu
+    hwmon:
+      platform: $CASE_FAN_RAD_CPU_HWMON
+      channel: $CASE_FAN_RAD_CPU_TEMP_CHANNEL
+EOF
+    if [[ ${#rad_backup_points[@]} -gt 0 ]]; then
+      cat <<EOF
+  # 保険（CASE_FAN_RAD_CPU_BACKUP_*）: 主の源が固まる・0 を返すようになっても、この温度でファンが上がる
+  - id: rad_cpu_backup
+    hwmon:
+      platform: $CASE_FAN_RAD_CPU_BACKUP_HWMON
+      channel: $CASE_FAN_RAD_CPU_BACKUP_TEMP_CHANNEL
+EOF
+    fi
+  fi
   printf '\ncurves:\n'
   render_curve gpu_curve gpu_max "${gpu_points[@]}"
   if [[ ${#cpu_points[@]} -gt 0 ]]; then
     render_curve cpu_curve cpu "${cpu_points[@]}"
     printf '  - id: case_fans\n    function:\n      type: maximum\n      curves:\n        - gpu_curve\n        - cpu_curve\n'
+  fi
+  if [[ ${#rad_pairs[@]} -gt 0 ]]; then
+    render_curve rad_gpu_curve gpu_max "${rad_gpu_points[@]}"
+    render_curve rad_cpu_curve rad_cpu "${rad_cpu_points[@]}"
+    if [[ ${#rad_backup_points[@]} -gt 0 ]]; then
+      render_curve rad_cpu_backup_curve rad_cpu_backup "${rad_backup_points[@]}"
+    fi
+    printf '  - id: rad_fans\n    function:\n      type: maximum\n      curves:\n        - rad_gpu_curve\n        - rad_cpu_curve\n'
+    if [[ ${#rad_backup_points[@]} -gt 0 ]]; then
+      printf '        - rad_cpu_backup_curve\n'
+    fi
   fi
   cat <<EOF
 
@@ -413,6 +605,33 @@ statistics:
   enabled: false
 api:
   enabled: false
+EOF
+}
+
+# fans の 1 つ。$1 id、$2 pwm、$3 rpm、$4 曲線、$5 最低の PWM、$6 コメント
+render_fan() {
+  cat <<EOF
+  - id: $1
+    hwmon:
+      platform: $CASE_FAN_HWMON
+      rpmChannel: $3
+      pwmChannel: $2
+    curve: $4
+    # $6
+    neverStop: true
+    minPwm: $5
+    startPwm: $5
+    maxPwm: 255
+    pwmMap: identity
+    setPwmToGetPwmMap: identity
+    useUnscaledCurveValues: true
+    # 1 回（200ms）に 3 まで動かす（0→255 に約 17 秒）
+    controlAlgorithm:
+      direct:
+        maxPwmChangePerCycle: 3
+    controlMode:
+      active: pwm
+      onExit: restore
 EOF
 }
 
@@ -486,7 +705,7 @@ probe() {
     echo "  起動オプション: acpi_enforce_resources=lax なし"
   fi
   echo "  nct6775 の ASUS WMI のボード一覧に「$board」が: $(board_in_nct6775_list "$board")"
-  echo "  ホストの設定: hosts/ubuntu/$UBUNTU_HOST.env（CASE_FAN_CONTROL=$CASE_FAN_CONTROL CASE_FAN_MODULE=$CASE_FAN_MODULE CASE_FAN_HWMON=${CASE_FAN_HWMON:-空} CASE_FAN_CHANNELS=${CASE_FAN_CHANNELS:-空} CASE_FAN_ACPI_LAX=$CASE_FAN_ACPI_LAX）"
+  echo "  ホストの設定: hosts/ubuntu/$UBUNTU_HOST.env（CASE_FAN_CONTROL=$CASE_FAN_CONTROL CASE_FAN_MODULE=$CASE_FAN_MODULE CASE_FAN_HWMON=${CASE_FAN_HWMON:-空} CASE_FAN_CHANNELS=${CASE_FAN_CHANNELS:-空} CASE_FAN_RAD_CHANNELS=${CASE_FAN_RAD_CHANNELS:-空} CASE_FAN_ACPI_LAX=$CASE_FAN_ACPI_LAX）"
 
   if "$load_module"; then
     echo
@@ -540,7 +759,12 @@ probe() {
   echo
   echo "== NVIDIA GPU"
   if command -v nvidia-smi >/dev/null; then
-    nvidia-smi --query-gpu=index,pci.bus_id,name,temperature.gpu,fan.speed,power.draw --format=csv,noheader 2>&1 | sed 's/^/  /'
+    # 調べる道具なので、nvidia-smi が失敗しても（ドライバの不一致など）先へ進む
+    local smi_out smi_rc=0
+    smi_out="$(nvidia-smi --query-gpu=index,pci.bus_id,name,temperature.gpu,fan.speed,power.draw --format=csv,noheader 2>&1)" || smi_rc=$?
+    # shellcheck disable=SC2001
+    [[ -z "$smi_out" ]] || sed 's/^/  /' <<<"$smi_out"
+    ((smi_rc == 0)) || ng "nvidia-smi が失敗しました（終了コード $smi_rc。ドライバの不一致など。上の行がその出力）"
     echo "  期待する枚数（NVIDIA_EXPECTED_GPUS）: $NVIDIA_EXPECTED_GPUS"
   else
     echo "  nvidia-smi がありません"
@@ -617,6 +841,31 @@ probe() {
   else
     echo "  --identify が使う hwmon: 決まらない（$id_why）"
   fi
+  [[ -z "$CASE_FAN_RAD_CHANNELS" ]] || probe_rad_bios
+}
+
+# --probe の見立て: ラジエーターの組の CPU の曲線と BIOS の曲線の比べ（入れるときの守りと同じ。読むだけ）
+probe_rad_bios() {
+  local dir out pts=() pwm rc
+  if ! dir="$(find_hwmon "${CASE_FAN_HWMON:-?}" 2>/dev/null)"; then
+    echo "  ラジエーターの組（CASE_FAN_RAD_CHANNELS=$CASE_FAN_RAD_CHANNELS）: CASE_FAN_HWMON（${CASE_FAN_HWMON:-空}）が1つに決まらないので、BIOS の曲線とは比べられない"
+    return 0
+  fi
+  if ! out="$(curve_points "$CASE_FAN_RAD_CPU_CURVE" CASE_FAN_RAD_CPU_CURVE 2>&1)" || [[ -z "$out" ]]; then
+    warn "ラジエーターの組: CASE_FAN_RAD_CPU_CURVE が空か読めない（${out:-空}）。入れるスクリプトは止まる"
+    return 0
+  fi
+  mapfile -t pts <<<"$out"
+  out="$(channel_pairs CASE_FAN_RAD_CHANNELS "$CASE_FAN_RAD_CHANNELS" 2>&1)" || { warn "ラジエーターの組: $out"; return 0; }
+  while read -r pwm _; do
+    rc=0
+    rad_bios_compare "$dir" "$pwm" "${pts[@]}" || rc=$?
+    case "$rc" in
+      0) ok "ラジエーターの pwm$pwm: $cmp_msg" ;;
+      2) warn "ラジエーターの pwm$pwm: $cmp_msg" ;;
+      *) ng "ラジエーターの pwm$pwm: $cmp_msg。入れるスクリプトは止まる" ;;
+    esac
+  done <<<"$out"
 }
 
 # --- 変更する ---------------------------------------------------------------
@@ -742,7 +991,8 @@ install_fan2go_binary() {
 # 今の pwmN_enable を「BIOS の制御」として記録する。fan2go が止まっている状態で読む
 write_restore_conf() {
   local pair pwm enable old lines=()
-  for pair in "${pairs[@]}"; do
+  # ケースファンとラジエーターのファンの両方（強制終了のときに ExecStopPost の case-fan-restore-bios が行ごとに戻す）
+  for pair in "${pairs[@]}" "${rad_pairs[@]}"; do
     read -r pwm _ <<<"$pair"
     enable="$(cat "$fan_dir/pwm${pwm}_enable")"
     if [[ "$enable" == 1 ]]; then
@@ -806,6 +1056,10 @@ do_install() {
     apt-get install -y libsensors5
   fi
   [[ -x /usr/bin/nvidia-smi ]] || warn "nvidia-smi がありません。GPU の温度は読めず、ケースファンは全開になります"
+  if [[ ${#rad_pairs[@]} -gt 0 ]]; then
+    # 解析済みかどうかは fan2go の DB を読まないと分からないので、組があるときはいつも出す
+    warn "ラジエーターのファン（CASE_FAN_RAD_CHANNELS=$CASE_FAN_RAD_CHANNELS）を初めて入れるときは、fan2go の初回の解析で、そのファンが止まる時間があります（止まる所の探索で pwm=0 まで下げる。見込み 30 秒〜1 分、最悪 3 分前後。ポンプは BIOS の制御のまま回り続ける）。CPU と GPU の負荷が低いときに入れるのがよい"
+  fi
 
   stop_fan2go
   install_fan2go_binary
@@ -833,7 +1087,7 @@ do_install() {
     warn "GPU の温度の状態（$STATUS_FILE）がまだありません。journalctl -u fan2go を見る"
   fi
   local pair pwm rpm
-  for pair in "${pairs[@]}"; do
+  for pair in "${pairs[@]}" "${rad_pairs[@]}"; do
     read -r pwm rpm <<<"$pair"
     echo "pwm$pwm: $(read_value "$fan_dir/pwm$pwm")/255 enable=$(read_value "$fan_dir/pwm${pwm}_enable")  fan$rpm: $(read_value "$fan_dir/fan${rpm}_input") RPM"
   done
@@ -861,6 +1115,7 @@ case "$mode" in
   probe) probe ;;
   print-config) check_settings; render_config ;;
   test-write-config) check_settings; write_config ;;
+  test-write-restore-conf) check_settings; write_restore_conf ;;
   identify) identify ;;
   install) do_install ;;
   uninstall) do_uninstall ;;

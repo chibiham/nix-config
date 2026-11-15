@@ -48,6 +48,61 @@ class Fixture:
         self.tmp.cleanup()
 
 
+# ラジエーターの組の変数を全部空にする（流す人の環境に依らないように。既定の CASE_FAN_RAD_MIN_DUTY は 20 に戻る）
+RAD_OFF = {
+    "CASE_FAN_RAD_CHANNELS": "",
+    "CASE_FAN_RAD_MIN_DUTY": "",
+    "CASE_FAN_RAD_GPU_CURVE": "",
+    "CASE_FAN_RAD_CPU_CURVE": "",
+    "CASE_FAN_RAD_CPU_HWMON": "",
+    "CASE_FAN_RAD_CPU_TEMP_CHANNEL": "",
+    "CASE_FAN_RAD_CPU_BACKUP_CURVE": "",
+    "CASE_FAN_RAD_CPU_BACKUP_HWMON": "",
+    "CASE_FAN_RAD_CPU_BACKUP_TEMP_CHANNEL": "",
+}
+
+# BIOS の pwm2 の曲線（chibihamuntu と同じ値。温度はミリ度）
+BIOS_CURVE = [(20000, 51), (45000, 102), (65000, 178), (70000, 255), (125000, 255)]
+
+# ラジエーターの組を使う値（chibihamuntu の主の CPU の曲線と同じ。ケースファンは pwm3、ラジエーターのファンは pwm2）
+RAD_ON = {
+    "CASE_FAN_CHANNELS": "3",
+    "CASE_FAN_RAD_CHANNELS": "2",
+    "CASE_FAN_RAD_GPU_CURVE": "45:30 55:50 65:75 72:90 78:100",
+    "CASE_FAN_RAD_CPU_CURVE": "17:20 42:40 62:70 67:100",
+    "CASE_FAN_RAD_CPU_HWMON": "nct6799",
+    "CASE_FAN_RAD_CPU_TEMP_CHANNEL": "9",
+}
+
+RAD_BACKUP = {
+    "CASE_FAN_RAD_CPU_BACKUP_CURVE": "40:35 60:50 75:65 85:85 92:100",
+    "CASE_FAN_RAD_CPU_BACKUP_HWMON": "coretemp",
+    "CASE_FAN_RAD_CPU_BACKUP_TEMP_CHANNEL": "1",
+}
+
+
+def add_radiator(fx):
+    """にせの木に、ラジエーターの組の温度の源と BIOS の曲線を足す: nct6799 の temp9・pwm2_temp_sel=9・pwm2 の BIOS の曲線、coretemp の temp1"""
+    (fx.nct / "temp9_input").write_text("40500\n")
+    (fx.nct / "pwm2_temp_sel").write_text("9\n")
+    for m, (t, v) in enumerate(BIOS_CURVE, start=1):
+        (fx.nct / f"pwm2_auto_point{m}_temp").write_text(f"{t}\n")
+        (fx.nct / f"pwm2_auto_point{m}_pwm").write_text(f"{v}\n")
+    make_hwmon(fx.hwmon, 2, "coretemp", {"temp1_input": 45000, "temp1_label": "Package id 0"})
+
+
+def block(text, start):
+    """text の中の、start の行から次の「  - id:」の行か空の行の前までを返す"""
+    lines = text.splitlines(keepends=True)
+    i = lines.index(start + "\n")
+    out = [lines[i]]
+    for line in lines[i + 1:]:
+        if line.startswith("  - id:") or line == "\n":
+            break
+        out.append(line)
+    return "".join(out)
+
+
 class PrintConfigTests(unittest.TestCase):
     def setUp(self):
         self.fx = Fixture()
@@ -61,6 +116,7 @@ class PrintConfigTests(unittest.TestCase):
             "CASE_FAN_HWMON": "nct6799",
             "CASE_FAN_CHANNELS": "2 3",
             "NVIDIA_EXPECTED_GPUS": "2",
+            **RAD_OFF,
             **env,
         }
         return subprocess.run([BASH, str(INSTALL), "--print-config"], env=full,
@@ -180,6 +236,232 @@ class PrintConfigTests(unittest.TestCase):
         r = self.run_print(CASE_FAN_MIN_DUTY="50")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("minPwm: 128", r.stdout)
+
+
+class RadiatorPrintConfigTests(unittest.TestCase):
+    """ラジエーターの組（CASE_FAN_RAD_*）の設定と守り"""
+
+    def setUp(self):
+        self.fx = Fixture()
+        self.addCleanup(self.fx.close)
+        add_radiator(self.fx)
+
+    def run_print(self, **env):
+        full = {
+            **os.environ,
+            "UBUNTU_HOST": "no-such-host-for-tests",
+            "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
+            "CASE_FAN_HWMON": "nct6799",
+            "CASE_FAN_CPU_CURVE": "60:30 95:100",
+            "NVIDIA_EXPECTED_GPUS": "0",
+            **RAD_OFF,
+            **RAD_ON,
+            **env,
+        }
+        return subprocess.run([BASH, str(INSTALL), "--print-config"], env=full,
+                              capture_output=True, text=True)
+
+    def assert_refused(self, r, *messages):
+        self.assertNotEqual(r.returncode, 0, r.stdout)
+        self.assertEqual(r.stdout, "")
+        for m in messages:
+            self.assertIn(m, r.stderr)
+
+    def test_config_with_backup(self):
+        r = self.run_print(**RAD_BACKUP)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        y = r.stdout
+        self.assertIn("# fan2go 0.15.0。ケースファン = max(GPU の曲線, CPU の曲線)、"
+                      "ラジエーターのファン = max(GPU の曲線, CPU の曲線, CPU の保険の曲線)。曲線の値は", y)
+        rad = block(y, "  - id: rad_pwm2")
+        for line in ["      platform: nct6799", "      rpmChannel: 2", "      pwmChannel: 2", "    curve: rad_fans",
+                     "    neverStop: true", "    minPwm: 51", "    startPwm: 51", "    maxPwm: 255",
+                     "    pwmMap: identity", "    setPwmToGetPwmMap: identity", "    useUnscaledCurveValues: true",
+                     "        maxPwmChangePerCycle: 3", "      active: pwm", "      onExit: restore"]:
+            self.assertIn(line + "\n", rad)
+        # ケースファンは今までどおり
+        case = block(y, "  - id: case_pwm3")
+        self.assertIn("    curve: case_fans\n", case)
+        self.assertIn("    minPwm: 77\n", case)
+        self.assertNotIn("case_pwm2", y)
+        self.assertIn("  - id: rad_cpu\n    hwmon:\n      platform: nct6799\n      channel: 9\n", y)
+        self.assertIn("  - id: rad_cpu_backup\n    hwmon:\n      platform: coretemp\n      channel: 1\n", y)
+        self.assertIn("  - id: rad_gpu_curve\n    linear:\n      sensor: gpu_max\n      steps:\n"
+                      "        - 45: 77\n        - 55: 128\n        - 65: 191\n        - 72: 230\n        - 78: 255\n", y)
+        self.assertIn("  - id: rad_cpu_curve\n    linear:\n      sensor: rad_cpu\n      steps:\n"
+                      "        - 17: 51\n        - 42: 102\n        - 62: 179\n        - 67: 255\n", y)
+        self.assertIn("  - id: rad_cpu_backup_curve\n    linear:\n      sensor: rad_cpu_backup\n      steps:\n"
+                      "        - 40: 89\n        - 60: 128\n        - 75: 166\n        - 85: 217\n        - 92: 255\n", y)
+        self.assertIn("  - id: rad_fans\n    function:\n      type: maximum\n      curves:\n"
+                      "        - rad_gpu_curve\n        - rad_cpu_curve\n        - rad_cpu_backup_curve\n\n", y)
+        # 比べが通ったことは標準エラーへ（設定には混ぜない）
+        self.assertIn("ラジエーターの pwm2: CASE_FAN_RAD_CPU_CURVE は、BIOS の曲線（temp9。5 点）より弱い所がない（両方の点の温度 9 か所で比べた）",
+                      r.stderr)
+        self.assertNotIn("BIOS の曲線（", y)
+
+    def test_config_without_backup(self):
+        r = self.run_print()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        y = r.stdout
+        self.assertIn("ラジエーターのファン = max(GPU の曲線, CPU の曲線)。曲線の値は", y)
+        self.assertNotIn("rad_cpu_backup", y)
+        self.assertIn("      curves:\n        - rad_gpu_curve\n        - rad_cpu_curve\n\nstatistics:", y)
+
+    def test_case_fan_part_is_unchanged(self):
+        # 組なしの出力の行（頭のコメントの 2 行目を除く）は、組ありの出力にそのままの順で全部ある
+        off = self.run_print(CASE_FAN_RAD_CHANNELS="")
+        on = self.run_print(**RAD_BACKUP)
+        self.assertEqual(off.returncode, 0, off.stderr)
+        self.assertEqual(on.returncode, 0, on.stderr)
+        off_lines = off.stdout.splitlines()
+        on_lines = on.stdout.splitlines()
+        self.assertNotEqual(off_lines[1], on_lines[1])
+        del off_lines[1]
+        del on_lines[1]
+        rest = iter(on_lines)
+        missing = [line for line in off_lines if not any(line == other for other in rest)]
+        self.assertEqual(missing, [])
+
+    def test_radiator_settings_are_ignored_without_channels(self):
+        plain = self.run_print(**RAD_OFF)
+        ignored = self.run_print(CASE_FAN_RAD_CHANNELS="", **RAD_BACKUP)
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertEqual(ignored.stdout, plain.stdout)
+        self.assertEqual(ignored.stderr, "")
+        self.assertNotIn("rad_", plain.stdout)
+        self.assertNotIn("ラジエーター", plain.stdout)
+
+    def test_min_duty(self):
+        r = self.run_print(CASE_FAN_RAD_MIN_DUTY="40")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("    minPwm: 102\n    startPwm: 102\n", block(r.stdout, "  - id: rad_pwm2"))
+        self.assertIn("    minPwm: 77\n", block(r.stdout, "  - id: case_pwm3"))
+        for duty in ["5", "101", "x"]:
+            with self.subTest(duty=duty):
+                self.assert_refused(self.run_print(CASE_FAN_RAD_MIN_DUTY=duty), "CASE_FAN_RAD_MIN_DUTY は 10..100")
+
+    def test_cpu_curve_is_required(self):
+        self.assert_refused(self.run_print(CASE_FAN_RAD_CPU_CURVE=""), "CASE_FAN_RAD_CPU_CURVE が空です")
+
+    def test_gpu_curve_is_required(self):
+        self.assert_refused(self.run_print(CASE_FAN_RAD_GPU_CURVE=""), "CASE_FAN_RAD_GPU_CURVE が空です")
+
+    def test_overlap_with_case_fans_is_refused(self):
+        self.assert_refused(self.run_print(CASE_FAN_CHANNELS="2 3"), "pwm2 が CASE_FAN_CHANNELS と CASE_FAN_RAD_CHANNELS の両方")
+
+    def test_duplicate_channel_is_refused(self):
+        self.assert_refused(self.run_print(CASE_FAN_RAD_CHANNELS="2 2"), "CASE_FAN_RAD_CHANNELS に pwm2 が2回")
+
+    def test_missing_channel_or_rpm_is_refused(self):
+        self.assert_refused(self.run_print(CASE_FAN_RAD_CHANNELS="7"), "pwm7")
+        self.assert_refused(self.run_print(CASE_FAN_RAD_CHANNELS="2:9"), "fan9_input")
+        self.assert_refused(self.run_print(CASE_FAN_RAD_CHANNELS="x"), "CASE_FAN_RAD_CHANNELS の値が読めません")
+
+    def test_last_points_must_be_full(self):
+        for key, curve in [("CASE_FAN_RAD_GPU_CURVE", "45:30 78:90"),
+                           ("CASE_FAN_RAD_CPU_CURVE", "17:20 42:40 62:70 67:99"),
+                           ("CASE_FAN_RAD_CPU_BACKUP_CURVE", "40:35 92:90")]:
+            with self.subTest(key=key):
+                r = self.run_print(**{**RAD_BACKUP, key: curve})
+                self.assert_refused(r, f"{key} の最後の点は 100%")
+
+    def test_gpu_curve_must_end_below_failsafe(self):
+        self.assert_refused(self.run_print(CASE_FAN_RAD_GPU_CURVE="45:30 100:100"), "100℃ より低くすること")
+
+    def test_curves_need_two_points(self):
+        self.assert_refused(self.run_print(CASE_FAN_RAD_CPU_CURVE="67:100"), "CASE_FAN_RAD_CPU_CURVE は2点以上")
+
+    def test_missing_temperature_source_is_refused(self):
+        self.assert_refused(self.run_print(CASE_FAN_RAD_CPU_TEMP_CHANNEL="8"), "nct6799 に temp8_input がありません")
+        self.assert_refused(self.run_print(CASE_FAN_RAD_CPU_HWMON=""), "CASE_FAN_RAD_CPU_HWMON が使えません")
+        self.assert_refused(self.run_print(CASE_FAN_RAD_CPU_HWMON="nosuch"), "hwmon nosuch が1つに決まりません")
+        self.assert_refused(self.run_print(**{**RAD_BACKUP, "CASE_FAN_RAD_CPU_BACKUP_TEMP_CHANNEL": "5"}),
+                            "coretemp に temp5_input がありません")
+        self.assert_refused(self.run_print(**{**RAD_BACKUP, "CASE_FAN_RAD_CPU_BACKUP_HWMON": "nosuch"}),
+                            "CASE_FAN_RAD_CPU_BACKUP_HWMON の hwmon nosuch")
+
+    def test_backup_source_without_curve_is_refused(self):
+        r = self.run_print(**{**RAD_BACKUP, "CASE_FAN_RAD_CPU_BACKUP_CURVE": ""})
+        self.assert_refused(r, "CASE_FAN_RAD_CPU_BACKUP_CURVE が空です")
+
+    def test_weaker_than_bios_is_refused(self):
+        # 65℃: BIOS 178、こちら 60% = 153
+        r = self.run_print(CASE_FAN_RAD_CPU_CURVE="20:20 45:40 65:60 70:100")
+        self.assert_refused(r, "ラジエーターの pwm2: CASE_FAN_RAD_CPU_CURVE が BIOS の曲線（temp9）より弱い所があります: "
+                               "65℃ で BIOS 178、こちら 153（PWM 0..255）", "止めます")
+
+    def test_weaker_between_bios_points_is_refused(self):
+        # こちらの点 30℃（51）で、BIOS は 20:51 と 45:102 の間の 71.4。BIOS の点の温度だけでは見つからない弱さ
+        r = self.run_print(CASE_FAN_RAD_CPU_CURVE="20:20 30:20 70:100")
+        self.assert_refused(r, "30℃ で BIOS 71.4、こちら 51")
+
+    def test_weaker_below_first_point_is_refused(self):
+        # こちらの最初の点が BIOS より上の温度で低い値: 20℃ で BIOS 51、こちら（最初の点より下は最初の値）26
+        r = self.run_print(CASE_FAN_RAD_CPU_CURVE="25:10 45:40 65:70 70:100")
+        self.assert_refused(r, "20℃ で BIOS 51、こちら 26")
+
+    def test_weaker_at_the_top_is_refused(self):
+        # 最後の点が 100% でも、全開に届くのが BIOS より遅ければ止まる（70℃: BIOS 255、こちら 72℃ まで上がりきらない）
+        r = self.run_print(CASE_FAN_RAD_CPU_CURVE="20:20 45:40 65:70 72:100")
+        self.assert_refused(r, "70℃ で BIOS 255、こちら 233.3")
+
+    def test_same_or_stronger_than_bios_passes(self):
+        for curve in ["20:20 45:40 65:70 70:100", "17:20 42:40 62:70 67:100", "10:50 60:100"]:
+            with self.subTest(curve=curve):
+                r = self.run_print(CASE_FAN_RAD_CPU_CURVE=curve)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertIn("より弱い所がない", r.stderr)
+
+    def test_compared_even_when_fan2go_is_driving(self):
+        # 比べるのは BIOS の曲線。いまの enable（fan2go が操っていれば 1）には依らない
+        (self.fx.nct / "pwm2_enable").write_text("1\n")
+        r = self.run_print(CASE_FAN_RAD_CPU_CURVE="20:20 45:40 65:60 70:100")
+        self.assert_refused(r, "65℃ で BIOS 178、こちら 153")
+
+    def assert_warned(self, r, message):
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(message, r.stderr)
+        self.assertIn("自分で確かめる", r.stderr)
+        self.assertTrue(r.stdout.startswith("# install-case-fan-control-ubuntu.sh"), r.stdout[:200])
+        self.assertNotIn("比べられません", r.stdout)
+        self.assertIn("  - id: rad_pwm2\n", r.stdout)
+
+    def test_different_bios_source_warns_and_proceeds(self):
+        (self.fx.nct / "pwm2_temp_sel").write_text("3\n")
+        # 源が違うので、BIOS より弱い曲線でも止めない
+        r = self.run_print(CASE_FAN_RAD_CPU_CURVE="20:20 45:40 65:60 70:100")
+        self.assert_warned(r, "BIOS の温度の源は temp3（pwm2_temp_sel）で、CASE_FAN_RAD_CPU_TEMP_CHANNEL（temp9）と違うので")
+
+    def test_different_hwmon_warns_and_proceeds(self):
+        r = self.run_print(CASE_FAN_RAD_CPU_HWMON="coretemp", CASE_FAN_RAD_CPU_TEMP_CHANNEL="1")
+        self.assert_warned(r, "CPU の温度の源（coretemp の temp1）が BIOS の側の hwmon（nct6799）と違うので")
+
+    def test_missing_temp_sel_warns_and_proceeds(self):
+        (self.fx.nct / "pwm2_temp_sel").unlink()
+        self.assert_warned(self.run_print(), "pwm2_temp_sel が読めず")
+
+    def test_missing_bios_curve_warns_and_proceeds(self):
+        for f in self.fx.nct.glob("pwm2_auto_point*"):
+            f.unlink()
+        self.assert_warned(self.run_print(), "BIOS の曲線（pwm2_auto_point*_temp・_pwm）がないので")
+
+    def test_unreadable_bios_curve_is_refused(self):
+        (self.fx.nct / "pwm2_auto_point3_pwm").write_text("garbage\n")
+        self.assert_refused(self.run_print(), "BIOS の曲線の点 3", "止めます")
+        (self.fx.nct / "pwm2_auto_point3_pwm").write_text("178\n")
+        (self.fx.nct / "pwm2_auto_point3_temp").unlink()
+        self.assert_refused(self.run_print(), "BIOS の曲線の点 3")
+
+    def test_bios_curve_with_many_points_is_read_in_order(self):
+        # 点の番号が 10 以上でも、番号の順に読む（glob の文字の順では 10 が 2 より前に来る）
+        for f in self.fx.nct.glob("pwm2_auto_point*"):
+            f.unlink()
+        for m in range(1, 11):
+            (self.fx.nct / f"pwm2_auto_point{m}_temp").write_text(f"{20000 + 5000 * m}\n")
+            (self.fx.nct / f"pwm2_auto_point{m}_pwm").write_text(f"{min(255, 25 * m)}\n")
+        r = self.run_print(CASE_FAN_RAD_CPU_CURVE="20:20 70:100")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("10 点", r.stderr)
 
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "--probe は Linux 専用")
@@ -550,6 +832,62 @@ class ProbePumpLineTests(unittest.TestCase):
         self.assertIn("判定できないチャネル（--stop は注意を出して進める）: pwm1 pwm2 pwm3\n", out)
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "--probe は Linux 専用")
+class ProbeTests(unittest.TestCase):
+    """--probe が nvidia-smi の失敗で落ちないこと、ラジエーターの組の BIOS の曲線との比べの行"""
+
+    def setUp(self):
+        self.fx = Fixture()
+        self.addCleanup(self.fx.close)
+        self.tools = self.fx.base / "tools"
+        self.path = make_fake_tools(self.tools)
+
+    def probe(self, **env):
+        r = subprocess.run([BASH, str(INSTALL), "--probe"], env={
+            **os.environ,
+            "PATH": self.path,
+            "UBUNTU_HOST": "no-such-host-for-tests",
+            "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
+            "CASE_FAN_HWMON": "",
+            **RAD_OFF,
+            **env,
+        }, capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return r.stdout
+
+    def test_failing_nvidia_smi_does_not_stop_probe(self):
+        (self.tools / "nvidia-smi").write_text(
+            "#!/bin/sh\necho 'Failed to initialize NVML: Driver/library version mismatch'\nexit 18\n")
+        out = self.probe()
+        self.assertIn("  Failed to initialize NVML: Driver/library version mismatch\n", out)
+        self.assertIn("nvidia-smi が失敗しました（終了コード 18。", out)
+        self.assertIn("期待する枚数（NVIDIA_EXPECTED_GPUS）", out)
+        self.assertIn("== 見立て", out)
+        self.assertIn("--identify が使う hwmon:", out)
+
+    def test_working_nvidia_smi(self):
+        out = self.probe()
+        self.assertIn("  0, 00000000:01:00.0, Fake GPU, 40, 30 %, 20.00 W\n", out)
+        self.assertNotIn("nvidia-smi が失敗しました", out)
+
+    def test_no_radiator_line_without_group(self):
+        self.assertNotIn("ラジエーター", self.probe())
+
+    def test_radiator_bios_comparison_lines(self):
+        add_radiator(self.fx)
+        env = {**RAD_ON, "CASE_FAN_HWMON": "nct6799"}
+        out = self.probe(**env)
+        self.assertIn("ラジエーターの pwm2: CASE_FAN_RAD_CPU_CURVE は、BIOS の曲線（temp9。5 点）より弱い所がない", out)
+        self.assertIn("CASE_FAN_RAD_CHANNELS=2", out)
+        out = self.probe(**{**env, "CASE_FAN_RAD_CPU_CURVE": "20:20 45:40 65:60 70:100"})
+        self.assertIn("ラジエーターの pwm2: CASE_FAN_RAD_CPU_CURVE が BIOS の曲線（temp9）より弱い所があります: "
+                      "65℃ で BIOS 178、こちら 153（PWM 0..255）。入れるスクリプトは止まる", out)
+        out = self.probe(**{**env, "CASE_FAN_RAD_CPU_TEMP_CHANNEL": "3"})
+        self.assertIn("ラジエーターの pwm2: BIOS の温度の源は temp9", out)
+        out = self.probe(**{**env, "CASE_FAN_RAD_CPU_CURVE": ""})
+        self.assertIn("CASE_FAN_RAD_CPU_CURVE が空か読めない", out)
+
+
 # にせの fan2go: viper と同じく、-c のパスの拡張子が .yaml / .yml でなければ読めずに落ちる
 FAKE_FAN2GO = """#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_LOG"
@@ -591,6 +929,7 @@ class WriteConfigTests(unittest.TestCase):
             "CASE_FAN_TEST_CONFIG_DIR": str(self.etc),
             "CASE_FAN_TEST_FAN2GO": str(self.fan2go),
             "FAKE_LOG": str(self.log),
+            **RAD_OFF,
             **env,
         }
         return subprocess.run([BASH, str(INSTALL), "--test-write-config"], env=full,
@@ -610,6 +949,30 @@ class WriteConfigTests(unittest.TestCase):
         r = self.run_write(CASE_FAN_CPU_CURVE="60:30 95:100")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("- cpu_curve", (self.etc / "fan2go.yaml").read_text())
+
+    def test_validates_with_radiator_group(self):
+        add_radiator(self.fx)
+        for extra in [{}, RAD_BACKUP]:
+            with self.subTest(backup=bool(extra)):
+                r = self.run_write(**RAD_ON, **extra)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                y = (self.etc / "fan2go.yaml").read_text()
+                self.assertIn("  - id: rad_pwm2\n", y)
+                self.assertIn("  - id: rad_fans\n", y)
+                self.assertEqual(sorted(p.name for p in self.etc.iterdir()), ["fan2go.yaml"])
+
+    @unittest.skipUnless(os.environ.get("FAN2GO_FOR_TESTS"), "本物の fan2go は FAN2GO_FOR_TESTS で渡したときだけ使う")
+    def test_real_fan2go_accepts_radiator_group(self):
+        # 本物の fan2go（0.15.0）の config validate に、組あり（保険あり・なし）と組なしの設定を通す。
+        # 本物は設定のファイルの持ち主が root でないと断る（「owner is not root」）ので、root で流したときだけ
+        if os.geteuid() != 0:
+            self.skipTest("本物の fan2go は持ち主が root でない設定を断るので、root のときだけ流す")
+        add_radiator(self.fx)
+        real = os.environ.get("FAN2GO_FOR_TESTS", "")
+        for name, extra in [("off", {"CASE_FAN_RAD_CHANNELS": ""}), ("on", RAD_ON), ("backup", {**RAD_ON, **RAD_BACKUP})]:
+            with self.subTest(name=name):
+                r = self.run_write(CASE_FAN_TEST_FAN2GO=real, CASE_FAN_CPU_CURVE="60:30 95:100", **extra)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_rejected_config_keeps_the_old_one_and_leaves_nothing(self):
         (self.etc / "fan2go.yaml").write_text("old\n")
@@ -690,6 +1053,71 @@ class GpuTempTests(unittest.TestCase):
         # Linux（coreutils 9.4）は 1.50 秒で終わるが、macOS の timeout は素で約 1.8 秒かかる
         if sys.platform.startswith("linux"):
             self.assertLess(self.elapsed, 1.8)
+
+
+class RestoreConfTests(unittest.TestCase):
+    """BIOS の pwmN_enable の記録（case-fan-restore.conf）に、ラジエーターのチャネルの行も入る"""
+
+    def setUp(self):
+        self.fx = Fixture()
+        self.addCleanup(self.fx.close)
+        add_radiator(self.fx)
+        self.etc = self.fx.base / "etc-fan2go"
+        self.etc.mkdir()
+        self.conf = self.etc / "case-fan-restore.conf"
+        (self.fx.nct / "pwm3_enable").write_text("2\n")
+
+    def run_write(self, **env):
+        return subprocess.run([BASH, str(INSTALL), "--test-write-restore-conf"], env={
+            **os.environ,
+            "UBUNTU_HOST": "no-such-host-for-tests",
+            "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
+            "CASE_FAN_HWMON": "nct6799",
+            "CASE_FAN_TEST_CONFIG_DIR": str(self.etc),
+            **RAD_OFF,
+            **RAD_ON,
+            **env,
+        }, capture_output=True, text=True)
+
+    def lines(self):
+        return [l for l in self.conf.read_text().splitlines() if not l.startswith("#")]
+
+    def test_both_groups_are_recorded_and_restored(self):
+        r = self.run_write()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.lines(), ["nct6799 3 2", "nct6799 2 5"])
+        # fan2go が操っている（enable=1）ところから、case-fan-restore-bios が 2 チャネルとも戻す
+        (self.fx.nct / "pwm2_enable").write_text("1\n")
+        (self.fx.nct / "pwm3_enable").write_text("1\n")
+        r = subprocess.run([BASH, str(RESTORE)], env={
+            **os.environ, "CASE_FAN_RESTORE_CONF": str(self.conf), "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
+        }, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((self.fx.nct / "pwm2_enable").read_text().strip(), "5")
+        self.assertEqual((self.fx.nct / "pwm3_enable").read_text().strip(), "2")
+        self.assertIn("nct6799 pwm2 を pwm2_enable=5", r.stdout)
+        self.assertIn("nct6799 pwm3 を pwm3_enable=2", r.stdout)
+
+    def test_without_group_only_case_fans(self):
+        r = self.run_write(CASE_FAN_RAD_CHANNELS="")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.lines(), ["nct6799 3 2"])
+
+    def test_manual_radiator_channel_uses_the_earlier_record(self):
+        # 前の入れ方（ケースファンだけ）の記録があり、ラジエーターのチャネルの記録はない
+        self.conf.write_text("# old\nnct6799 3 2\nnct6799 2 5\n")
+        (self.fx.nct / "pwm2_enable").write_text("1\n")
+        r = self.run_write()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.lines(), ["nct6799 3 2", "nct6799 2 5"])
+
+    def test_manual_radiator_channel_without_record_is_refused(self):
+        self.conf.write_text("# old\nnct6799 3 2\n")
+        (self.fx.nct / "pwm2_enable").write_text("1\n")
+        r = self.run_write()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("pwm2 が手動（enable=1）のまま", r.stderr)
+        self.assertEqual(self.conf.read_text(), "# old\nnct6799 3 2\n")
 
 
 class RestoreTests(unittest.TestCase):

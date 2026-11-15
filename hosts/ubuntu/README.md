@@ -38,6 +38,15 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 | `CASE_FAN_CPU_CURVE` | 空 | install-case-fan-control | CPU の温度 → デューティ。ケースファン = max(GPU, CPU)。空なら GPU だけ |
 | `CASE_FAN_CPU_HWMON` | `k10temp` | install-case-fan-control | CPU の温度の hwmon の name（Intel なら `coretemp`） |
 | `CASE_FAN_CPU_TEMP_CHANNEL` | `1` | install-case-fan-control | `temp<N>_input` の N（k10temp の 1 は Tctl） |
+| `CASE_FAN_RAD_CHANNELS` | 空 | install-case-fan-control | ラジエーターの組: CPU の簡易水冷のラジエーターのファンの pwm のチャネル（書き方は `CASE_FAN_CHANNELS` と同じ。`CASE_FAN_HWMON` の中）。ケースファンとは別の曲線で、ファン = max(GPU, CPU[, CPU の保険])。空なら組を使わない（設定はケースファンだけで、出力は組を足す前と同じ）。`CASE_FAN_CHANNELS` と重なれば止まる。chibihamuntu は `2`（env では `:=` でなく `=` で書き、`CASE_FAN_RAD_CHANNELS=` と空を渡せば組なしの設定を見られる） |
+| `CASE_FAN_RAD_MIN_DUTY` | `20` | install-case-fan-control | ラジエーターのファンの最低のデューティ（%、10〜100）。止めない |
+| `CASE_FAN_RAD_GPU_CURVE` | 空 | install-case-fan-control | ラジエーターのファンの GPU の曲線（組を使うなら必須）。決まりは `CASE_FAN_GPU_CURVE` と同じ（最後の温度は 100℃ 未満、最後の点は 100%） |
+| `CASE_FAN_RAD_CPU_CURVE` | 空 | install-case-fan-control | ラジエーターのファンの CPU の曲線（組を使うなら必須。CPU のクーラーのファンを CPU の曲線なしで操らせない）。最後の点は 100%。温度の源が BIOS と同じ（`CASE_FAN_RAD_CPU_HWMON` が `CASE_FAN_HWMON` と同じで、`pwmN_temp_sel` が `CASE_FAN_RAD_CPU_TEMP_CHANNEL` と同じ）なら、sysfs の BIOS の曲線（`pwmN_auto_pointM_temp`・`_pwm`）と両方の点の温度の全部で比べ、1 か所でも BIOS より小さければ止まる。源が違う・BIOS の曲線がないときは注意を出して進める |
+| `CASE_FAN_RAD_CPU_HWMON` | 空 | install-case-fan-control | ラジエーターの CPU の曲線の温度の hwmon の name（BIOS と同じ源を指せるように、`CASE_FAN_CPU_HWMON` とは別。chibihamuntu は `nct6798`） |
+| `CASE_FAN_RAD_CPU_TEMP_CHANNEL` | 空 | install-case-fan-control | その `temp<N>_input` の N（chibihamuntu は `9`。`pwm2_temp_sel=9`） |
+| `CASE_FAN_RAD_CPU_BACKUP_CURVE` | 空 | install-case-fan-control | 任意。別の温度の源での保険の CPU の曲線（主の源が固まった・0 を返すようになったとき用）。あれば最後の点は 100%。空なら使わない |
+| `CASE_FAN_RAD_CPU_BACKUP_HWMON` | 空 | install-case-fan-control | 保険の曲線の温度の hwmon の name（保険の曲線があるときは必須。曲線が空なのにこれがあれば止まる） |
+| `CASE_FAN_RAD_CPU_BACKUP_TEMP_CHANNEL` | 空 | install-case-fan-control | その `temp<N>_input` の N |
 | `CASE_FAN_ACPI_LAX` | `0` | install-case-fan-control | 1なら GRUB に `acpi_enforce_resources=lax` を足す（`/etc/default/grub.d/60-case-fan-acpi-lax.cfg`。再起動が要る）。0 に戻して流すと外す |
 | `COMFY_CUDA_DEVICES` | 空 | install-comfyui | comfyui.serviceの `CUDA_VISIBLE_DEVICES`。複数を書くと最初のGPUが既定のデバイス（`cuda:0`）になり、ほかのGPUはノード（`Select CLIP Device` など）で指定したときだけ使われる（dekahamuntu は `0,1`。GPU 1 は H3 Image のテキストエンコーダーの計算だけに使い、重みは RAM に置かれる） |
 | `COMFY_REF` | 空 | update-comfyui, install-comfyui | ComfyUIの版（タグかcommit）。update-comfyui が `git checkout --detach` する（`--ref` が優先）。空なら `git pull --ff-only`（master）。install-comfyui は新しく clone するときだけ使う |

@@ -44,7 +44,7 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
     ├── install-gpu-led-off-ubuntu.sh # OpenRGBと消灯サービスの導入
     ├── turn-off-gpu-led.sh # ホストの設定で決めたGPUだけを消灯（既定はGigabyte RTX 3090）
     ├── install-rapl-power-access-ubuntu.sh # RAPL energy_ujをpowerグループへ（udev）
-    ├── install-case-fan-control-ubuntu.sh # ケースファンをGPUの温度で回す（fan2go。--probe は読むだけ。--identify <N> [--stop] で見分ける。systemd/fan2go.service）
+    ├── install-case-fan-control-ubuntu.sh # ケースファンをGPUの温度で回す（fan2go。CASE_FAN_RAD_* で簡易水冷のラジエーターのファンも max(GPU, CPU) で。--probe は読むだけ。--identify <N> [--stop] で見分ける。systemd/fan2go.service）
     ├── case-fan-gpu-temp.sh # fan2goのセンサー: GPUの温度の最大（読めなければ全開側）
     ├── case-fan-restore-bios.sh # fan2goが止まったときにBIOSの制御へ戻す
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動（--unit-only はsudoなしでunitだけ書き直す）

@@ -52,12 +52,12 @@
   - sda = Fanxiang S101 2T（SATA、1.9T）。Ubuntu はこれに入っている。sda1 `/boot/efi` 1G、sda2 `/boot` 2G、sda3 LVM → `/` 1.9T（使用 894G・空き 886G）
   - nvme0n1 = Lexar SSD NM790 2TB（NVMe、PCIe 4.0 x4、ファームウェア 11296）。中は EFI 100M・16M・NTFS 1.9T・NTFS 889M。Ubuntu からはマウントしていない（Windows の並びに見える）
 - ネットワーク: 有線 eno1 = Realtek RTL8125（2.5GbE）、1,000Mb/s でつながっている。Wi-Fi wlp6s0 = Realtek RTL8852BE（802.11ax）、up。Bluetooth あり
-- ファン: 2026-11-15 19:09 JST に、Super I/O のドライバ nct6775 を起動のたびに読み込む設定（`/etc/modules-load.d/case-fan-control.conf`）とケースファンの制御（fan2go）を入れた。ケースファン（pwm5）は fan2go が GPU の温度で回し、ほかのファン（ラジエーターのファン・ポンプなど）は BIOS の制御のまま。それより前は nct6775 を読み込んでおらず（hwmon に pwm・fan がない）、BIOS まかせだった。値は下の「ファン（2026-11-15）」
+- ファン: 2026-11-15 19:09 JST に、Super I/O のドライバ nct6775 を起動のたびに読み込む設定（`/etc/modules-load.d/case-fan-control.conf`）とケースファンの制御（fan2go）を入れた。ケースファン（pwm5）は fan2go が GPU の温度で回し、ほかのファン（ラジエーターのファン・ポンプなど）は BIOS の制御のまま。同じ日の 19:25 JST ごろ、本人がラジエーターのファン（pwm2）も fan2go で操る（max(GPU の曲線, CPU の曲線)）と決めた。ポンプ（pwm6）は操らない。まだ実機には入れていない。それより前は nct6775 を読み込んでおらず（hwmon に pwm・fan がない）、BIOS まかせだった。値は下の「ファン（2026-11-15）」
 - そのほか: USB に ASUS AURA LED Controller
 
 ### ファン（2026-11-15）
 
-本人が 17:00 JST ごろ `scripts/install-case-fan-control-ubuntu.sh --probe --load-module` を流し、そのあと sudo なしの `--probe` と sysfs で読んだ。そのあと 18:25 ごろと 19:00 ごろに `--identify` で本人がどのチャネルが何かを見分けた（下の「--identify の結果」）。ケースファンのチャネルは 5 に決まり、`hosts/ubuntu/chibihamuntu.env` を `CASE_FAN_CHANNELS=5`・`CASE_FAN_CONTROL=1` にした。本人が 19:09 JST（10:09 UTC）に実機に入れた。fan2go が操るのは pwm5 だけ（enable=1）で、pwm1・2・4・6 は enable=5（BIOS の自動）、pwm7 は enable=0 のまま。GPU の曲線は最初 dekahamuntu と同じ値で入れ、19:20 JST ごろに本人が前へ寄せると決めた（env だけ。入れ直しはこれから）。初回の解析・入れたあとの値・曲線は [ubuntu-server.md の「ケースファン」](ubuntu-server.md#ケースファンgpu-の温度で回す)。下の値（表・--identify）は、入れる前に BIOS の制御のまま読んだもの。
+本人が 17:00 JST ごろ `scripts/install-case-fan-control-ubuntu.sh --probe --load-module` を流し、そのあと sudo なしの `--probe` と sysfs で読んだ。そのあと 18:25 ごろと 19:00 ごろに `--identify` で本人がどのチャネルが何かを見分けた（下の「--identify の結果」）。ケースファンのチャネルは 5 に決まり、`hosts/ubuntu/chibihamuntu.env` を `CASE_FAN_CHANNELS=5`・`CASE_FAN_CONTROL=1` にした。本人が 19:09 JST（10:09 UTC）に実機に入れた。fan2go が操るのは pwm5 だけ（enable=1）で、pwm1・2・4・6 は enable=5（BIOS の自動）、pwm7 は enable=0 のまま。GPU の曲線は最初 dekahamuntu と同じ値で入れ、19:20 JST ごろに本人が前へ寄せると決めた（env だけ。入れ直しはこれから）。19:25 JST ごろ、本人がラジエーターのファン（pwm2）も操ると決めた（issue 6 の本文の「CPU のクーラーは操らない」を上書き。ポンプの pwm6 は操らない。env とスクリプトだけ。入れ直しはこれから）。初回の解析・入れたあとの値・曲線は [ubuntu-server.md の「ケースファン」](ubuntu-server.md#ケースファンgpu-の温度で回す)。下の値（表・--identify）は、入れる前に BIOS の制御のまま読んだもの。
 
 - 環境: BIOS 1220、カーネル 7.0.0-43-generic。fan2go は入っていなかった（17:00 の時点。19:09 に入れた）。libsensors5 はある
 - Super I/O: `nct6775: Found NCT6798D or compatible chip at 0x2e:0x290`。hwmon の name は `nct6798`。nct6775 の ASUS WMI のボード一覧にこのボードがあり、`acpi_enforce_resources=lax` なしで掴めた。`--probe --load-module` の読み込みは一時的（再起動で消える）。19:09 に入れてからは、起動のたびに読み込む
@@ -71,7 +71,7 @@
 | チャネル | 回転数（RPM） | pwm（0..255） | enable | BIOS の自動の曲線（℃:PWM） | temp_sel | つながっているもの |
 |---|---|---|---|---|---|---|
 | 1 | 0 | 205 → 183 → 185 | 5 | 20:153 45:178 60:216 70:255 | 9 | 何もつながっていない見込み（止めても目に見えて止まったファンはなかった。本人。未確認） |
-| 2 | 1,237 → 1,065 → 約 1,100 | 143 → 109 → 113 | 5 | 20:51 45:102 65:178 70:255 | 9 | ラジエーター（天面。簡易水冷）のファン（本人が確かめた） |
+| 2 | 1,237 → 1,065 → 約 1,100 | 143 → 109 → 113 | 5 | 20:51 45:102 65:178 70:255 | 9 | ラジエーター（天面。簡易水冷）のファン（本人が確かめた）。pwm=0 で止まる。fan2go で操ることにした（まだ入れていない） |
 | 3 | 0 | pwm3 はない | — | — | — | pwm がないので --identify では見分けられない（未確認） |
 | 4 | 0 | 205 → 183 → 185 | 5 | 20:153 45:178 60:216 70:255 | 9 | 何もつながっていない見込み（止めても目に見えて止まったファンはなかった。本人。未確認） |
 | 5 | 744 → 632 → 約 653 | 143 → 109 → 113（pwm2 といつも同じ値） | 5 | 20:51 45:102 65:178 70:255 | 9 | ケースファン（本人の見立て。ケースの付属ファン 6 つ全部かは未確認）。pwm=0 でも約 475 RPM で回り続ける |
@@ -79,7 +79,10 @@
 | 7 | 0 | 255 | 0（全開） | 25:140 35:170 45:200 55:230 100:255 | 3 | 確かめていない |
 
 - 曲線は sysfs の `pwmN_auto_pointM_temp`・`pwmN_auto_pointM_pwm`。enable=0 の pwm7 は曲線を使っていない（全開）
-- temp_sel（`pwmN_temp_sel`）の 9・3 は nct6798 の temp9・temp3 ではなく、温度の源の番号。何を指すかは確かめていない
+- temp_sel（`pwmN_temp_sel`）の値は sysfs の tempN の N（nct6775 のドライバとドキュメント: 「Value is temperature sensor index. For example, select '1' for temp1_input」）。前に「temp9・temp3 ではなく温度の源の番号。何を指すかは確かめていない」と書いたのは誤り。9 は nct6798 の temp9（ラベル「PECI Agent 0 Calibration」）、3 は temp3（ラベル「AUXTIN0」）
+  - pwm2 の BIOS の制御は temp9 で引かれている（実測。2026-11-15、読むだけ）: temp9 40.5℃ → 曲線の計算 92.8・実測 pwm2 93、38.0℃ → 87.7・87、36.0℃ → 83.6・83、50.5℃ → 122.9・120。BIOS の pwm2 の曲線は 20℃:51、45℃:102、65℃:178、70℃:255（5 点目 125℃:255）で点の間は直線、`pwm2_step_up_time=0`・`pwm2_step_down_time=0`・`pwm2_temp_tolerance=0`
+  - temp9 は coretemp の Package（= nct6798 の temp8「PECI Agent 0」）より低く出る: Package 40℃ のとき temp9 36.0、64℃ のとき 50.5。学習中は Package 70〜76℃ で pwm2 151〜158（fan2 1,246〜1,291 RPM）。合間は Package 39〜58℃（1 秒単位で上下する）で temp9 38〜45℃、pwm2 87〜109、fan2 927〜1,032 RPM
+  - fan2 は pwm=0 で止まる（本人が `--identify 2 --stop` で見た）。仕様は 650〜1,750 RPM（MasterLiquid 360L Core、120mm ×3）。BIOS の最低は 51（20%）
 - 学習中（GPU 100%・約 340W）の GPU は 65〜66℃ で、BIOS の制御では pwm5 が 124〜143（fan5 650〜750 RPM）だった（本人）
 
 --identify の結果（本人が実機で流した。2026-11-15 JST）:
@@ -94,6 +97,7 @@
 - pwm5 は BIOS の曲線が pwm2 と同じなので、ボードの上では CPU_OPT のヘッダーかもしれない（未確認）。チャネルの番号とボードのヘッダー（CPU_FAN・CPU_OPT・AIO_PUMP・CHA_FAN1〜3）の対応は確かめていない
 - ケースの付属ファンが 3pin か 4pin かは未確認（pwm5 は mode=1）
 - 天面は簡易水冷のラジエーターとそのファン（120mm ×3。pwm2）で、本人はケースの排気が弱いと見ている（本人の言葉は「上部はCPUのラジエーターのファンにしているから排気が弱いとおもうんだよね」。2026-11-15）。ケースファンの GPU の曲線を前へ寄せた理由の 1 つ。ラジエーターのファンの向き（排気か）は未確認
+- ラジエーターのファン（pwm2）も fan2go で操り、max(GPU の曲線, CPU の曲線) で回すことにした（本人、2026-11-15 19:25 JST ごろ。執事の「ここも GPU と CPU の高いほうで回すようにすれば排気が増える。高いほうに合わせる形なら CPU の冷却は弱くならない。やる?」に「やっとこう」）。CPU の曲線は BIOS と同じ temp9 で、BIOS より弱くしない。ポンプ（pwm6）は操らない。値と理由は [ubuntu-server.md の「ラジエーターのファン（pwm2）も操る」](ubuntu-server.md#ラジエーターのファンpwm2も操る)。まだ実機には入れていない
 
 ### 本人の一覧・仕様と実機の食い違い
 
@@ -113,7 +117,7 @@
 - Lexar NM790 がどの M.2 スロット（CPU 側の M.2_1 かチップセット側の M.2_2）に挿さっているか、Windows の用途
 - Wi-Fi のカードの出どころ（ボード付属か後付けか）
 - ケースの付属ファン 6 つが全部 fan5 につながっているか（ハブの有無）、3pin か 4pin か。fan5 が 30% のときの回転数。pwm6 がポンプか、pwm7 に何がつながっているか、pwm1・pwm4 に何もつながっていないか。チャネルの番号とボードのヘッダーの対応（pwm5 が CPU_OPT か）。値と見立ては上の「ファン（2026-11-15）」
-- BIOS の自動の曲線の temp_sel（9・3）が、どの温度を指すか
+- temp9（PECI Agent 0 Calibration）が何の値か（Package より低く出る理由。ラベルに undocumented とある源）。temp_sel の 9・3 が temp9・temp3 を指すことは、上の「ファン（2026-11-15）」で分かった
 
 ---
 

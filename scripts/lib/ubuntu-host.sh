@@ -64,6 +64,18 @@ unset _ubuntu_host_repo
 : "${CASE_FAN_CPU_CURVE:=}"
 : "${CASE_FAN_CPU_HWMON:=k10temp}"
 : "${CASE_FAN_CPU_TEMP_CHANNEL:=1}"
+# ラジエーターの組（CPU の簡易水冷のラジエーターのファン）。ケースファンとは別の曲線で、ファン = max(GPU, CPU[, CPU の保険])。
+# チャネルが空なら使わない（設定はケースファンだけ）。使うなら GPU の曲線と CPU の曲線（とその温度の源）が必須。
+# CPU の曲線は BIOS の曲線より弱くしない（同じ温度の源なら、入れるスクリプトが sysfs の BIOS の曲線と比べて止まる）
+: "${CASE_FAN_RAD_CHANNELS:=}"
+: "${CASE_FAN_RAD_MIN_DUTY:=20}"
+: "${CASE_FAN_RAD_GPU_CURVE:=}"
+: "${CASE_FAN_RAD_CPU_CURVE:=}"
+: "${CASE_FAN_RAD_CPU_HWMON:=}"
+: "${CASE_FAN_RAD_CPU_TEMP_CHANNEL:=}"
+: "${CASE_FAN_RAD_CPU_BACKUP_CURVE:=}"
+: "${CASE_FAN_RAD_CPU_BACKUP_HWMON:=}"
+: "${CASE_FAN_RAD_CPU_BACKUP_TEMP_CHANNEL:=}"
 # 1 なら GRUB に acpi_enforce_resources=lax を足す（ACPI が Super I/O を握っていて掴めないときだけ）
 : "${CASE_FAN_ACPI_LAX:=0}"
 
