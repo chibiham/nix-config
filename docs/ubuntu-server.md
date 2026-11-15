@@ -199,11 +199,11 @@ AMD（Zen）でも `intel_rapl_msr` が同じ `intel-rapl:0` に積算エネル�
 
 ### ケースファン（GPU の温度で回す）
 
-**ケースファンのチャネルは 5 に決まり（本人が `--identify` で確かめた、2026-11-15）、env は `CASE_FAN_CHANNELS=5`・`CASE_FAN_CONTROL=1` にした。実機に入れる（sudo）のは本人で、2026-11-15 の時点ではまだ入れていない。** ケースファンはいまも BIOS の制御のまま。
+**本人が実機に入れた（2026-11-15 19:09 JST = 10:09 UTC。チャネル 5、GPU の曲線は dekahamuntu と同じ値）。初回の解析は失敗せずに通った（1 分 43.7 秒。下の「初回の解析」）。そのあと本人が GPU の曲線を前へ寄せると決め、env に新しい曲線を書いた。実機への入れ直し（sudo）は本人がこれから（2026-11-15 19:20 JST 時点）。** いま実機で動いているのは最初の曲線。
 
 ケースファンを GPU の温度に合わせて回す（issue 6）。仕組み（fan2go、ケースファン = max(GPU の曲線, CPU の曲線)、GPU の温度が読めないときは全開側に倒す、止めたとき・落ちたときは BIOS の制御へ戻す、初回の解析）は dekahamuntu と同じスクリプトで、説明は [dekahamuntu-setup.md の「ケースファン（GPU の温度で回す）」](dekahamuntu-setup.md#ケースファンgpu-の温度で回す)。ここには chibihamuntu に固有のことだけを書く。値は `hosts/ubuntu/chibihamuntu.env` の `CASE_FAN_*`（意味は `hosts/ubuntu/README.md`）。
 
-`configure-ubuntu-hardware.sh` は、env が `CASE_FAN_CONTROL=1` のときだけ `install-case-fan-control-ubuntu.sh` を流す。chibihamuntu の env は 1 なので、`configure-ubuntu-hardware.sh` を流すと入れるスクリプトも流れる（入れたあとは、流すたびに fan2go を止めて入れ直す）。まだ入れていないうちは、流すと初回の解析（下の「初回の解析の見込み」）が走る。
+`configure-ubuntu-hardware.sh` は、env が `CASE_FAN_CONTROL=1` のときだけ `install-case-fan-control-ubuntu.sh` を流す。chibihamuntu の env は 1 なので、`configure-ubuntu-hardware.sh` を流すと入れるスクリプトも流れる（入れたあとは、流すたびに fan2go を止めて入れ直す。下の「曲線を変えたあとの入れ直し」）。
 
 | 項目 | chibihamuntu |
 |---|---|
@@ -213,39 +213,52 @@ AMD（Zen）でも `intel_rapl_msr` が同じ `intel-rapl:0` に積算エネル�
 | 最低のデューティ | 30%（`CASE_FAN_MIN_DUTY`）。どの pwm も mode=1（PWM、4pin の制御）。fan5 は pwm=0 でも約 475 RPM で回り続けるので、30% は「止めない」ための下限というより曲線の下の値。30% のときの回転数は未確認 |
 | GPU の温度 | RTX 3090 1 枚。`NVIDIA_EXPECTED_GPUS=0` なので枚数は確かめない |
 | CPU の温度 | coretemp の temp1（Package id 0）。`CASE_FAN_CPU_HWMON=coretemp`、`CASE_FAN_CPU_TEMP_CHANNEL=1` |
-| 曲線 | まず dekahamuntu と同じ値（本人の方針）。GPU `45:30 60:45 70:65 78:85 83:100`、CPU `60:30 75:45 85:65 95:100`（℃:デューティ%） |
+| 曲線 | GPU `45:30 55:50 65:75 72:90 78:100`、CPU `60:30 75:45 85:65 95:100`（℃:デューティ%）。dekahamuntu と違うのは GPU の曲線だけ（CPU の曲線は同じ値）。GPU の曲線は、最初は dekahamuntu と同じ `45:30 60:45 70:65 78:85 83:100` で入れ（2026-11-15 19:09 JST）、同じ日の 19:20 JST ごろに本人が前へ寄せると決めた。本人の言葉は「もう少し曲線を前にしよう。GPUは冷やしたいし、上部はCPUのラジエーターのファンにしているから排気が弱いとおもうんだよね」。新しい曲線の PWM は 45℃ 77・55℃ 128・65℃ 191・72℃ 230・78℃ 255。学習中の 66〜67℃ なら約 77〜79%（PWM 197〜202）の計算（前の曲線では約 59%・150）。fan5 は全開で約 1,070 RPM。新しい曲線は実機にまだ入れていない |
+| 前の曲線のとき（実機） | 学習中（GPU 100%・約 335〜340W。2026-11-15 19:13〜19:15 JST、20 秒ごと 6 回）に GPU 66〜67℃、CPU Package 70〜76℃、pwm5 149〜150（enable=1）、fan5 767〜776 RPM。曲線の計算（67℃ → 約 59% = 150）と合う。BIOS のままのほかのチャネルは pwm2 151〜158・fan2 1,248〜1,291 RPM、fan6 約 2,570 RPM。`case-fan-gpu-temp.status` は「<時刻> ok 67 gpus=1」 |
 | BIOS の制御のとき | 学習中（GPU 100%・約 340W、GPU 65〜66℃）に pwm5 が 124〜143、fan5 が 650〜750 RPM（本人、2026-11-15） |
 
 チャネルごとの回転数・pwm・BIOS の曲線と、どれが何かの見立て（未確認）は [machines.md の「ファン（2026-11-15）」](machines.md#ファン2026-11-15)。
 
 #### 入れ方（本人が実機で流す。sudo が要る）
 
-済んだこと（2026-11-15、本人）:
+済んだこと（2026-11-15 JST、本人）:
 
 1. `scripts/install-case-fan-control-ubuntu.sh --probe --load-module`（17:00 JST ごろ。nct6775 を一時的に読み込んで調べた。再起動で消える）
 2. `--identify 5`（18:25 ごろ。10 秒だけ全開）: fan5 だけが 685 → 最大 1,071 RPM に上がった。`--identify 5 --stop`（19:00 ごろ。10 秒だけ pwm=0）: fan5 が 676 → 475 RPM に下がったが止まらなかった。どちらも終わると元（enable=5 pwm=124）へ戻った。pwm2 はラジエーターのファン（音で確かめ、止めたら止まった）。pwm1・pwm4 は止めても目に見えて止まったファンはなかった。値は [machines.md の「ファン（2026-11-15）」](machines.md#ファン2026-11-15)
 3. `hosts/ubuntu/chibihamuntu.env` を `CASE_FAN_CHANNELS=5`・`CASE_FAN_CONTROL=1` にした
+4. 入れた（19:09 JST = 10:09 UTC。実機の写し `~/nix-config-issue6`、commit 551a83a と同じ中身で `scripts/install-case-fan-control-ubuntu.sh`）。GPU の曲線は dekahamuntu と同じ `45:30 60:45 70:65 78:85 83:100`。読むだけで確かめたこと:
+   - `fan2go.service` は 19:09:26 JST に起動。active・enabled、再起動 0 回、メモリ約 13MB（19:13:54 JST）
+   - `/etc/fan2go/fan2go.yaml` の sha256 は `--print-config` の出力と同じ。`/etc/modules-load.d/case-fan-control.conf` に nct6775。`/etc/fan2go/case-fan-restore.conf` は「nct6798 5 5」（入れる前の BIOS の pwm5_enable は 5）
+   - 操っているのは pwm5 だけ（enable=1）。pwm1・2・4・6 は enable=5（BIOS の自動）、pwm7 は enable=0 のまま
+   - カーネルのログに NVIDIA の Xid はない（起動 16:37 JST から 19:13 JST まで）
+   - 入れたあとの値は上の表の「前の曲線のとき（実機）」
+5. GPU の曲線を `45:30 55:50 65:75 72:90 78:100` にした（env だけ。19:20 JST ごろ、本人が決めた。上の表の「曲線」）
 
-これから流すもの:
+これから流すもの（曲線を変えたあとの入れ直し。本人が流す。sudo）:
 
 ```bash
 cd ~/.config/nix-config
 
-# 1. 書く予定の fan2go.yaml を見る（sudo 不要。ファンは変えない）。fans が case_pwm5（pwmChannel 5、rpmChannel 5）の 1 つだけかを見る
+# 1. 書く予定の fan2go.yaml を見る（sudo 不要。ファンは変えない）。fans が case_pwm5 の 1 つだけで、GPU の曲線が新しい値かを見る
 scripts/install-case-fan-control-ubuntu.sh --print-config
 
-# 2. 入れる（sudo）。初回の解析で pwm が曲線と関係なく 0〜255 を動く（fan5 は止まらず、最低で約 475 RPM）。
-#    学習中に入れるかは本人が決める。GPU が暇なときのほうが確か
+# 2. 入れ直す（sudo）。コマンドは初めに入れたときと同じ
 #    （configure-ubuntu-hardware.sh を流しても、env が 1 なのでこれが流れる）
 scripts/install-case-fan-control-ubuntu.sh
 ```
 
-初回の解析の見込み（別の作業者が fan2go 0.15.0 のソースを読んだ見込み。実機ではまだ確かめていない。時間は推測を含む）:
+入れ直しでスクリプトがすること（`do_install` を読んだ）: fan2go が動いていれば止める（unit の `ExecStopPost` が BIOS の制御へ戻す）→ fan2go の実行ファイル（SHA256 が合えばそのまま）・センサーと戻しのスクリプトを置き直す → BIOS の `pwm5_enable` を `case-fan-restore.conf` に書き直す（止めたあとも enable=1 のままなら前の記録の 5 を使う）→ 設定を `fan2go config validate` で確かめてから置き換える → unit を置き直して起動し直す（`systemctl restart`）。止めてから起動するまでの短いあいだは BIOS の制御。
 
-- 失敗せずに通る見込み。fan5 は止まる点がないので start の境界は PWM 0 になるが、使われるのは設定の `minPwm: 77`・`startPwm: 77`・`maxPwm: 255`（設定に書いた値は解析の結果で上書きされない。`internal/fans/hwmon.go` の `SetStartPwm` など）。ログには「Analysis boundaries detected (before config overrides)」と出る
-- 解析のあいだ、pwm は曲線と関係なく動く: 127 → 63 → 31 → 15 → 7 → 3 → 1 → 0（止まる所の探索）、255〜191（最大の探索と確認）、32〜224（間の点）。1 点あたり約 5〜30 秒（`analysis.settleTimeout` の既定 30 秒）。合計はおそらく 1.5〜3 分、上限は約 11 分。fan5 が最低（約 475 RPM）付近にあるのはおそらく 1 分前後、最悪 4〜5 分。GPU 自身のファンは別に動く
-- 解析の途中で fan2go を止めると、解析が終わるまで終わらず（systemd の既定の 90 秒で SIGKILL）、そのときは unit の `ExecStopPost`（case-fan-restore-bios）が BIOS の制御へ戻す。測った結果は最後にまとめて保存するので、途中で止めると次の起動で解析は最初からやり直し
-- 動いている間の RPM の検査（平均が 0 なら minPwm を上げる・全開でも 0 なら止まる）には、fan5 はいつも約 475 RPM 以上なので当たらない見込み
+解析の結果は `/var/lib/fan2go/fan2go.db` に残る（入れ直しでは消さない）ので、入れ直しでは初回の解析は走らない見込み（fan2go 0.15.0 のソースの読み: 保存した結果があれば解析を飛ばす。dekahamuntu-setup.md にも「2 回目からは測らない」とある。chibihamuntu では入れ直しのときに `journalctl -u fan2go` で確かめる）。`--uninstall` は `/var/lib/fan2go` を消すので、外してから入れると解析はやり直しになる。
+
+初回の解析（見込みは別の作業者が fan2go 0.15.0 のソースを読んだもの。実機で確かめたのは 2026-11-15 19:09 JST に入れたとき。ログは `journalctl -u fan2go`、時刻は JST）:
+
+- 見込み: 失敗せずに通る。fan5 は止まる点がないので start の境界は PWM 0 になるが、使われるのは設定の `minPwm: 77`・`startPwm: 77`・`maxPwm: 255`（設定に書いた値は解析の結果で上書きされない。`internal/fans/hwmon.go` の `SetStartPwm` など）。ログには「Analysis boundaries detected (before config overrides)」と出る
+  - 実機で確かめた: 見込みどおり。19:09:29「Fan 'case_pwm5' has not yet been analyzed, starting initialization sequence...」→ 19:10:06「start/min boundary detected at PWM 0」→ 19:10:39「max boundary confirmed at PWM 255 (threshold 1022.2 RPM)」→ 19:11:12「RPM curve analysis finished in 1m43.695s」「Analysis boundaries detected (before config overrides): Start 1, Max 255」「PWM settings of fan 'case_pwm5': Min 77, Start 77, Max 255」「Starting controller loop」
+- 見込み: 解析のあいだ、pwm は曲線と関係なく動く: 127 → 63 → 31 → 15 → 7 → 3 → 1 → 0（止まる所の探索）、255〜191（最大の探索と確認）、32〜224（間の点）。1 点あたり約 5〜30 秒（`analysis.settleTimeout` の既定 30 秒）。合計はおそらく 1.5〜3 分、上限は約 11 分。GPU 自身のファンは別に動く
+  - 実機で確かめた: 合計 1 分 43.7 秒（見込みの幅の中）。止まる所の探索は 37.582 秒、最大の探索は 33.046 秒（ログの値）。pwm が一点ずつどう動いたか、fan5 が最低付近にあった時間は記録していない
+- 見込み（実機では確かめていない）: 解析の途中で fan2go を止めると、解析が終わるまで終わらず（systemd の既定の 90 秒で SIGKILL）、そのときは unit の `ExecStopPost`（case-fan-restore-bios）が BIOS の制御へ戻す。測った結果は最後にまとめて保存するので、途中で止めると次の起動で解析は最初からやり直し
+- 見込み: 動いている間の RPM の検査（平均が 0 なら minPwm を上げる・全開でも 0 なら止まる）には、fan5 はいつも約 475 RPM 以上なので当たらない。入れたあと（19:13〜19:15 JST）は fan5 767〜776 RPM で、fan2go の再起動は 0 回
 
 入れたあとの確かめ方:
 
@@ -257,7 +270,7 @@ scripts/install-case-fan-control-ubuntu.sh --probe   # 操るチャネルの ena
 
 `case-fan-gpu-temp.status` の行は、chibihamuntu では `NVIDIA_EXPECTED_GPUS=0` なので枚数で failsafe にはならず、見えた枚数がそのまま `gpus=1` と出る（dekahamuntu は 2 枚を期待して `gpus=2`）。`nvidia-smi` が失敗する・1.2 秒で返らない・GPU が 1 枚も見えない・数でない値のときは「failsafe 100 <理由>」で、ケースファンは全開になる。
 
-GPU に負荷をかけて pwm と回転数が上がり、負荷を止めると下がるのを見る（issue 6 の完了条件。まだ確かめていない）。
+GPU に負荷をかけて pwm と回転数が上がり、負荷を止めると下がるのを見る（issue 6 の完了条件。前の曲線で学習中の値は読んだが、負荷を止めたとき・戻ったときはまだ確かめていない）。
 
 #### 外し方
 
@@ -271,9 +284,10 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 
 #### 入れたあとに埋めるところ
 
-- 入れた日時（この節の冒頭の「まだ入れていない」を直す）
-- 初回の解析の結果（上の見込みどおりだったか。かかった時間、ログの境界の行）
-- GPU に負荷をかけたとき・止めたときの pwm5・fan5 の値（issue 6 の完了条件）
+- 新しい曲線（`45:30 55:50 65:75 72:90 78:100`）で入れ直した日時（この節の冒頭と、表の「曲線」の「まだ入れていない」を直す）
+- 入れ直しで初回の解析が走らなかったか（`journalctl -u fan2go` に「has not yet been analyzed」が出ないか）
+- 新しい曲線での学習中の pwm5・fan5・GPU の温度（計算では 66〜67℃ で PWM 197〜202）
+- 負荷を止めたとき・戻ったときの pwm5・fan5（issue 6 の完了条件）
 
 ## ComfyUI
 

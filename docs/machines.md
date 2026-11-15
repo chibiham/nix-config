@@ -52,15 +52,15 @@
   - sda = Fanxiang S101 2T（SATA、1.9T）。Ubuntu はこれに入っている。sda1 `/boot/efi` 1G、sda2 `/boot` 2G、sda3 LVM → `/` 1.9T（使用 894G・空き 886G）
   - nvme0n1 = Lexar SSD NM790 2TB（NVMe、PCIe 4.0 x4、ファームウェア 11296）。中は EFI 100M・16M・NTFS 1.9T・NTFS 889M。Ubuntu からはマウントしていない（Windows の並びに見える）
 - ネットワーク: 有線 eno1 = Realtek RTL8125（2.5GbE）、1,000Mb/s でつながっている。Wi-Fi wlp6s0 = Realtek RTL8852BE（802.11ax）、up。Bluetooth あり
-- ファン: Super I/O のドライバ（nct6775 など）は読み込んでいない（hwmon に pwm・fan がない）。BIOS まかせ。2026-11-15 に一時的に読み込んで読んだ値は下の「ファン（2026-11-15）」
+- ファン: 2026-11-15 19:09 JST に、Super I/O のドライバ nct6775 を起動のたびに読み込む設定（`/etc/modules-load.d/case-fan-control.conf`）とケースファンの制御（fan2go）を入れた。ケースファン（pwm5）は fan2go が GPU の温度で回し、ほかのファン（ラジエーターのファン・ポンプなど）は BIOS の制御のまま。それより前は nct6775 を読み込んでおらず（hwmon に pwm・fan がない）、BIOS まかせだった。値は下の「ファン（2026-11-15）」
 - そのほか: USB に ASUS AURA LED Controller
 
 ### ファン（2026-11-15）
 
-本人が 17:00 JST ごろ `scripts/install-case-fan-control-ubuntu.sh --probe --load-module` を流し、そのあと sudo なしの `--probe` と sysfs で読んだ。そのあと 18:25 ごろと 19:00 ごろに `--identify` で本人がどのチャネルが何かを見分けた（下の「--identify の結果」）。ケースファンのチャネルは 5 に決まり、`hosts/ubuntu/chibihamuntu.env` を `CASE_FAN_CHANNELS=5`・`CASE_FAN_CONTROL=1` にした。実機に入れる（sudo）のは本人で、2026-11-15 の時点ではまだ入れていない（ケースファンの制御（fan2go）は入っていない。[ubuntu-server.md](ubuntu-server.md#ケースファンgpu-の温度で回す)）。
+本人が 17:00 JST ごろ `scripts/install-case-fan-control-ubuntu.sh --probe --load-module` を流し、そのあと sudo なしの `--probe` と sysfs で読んだ。そのあと 18:25 ごろと 19:00 ごろに `--identify` で本人がどのチャネルが何かを見分けた（下の「--identify の結果」）。ケースファンのチャネルは 5 に決まり、`hosts/ubuntu/chibihamuntu.env` を `CASE_FAN_CHANNELS=5`・`CASE_FAN_CONTROL=1` にした。本人が 19:09 JST（10:09 UTC）に実機に入れた。fan2go が操るのは pwm5 だけ（enable=1）で、pwm1・2・4・6 は enable=5（BIOS の自動）、pwm7 は enable=0 のまま。GPU の曲線は最初 dekahamuntu と同じ値で入れ、19:20 JST ごろに本人が前へ寄せると決めた（env だけ。入れ直しはこれから）。初回の解析・入れたあとの値・曲線は [ubuntu-server.md の「ケースファン」](ubuntu-server.md#ケースファンgpu-の温度で回す)。下の値（表・--identify）は、入れる前に BIOS の制御のまま読んだもの。
 
-- 環境: BIOS 1220、カーネル 7.0.0-43-generic。fan2go は入っていない。libsensors5 はある
-- Super I/O: `nct6775: Found NCT6798D or compatible chip at 0x2e:0x290`。hwmon の name は `nct6798`。nct6775 の ASUS WMI のボード一覧にこのボードがあり、`acpi_enforce_resources=lax` なしで掴めた。読み込みは一時的（再起動で消える）
+- 環境: BIOS 1220、カーネル 7.0.0-43-generic。fan2go は入っていなかった（17:00 の時点。19:09 に入れた）。libsensors5 はある
+- Super I/O: `nct6775: Found NCT6798D or compatible chip at 0x2e:0x290`。hwmon の name は `nct6798`。nct6775 の ASUS WMI のボード一覧にこのボードがあり、`acpi_enforce_resources=lax` なしで掴めた。`--probe --load-module` の読み込みは一時的（再起動で消える）。19:09 に入れてからは、起動のたびに読み込む
 - pwm は 1・2・4・5・6・7（pwm3 はない）。どれも mode=1（PWM、4pin の制御）。`pwmN_enable` は 1・2・4・5・6 が 5（BIOS の自動）、7 が 0（全開）
 - fan は 1〜7 の入力がある
 - CPU の温度: coretemp（hwmon の name `coretemp`）の temp1 が Package id 0。nct6798 の temp8（PECI Agent 0）も同じ値
@@ -93,6 +93,7 @@
 - 見立て（本人・執事。未確認）: ケースの付属ファン 120mm ×6（背面 1・側面 2・底面 3、ARGB）全体が、ケース付属のハブ 1 つにまとまって fan5 の 1 チャネルにつながっている（回転は 1 つぶんだけ返る）。6 つ全部が 5 につながっているかは、目では確かめきれていない。pwm1・pwm4 は何もつながっていない見込み。pwm6 はポンプ（BIOS の曲線が全点 255、約 2,600 RPM で一定）
 - pwm5 は BIOS の曲線が pwm2 と同じなので、ボードの上では CPU_OPT のヘッダーかもしれない（未確認）。チャネルの番号とボードのヘッダー（CPU_FAN・CPU_OPT・AIO_PUMP・CHA_FAN1〜3）の対応は確かめていない
 - ケースの付属ファンが 3pin か 4pin かは未確認（pwm5 は mode=1）
+- 天面は簡易水冷のラジエーターとそのファン（120mm ×3。pwm2）で、本人はケースの排気が弱いと見ている（本人の言葉は「上部はCPUのラジエーターのファンにしているから排気が弱いとおもうんだよね」。2026-11-15）。ケースファンの GPU の曲線を前へ寄せた理由の 1 つ。ラジエーターのファンの向き（排気か）は未確認
 
 ### 本人の一覧・仕様と実機の食い違い
 
