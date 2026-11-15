@@ -521,6 +521,7 @@ ls /sys/class/powercap/                                                  # intel
 | 止めない | `neverStop`。最低は `CASE_FAN_MIN_DUTY`（30%） |
 | 止めたとき・落ちたとき | BIOS の制御に戻す。fan2go 自身（`controlMode.onExit: restore`）と、unit の `ExecStopPost`（`case-fan-restore-bios`。入れたときに読んだ `pwmN_enable` の値に戻す。強制終了のときの保険） |
 | GPU の温度が読めないとき | `nvidia-smi` の失敗・1.2 秒で返らない（TERM を無視しても 0.3 秒後に KILL。fan2go の cmd センサーの時間切れ 2 秒より手前で終える）・枚数が `NVIDIA_EXPECTED_GPUS`（2）でない・数でない値のとき、100℃ を出す。曲線は 83℃ で 100% なので全開になる。GPU の曲線の最後の点が 100% でなければ、入れるスクリプトが止まる（2026-11-14、実装レビューの指摘で足した。dekahamuntu の設定で作られる YAML は変わっていないので、入れ直しは要らない） |
+| GPU のデバイスの許し | unit（`systemd/fan2go.service`）は、`nvidia-smi` が開く NVIDIA のデバイスを、パスでなくデバイスの種類 `DeviceAllow=char-nvidia rw`（`/proc/devices` の「nvidia」、メジャー 195 = `/dev/nvidia0`〜N・`/dev/nvidiactl`）で許す。パスで書くと、起動の時点でノードがまだないとき許しに入らず、再起動のあと GPU を読めないまま全開になる（2026-11-16 に chibihamuntu で起きた。[ubuntu-server.md の「再起動のあと GPU の温度が読めず全開になる」](ubuntu-server.md#再起動のあと-gpu-の温度が読めず全開になる2026-11-16-に直した)）。種類の指定も起動の時点で読み込まれているドライバだけが効くので、`Wants=`・`After=modprobe@nvidia.service` でドライバを先に読み込ませる。`/dev/nvidia-uvm`・`/dev/nvidia-caps/*` は `nvidia-smi` に要らないので許さない。dekahamuntu も同じ unit（2026-11-16 の直しを入れるには、入れるスクリプトの流し直しが要る。fan2go.yaml は変わらない） |
 | 値の置き場所 | `hosts/ubuntu/dekahamuntu.env` の `CASE_FAN_*`（意味は `hosts/ubuntu/README.md`）。スクリプトの既定は切（`CASE_FAN_CONTROL=0`）。dekahamuntu は 1 |
 
 曲線（たたき台。`CASE_FAN_GPU_CURVE`・`CASE_FAN_CPU_CURVE`。「温度:デューティ%」）:
@@ -663,7 +664,7 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 
 - 83℃ 以上で全開（PWM 255）になること（GPU は 72℃ までしか上がっていない。2 枚が同時に働いたときも同じ）
 - `systemctl stop fan2go` で BIOS の制御（`pwmN_enable=5`）に戻ること、起動し直したときに解析をやり直さないこと
-- 再起動のあと、`nct6775` が自動で読み込まれ、fan2go が自分で立ち上がること
+- 再起動のあと、`nct6775` が自動で読み込まれ、fan2go が自分で立ち上がり、GPU の温度を読めること（2026-11-16 の時点で、dekahamuntu は 2026-11-13 09:16 UTC の起動のまま。fan2go を入れてから再起動していない）。2026-11-14 までに入れた unit（デバイスをパスで許す版）のままだと、chibihamuntu と同じく再起動のあと全開になりうる。直した unit を入れるには入れるスクリプトの流し直しが要る（本人。fan2go.yaml は変わらないので、初回の解析は走らない）。確かめ方は [ubuntu-server.md の「再起動のあと GPU の温度が読めず全開になる」](ubuntu-server.md#再起動のあと-gpu-の温度が読めず全開になる2026-11-16-に直した)の手順で、`gpus=2` を見る
 - GPU が読めないとき（failsafe）に全開になること（実機では起こしていない）
 - チャネル 2 が CPU のクーラーという見分け（本人「たぶん」）と、fan5 が CPU_OPT で 2 に連動しているという見込み
 - 実機の `/usr/local/sbin/case-fan-gpu-temp` はまだ古い版（`timeout -k 0.5 1.5`）。新しい版（`-k 0.3 1.2`）にするには入れるスクリプトの流し直しが要る（本人に頼んである。2026-11-13）

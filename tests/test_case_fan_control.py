@@ -1218,6 +1218,102 @@ class GpuTempTests(unittest.TestCase):
             self.assertLess(self.elapsed, 1.8)
 
 
+UNIT = REPO / "systemd/fan2go.service"
+
+
+def read_unit(path=UNIT):
+    """systemd の unit を（節, 鍵）→ 値の一覧で読む。同じ鍵が何度も出てよい（configparser では読めない）"""
+    entries = {}
+    section = None
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1]
+            continue
+        key, _, value = line.partition("=")
+        entries.setdefault((section, key.strip()), []).append(value.strip())
+    return entries
+
+
+class UnitFileTests(unittest.TestCase):
+    """systemd/fan2go.service の中身。起動の時点で /dev/nvidia* がまだなくても、あとで GPU を読めること"""
+
+    def setUp(self):
+        self.unit = read_unit()
+
+    def values(self, section, key):
+        return self.unit.get((section, key), [])
+
+    def words(self, section, key):
+        return [w for v in self.values(section, key) for w in v.split()]
+
+    def device_allow(self):
+        return [tuple(v.split()) for v in self.values("Service", "DeviceAllow")]
+
+    def test_nvidia_devices_are_allowed_by_group_not_by_path(self):
+        # パスは起動の時点で stat して番号に直す。そのときないノードは、あとでできても許されない
+        allowed = self.device_allow()
+        for spec, _ in allowed:
+            self.assertFalse(spec.startswith("/dev/nvidia"), f"NVIDIA のデバイスをパスで許している: {spec}")
+        self.assertIn(("char-nvidia", "rw"), allowed)
+
+    def test_nvidia_permission_is_not_wider_than_needed(self):
+        # nvidia-smi に要るのはメジャー 195（nvidiactl と nvidiaN）だけ。種類のワイルドカードや、uvm・caps は許さない
+        for spec, access in self.device_allow():
+            if "nvidia" in spec:
+                self.assertIn(spec, ("char-nvidia", "char-nvidia-frontend"))
+                self.assertNotIn("*", spec)
+                self.assertNotIn("m", access)
+
+    def test_path_specs_have_no_wildcards(self):
+        # パスの指定にはワイルドカードが効かない（man systemd.resource-control）
+        for spec, _ in self.device_allow():
+            if spec.startswith("/"):
+                self.assertNotIn("*", spec)
+                self.assertNotIn("?", spec)
+
+    def test_nvidia_driver_is_loaded_before_start(self):
+        # 種類の指定も、起動の時点で /proc/devices にあるものだけが許す一覧に入る
+        self.assertIn("modprobe@nvidia.service", self.words("Unit", "Wants"))
+        self.assertIn("modprobe@nvidia.service", self.words("Unit", "After"))
+
+    def test_waiting_for_nvidia_cannot_stop_the_start(self):
+        # GPU やドライバがなくても fan2go は起動して全開側で回る: 強い依存（Requires・BindsTo・Requisite）や、
+        # デバイスのノードを待つ ExecStartPre・条件を足さない
+        for key in ("Requires", "BindsTo", "Requisite"):
+            self.assertFalse([w for w in self.words("Unit", key) if "nvidia" in w], key)
+        for key, value in self.unit.items():
+            if key[0] == "Unit" and key[1].startswith(("Condition", "Assert")):
+                self.fail(f"{key[1]} があると、満たないとき fan2go が起動しない")
+        for value in self.values("Service", "ExecStartPre"):
+            self.assertNotIn("nvidia", value)
+
+    def test_bios_restore_and_hardening_are_kept(self):
+        self.assertEqual(self.values("Service", "ExecStopPost"), ["+/usr/local/sbin/case-fan-restore-bios"])
+        self.assertEqual(self.values("Service", "Restart"), ["always"])
+        for key, value in (
+            ("ProtectSystem", "strict"), ("ProtectHome", "true"), ("NoNewPrivileges", "true"),
+            ("PrivateTmp", "true"), ("ProtectKernelModules", "true"), ("ProtectKernelTunables", "true"),
+            ("IPAddressDeny", "any"),
+        ):
+            self.assertEqual(self.values("Service", key), [value], key)
+        # DeviceAllow があるので、一覧にないデバイスは拒まれる（auto のまま）
+        self.assertNotIn("DevicePolicy", [k for _, k in self.unit])
+
+    @unittest.skipUnless(shutil.which("systemd-analyze"), "systemd-analyze がない")
+    def test_systemd_analyze_verify(self):
+        # 実行ファイル（/usr/local/bin/fan2go など）がない機械でも読めるよう、その文句だけは除く
+        r = subprocess.run(["systemd-analyze", "verify", str(UNIT)], capture_output=True, text=True, timeout=60)
+        problems = [
+            line for line in r.stderr.splitlines()
+            if "fan2go.service" in line and "is not executable" not in line and "No such file" not in line
+            and "Command " not in line
+        ]
+        self.assertEqual(problems, [], r.stderr)
+
+
 class RestoreConfTests(unittest.TestCase):
     """BIOS の pwmN_enable の記録（case-fan-restore.conf）に、ラジエーターのチャネルの行も入る"""
 
@@ -1291,6 +1387,88 @@ class RestoreConfTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("pwm3 が手動（enable=1）のまま", r.stderr)
         self.assertEqual(self.conf.read_text(), "# old\nnct6799 2 5\n")
+
+
+class DroppedChannelTests(unittest.TestCase):
+    """組から外したチャネル（ラジエーターの組をやめた pwm2）を、記録を書き直す前に BIOS の制御へ戻す"""
+
+    def setUp(self):
+        self.fx = Fixture()
+        self.addCleanup(self.fx.close)
+        add_radiator(self.fx)
+        self.etc = self.fx.base / "etc-fan2go"
+        self.etc.mkdir()
+        self.conf = self.etc / "case-fan-restore.conf"
+        # 前の入れ方（ケースファンの pwm3 とラジエーターの pwm2）の記録
+        self.old = "# old\nnct6799 3 2\nnct6799 2 5\n"
+        self.conf.write_text(self.old)
+        (self.fx.nct / "pwm3_enable").write_text("2\n")
+        self.enable2 = self.fx.nct / "pwm2_enable"
+
+    def run_write(self, **env):
+        # 組をやめた形: ケースファンは pwm3、CASE_FAN_RAD_CHANNELS は空（ほかの CASE_FAN_RAD_* は残っている）
+        return subprocess.run([BASH, str(INSTALL), "--test-write-restore-conf"], env={
+            **os.environ,
+            "UBUNTU_HOST": "no-such-host-for-tests",
+            "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
+            "CASE_FAN_HWMON": "nct6799",
+            "CASE_FAN_TEST_CONFIG_DIR": str(self.etc),
+            **RAD_OFF,
+            **RAD_ON,
+            **RAD_BACKUP,
+            "CASE_FAN_RAD_CHANNELS": "",
+            **env,
+        }, capture_output=True, text=True)
+
+    def lines(self):
+        return [l for l in self.conf.read_text().splitlines() if not l.startswith("#")]
+
+    def test_dropped_channel_already_back_to_bios_is_left_alone(self):
+        # ふつうの入れ直し: fan2go を止めたときに pwm2 は 5 へ戻っている
+        self.enable2.write_text("5\n")
+        r = self.run_write()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.lines(), ["nct6799 3 2"])
+        self.assertEqual(self.enable2.read_text().strip(), "5")
+        self.assertIn("組から外した nct6799 pwm2 は BIOS の制御（pwm2_enable=5）です", r.stdout)
+
+    def test_dropped_channel_left_manual_is_restored_before_the_record_is_rewritten(self):
+        # fan2go の戻しも ExecStopPost も効かず、pwm2 が手動のまま残った
+        self.enable2.write_text("1\n")
+        r = self.run_write()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.enable2.read_text().strip(), "5")
+        self.assertEqual(self.lines(), ["nct6799 3 2"])
+        self.assertIn("前の記録の pwm2_enable=5（BIOS の制御）へ戻しました", r.stdout)
+
+    def test_dropped_channel_with_unusable_record_is_refused(self):
+        self.old = "# old\nnct6799 3 2\nnct6799 2 1\n"
+        self.conf.write_text(self.old)
+        self.enable2.write_text("1\n")
+        r = self.run_write()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("前の記録の値（1）では BIOS の制御へ戻せません", r.stderr)
+        self.assertEqual(self.conf.read_text(), self.old)
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root は読むだけのファイルにも書ける")
+    def test_dropped_channel_that_cannot_be_restored_keeps_the_old_record(self):
+        self.enable2.write_text("1\n")
+        self.enable2.chmod(0o444)
+        self.addCleanup(self.enable2.chmod, 0o644)
+        r = self.run_write()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("pwm2_enable=5（BIOS の制御）へ戻せませんでした。記録は書き直していません", r.stderr)
+        self.assertEqual(self.conf.read_text(), self.old)
+        # 前の記録が残るので、case-fan-restore-bios はまだ pwm2 を戻しに行ける
+        self.assertIn("nct6799 2 5", self.conf.read_text())
+
+    def test_channel_kept_in_the_group_is_not_touched(self):
+        # 組を続ける（CASE_FAN_RAD_CHANNELS=2）なら、外したチャネルはなく、記録は 2 行のまま
+        self.enable2.write_text("5\n")
+        r = self.run_write(CASE_FAN_RAD_CHANNELS="2")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.lines(), ["nct6799 3 2", "nct6799 2 5"])
+        self.assertNotIn("組から外した", r.stdout + r.stderr)
 
 
 class RestoreTests(unittest.TestCase):
