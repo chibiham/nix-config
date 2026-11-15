@@ -90,6 +90,7 @@ sudo が要るので、本人が実機で流す。執事が結果を読んでこ
 - 2026-11-15 23:58 [agent] レビューの指摘 3 件を直して commit(df5de8d): (1) ラジエーターの組は BIOS のモード(戻し先の pwmN_enable。いま 1 なら case-fan-restore.conf の記録)を先に見て、全開(0)・SmartFan IV(5)以外・分からないときは止まる。(2) BIOS の曲線の同じ温度の段差は、高いほうの値と比べる(62:178 62:255 の例は「62℃ で BIOS 255、こちら 179」で止まる)。(3) --identify の戻しは pwm と enable の両方の結果を見て、戻せなければ手で戻すコマンドを出して 0 でない終了コードで終わる。確かめ(最後の commit を chibihamuntu の /tmp に写して。fan2go は動いたまま、sudo なし): 試験 106 件 OK(skip 1)。dekahamuntu の --print-config の sha256 は develop と同じ 0fd88fd6…。chibihamuntu の --print-config の sha256 は実機の /etc/fan2go/fan2go.yaml と同じ 5742d5e1…(標準エラーに「BIOS のモード: SmartFan IV（…記録）」)。fan2go.service は active、22:59:52 JST から再起動 0 回。完了条件の印はそのまま(条件 1・2 は最後の commit で確かめ直した)。
 - 2026-11-15 23:59 [agent] 再レビュー開始。指定範囲 develop..agent/6 の8 commit・9ファイルを確認する。前回指摘3件の修正と追加の安全性境界を読む。コード変更・コミット・sudo・実機ファン操作はしない。
 - 2026-11-16 00:01 [agent] 再レビューのLinuxスモーク: 前回3件は修正を確認。偽hwmonでBIOS全開・同温度の段差は--print-config終了1、PWM復元失敗は終了1と手動復元コマンドを表示。実機には読むだけの--print-configを実行し、case_pwm5・rad_pwm2だけ、sha256 5742d5e1…aaaa0b9で現在の/etc/fan2go/fan2go.yamlと一致。
+- 2026-11-16 00:01 [agent] 再レビュー完了(develop..agent/6、先頭1e6af78)。修正すべき正しさの不具合は見つからなかった。前回3件はLinuxの偽hwmonで修正確認、Linux試験106件OK(skip1: rootを要する本物fan2go検査)。dekahamuntuの生成設定はdevelopとバイト一致(sha256 0fd88fd6…ce1cd5)。実機への読むだけの--print-configは現在の設定と一致。コード変更・コミット・sudo・実機ファン操作なし。一時の検証用コピーは削除済み。判定REVIEW_OK。
 
 ## エージェントの結果(2026-11-15 23:46)
 
