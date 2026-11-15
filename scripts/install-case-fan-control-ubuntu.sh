@@ -1048,10 +1048,16 @@ identify() {
 }
 
 stop_fan2go() {
-  if systemctl is-active --quiet fan2go 2>/dev/null; then
-    echo "fan2go を止めます（BIOS の制御に戻る）"
-    systemctl stop fan2go
-  fi
+  # active だけでなく、落ちて起動し直しを待っている（activating (auto-restart)）・起動中・止まりかけも止める。
+  # 待っているのを止めないと、記録（case-fan-restore.conf）を書き直すあいだに古い設定で起動し、組から外したチャネルを操りうる
+  local state
+  state="$(systemctl is-active fan2go 2>/dev/null || true)"
+  case "$state" in
+    active | activating | deactivating | reloading | refreshing)
+      echo "fan2go を止めます（$state。BIOS の制御に戻る）"
+      systemctl stop fan2go
+      ;;
+  esac
 }
 
 set_grub_lax() {
@@ -1088,6 +1094,44 @@ install_fan2go_binary() {
   rm -rf -- "$work"
 }
 
+# 前の記録（case-fan-restore.conf）にあって、新しい記録（引数の「<name> <チャネル> <enable>」）にないチャネルを確かめる。
+# 組から外したチャネル（例: ラジエーターの組をやめた pwm2）は、記録を書き直すと case-fan-restore-bios が戻さなくなる。
+# ふつうは直前の stop_fan2go で fan2go 自身（onExit: restore）と ExecStopPost が前の記録の値へ戻している。
+# それでも手動（enable=1）のまま残っていれば、ここで前の記録の値へ戻し、読み戻して確かめる。戻せなければ、
+# 記録を書き直さずに止まる（前の記録が残るので、次に fan2go が止まるときにも戻しに行く）
+restore_dropped_channels() {
+  local keep=" " item name ch enable _rest dir now
+  for item in "$@"; do
+    read -r name ch _rest <<<"$item"
+    keep+="$name:$ch "
+  done
+  [[ -r "$RESTORE_CONF" ]] || return 0
+  while read -r name ch enable _rest; do
+    [[ -n "${name:-}" && "${name:0:1}" != "#" ]] || continue
+    [[ "$keep" != *" $name:$ch "* ]] || continue
+    dir="$(find_hwmon "$name" 2>/dev/null)" || {
+      warn "前の記録の $name pwm$ch は、組から外したチャネルですが、hwmon $name が1つに決まらないので確かめられません" >&2
+      continue
+    }
+    now="$(cat "$dir/pwm${ch}_enable" 2>/dev/null)" || now="?"
+    if [[ "$now" != 1 ]]; then
+      echo "組から外した $name pwm$ch は BIOS の制御（pwm${ch}_enable=$now）です。記録から外します"
+      continue
+    fi
+    [[ "$enable" =~ ^[0-9]+$ && "$enable" != 1 ]] ||
+      die "組から外した $name pwm$ch が手動（enable=1）のままで、前の記録の値（${enable:-空}）では BIOS の制御へ戻せません。記録は書き直していません。再起動して BIOS の制御に戻してから入れ直す"
+    if [[ "$mode" != install ]] && ! "$fake_hwmon_root"; then
+      die "組から外した $name pwm$ch が手動（enable=1）のままです（試験の入口なので本物の sysfs には書きません）"
+    fi
+    if printf '%s\n' "$enable" 2>/dev/null >"$dir/pwm${ch}_enable" &&
+      [[ "$(cat "$dir/pwm${ch}_enable" 2>/dev/null)" == "$enable" ]]; then
+      echo "組から外した $name pwm$ch が手動（enable=1）のままだったので、前の記録の pwm${ch}_enable=$enable（BIOS の制御）へ戻しました"
+    else
+      die "組から外した $name pwm$ch を pwm${ch}_enable=$enable（BIOS の制御）へ戻せませんでした。記録は書き直していません。手で戻す: sudo sh -c 'echo $enable > $dir/pwm${ch}_enable'（再起動でも BIOS の制御に戻る）"
+    fi
+  done <"$RESTORE_CONF"
+}
+
 # 今の pwmN_enable を「BIOS の制御」として記録する。fan2go が止まっている状態で読む
 write_restore_conf() {
   local pair pwm enable old lines=()
@@ -1104,6 +1148,7 @@ write_restore_conf() {
     fi
     lines+=("$CASE_FAN_HWMON $pwm $enable")
   done
+  restore_dropped_channels "${lines[@]}"
   {
     echo "# install-case-fan-control-ubuntu.sh が書く。<hwmon の name> <pwm のチャネル> <BIOS の pwmN_enable>"
     printf '%s\n' "${lines[@]}"
