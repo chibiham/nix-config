@@ -319,7 +319,7 @@ scripts/install-minimax-h3-image-ubuntu.sh
 2. 22:25〜22:27: 更新の前（`e3bee7ff`）の本番で、主なレシピ 5 つを 1 枚ずつ作った（比べる元）
 3. 22:27:02〜22:27:14: `update-comfyui-ubuntu.sh`。実機の `~/.config/nix-config` は develop のままで触らず、このブランチのスクリプトを `~/issue5-stage/nix-config/` に写して流した（値は写した dekahamuntu.env の `COMFY_REF=v0.45.2`）。控えは `~/.local/state/comfyui-update/20261114T222702Z-e3bee7ffc`（describe は v0.42.0-7-ge3bee7ffc）。8 つのパッケージが入れ替わり、起動し直しから 9 秒で応答して `comfyui_version 0.45.2`
 4. 22:30:17〜22:30:26: `install-comfyui-ubuntu.sh --unit-only`。出力に「ComfyUIに見せるGPU: 0,1」「既定のデバイス: cuda:0 = NVIDIA GeForce RTX 5060 Ti」。unit の差は `CUDA_VISIBLE_DEVICES=0` → `0,1` の 1 行。6 秒で応答し、`/system_stats` の devices に cuda:0・cuda:1 が出た
-5. 22:33:17〜22:50:31: H3 Image の A/B。22:51〜23:00: Qwen との同居の確かめ。23:01〜23:13: GGUF の A/B（写しを 2 枚見せる形で起動して計った。本番の ComfyUI のモデルは降ろしておいた）
+5. 22:33:17〜22:50:31: H3 Image の A/B。22:51〜23:00: Qwen との同居の確かめ。23:01〜23:13: GGUF の A/B（写しを 2 枚見せる形で起動して計った。本番の ComfyUI のモデルは降ろしておいた）。23:51〜翌 00:13（日本時間 8:51〜9:13）: GGUF の 2880²・4096² の A/B（写しを `CUDA_VISIBLE_DEVICES=1,0` で起動。Q5_K_M は 4096² が OutOfMemoryError で載らなかった。値は ai-server-placement.md）
 6. 4. の重みは 17:29〜17:31 UTC に置いてあった（ここでは流し直していない）
 7. 計測のあいだの温度の最大は 74℃（GPU 0、4096²）、電力の最大 183W、fan2go は全部の回で active（failsafe なし）。83℃ には届いていない。sudo は使っていない。chibihamuntu には触っていない
 
