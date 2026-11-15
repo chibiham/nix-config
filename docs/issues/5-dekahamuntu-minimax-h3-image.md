@@ -96,6 +96,7 @@ goal:
 - 2026-11-15 09:37 [agent] 追加P2を隔離実行で確認: scripts/lib/comfyui.sh:27-28 は HTTP200 の {} や queue_running/queue_pending が null の応答を jq の length(null)=0 により空キューと誤認する。実curlで両方ともrc=0。使い捨てHOME・systemctlスタブで install-comfyui --unit-only を流すと、/queue={}でもdaemon-reload/restartまで実行しrc=0。キュー状態を確認できない応答は拒否すべき。実機がこの応答を返した事実や実ジョブ中断は確認していない。
 - 2026-11-15 09:37 [agent] 再レビュー完了（develop..agent/5、先頭dbb0673）。前回のimage-dual非同期アンロード競合は修正済み。GGUF大解像度の比較も補完済み。追加P2 1件: キュー応答が {} / null の場合に空キューと誤認して再起動を許すため、両フィールドが配列である確認が必要。隔離実行で確認、判定REVIEW_NG。モデル取得・Qwen設定の担当範囲に追加指摘なし。変更shell6ファイルのbash -nとdekahamuntuのnix eval通過。コード・コミット・実機設定は変更していない。
 - 2026-11-15 09:37 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合が1件あります。前回の `image-dual` のアンロード完了待ちは修正済みです。
+- 2026-11-15 09:37 [agent] 返事待ち: TASK_DONE を受けたが、まだ develop に入れていない: 実装レビューで指摘があった。worktree /Users/chibiham/.subako/worktrees/nix-config/5 で直して commit し、TASK_DONE で返す: 修正が必要な不具合が1件あります。前回の `image-dual` のアンロード完了待ちは修正済みです。 1. **[P2] 不完全なキュー応答を「空」と誤認し、再起動を許可する** `scripts/lib/comfyui.sh:27–28` `/queue` が HTTP 200 で `{}` または `{"queue_running":null,"queue_pending":null}` を返すと、jq の `length(null) = 0` により「実行中0・待ち0」と判定します。キュー状態を確認できていないのに、更新・`--unit-only` が再起動へ進め…(自動の差し戻しが上限 3 回に達した)
 
 ## エージェントの結果(2026-11-15 08:32)
 
