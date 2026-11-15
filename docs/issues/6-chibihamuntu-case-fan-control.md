@@ -9,7 +9,7 @@ goal:
   - text: chibihamuntu で install-case-fan-control-ubuntu.sh --print-config が通り、出てくる設定が操るのはケースファンのチャネルだけで、GPU の温度が読めないときは全開側に倒れる形になっている
     done: true
   - text: 試験(tests/test_case_fan_control.py)が Linux で通り、dekahamuntu の設定から出る fan2go の設定が変わっていない
-    done: true
+    done: false
   - text: docs に、chibihamuntu のファンのつなぎ方(どのヘッダーに何がつながっているか)・入れ方・外し方が書いてある
     done: true
   - text: 本人が実機に入れたあと、fan2go.service が active で、GPU に負荷をかけるとケースファンの pwm と回転数が上がり、負荷を止めると下がるのを実機で確かめてある
@@ -72,3 +72,4 @@ sudo が要るので、本人が実機で流す。執事が結果を読んでこ
 - 2026-11-15 19:00 [agent] 完了条件 3 を済みにした: docs/machines.md の chibihamuntu の「ファン（2026-11-15）」に、チャネル 1〜7 ごとの回転数・pwm・BIOS の曲線・つながっているもの(2 = ラジエーターのファン、5 = ケースファン、6 = ポンプと見られる、1・4 = 何もつながっていない見込み、7 = 確かめていない。未確認は未確認と書いた)と --identify の値。docs/ubuntu-server.md の「ケースファン（GPU の温度で回す）」に、構成の表・入れ方(済んだことと、これから流すコマンド)・入れたあとの確かめ方・外し方(stop / disable / --uninstall と env を 0 に戻す)・初回の解析の見込み。差分を読んで確かめた(commit 44be500・da44c29・551a83a)。入れた日時と入れたあとの値は、本人が入れたあとに書き足す。
 - 2026-11-15 19:00 [agent] 返事待ち: chibihamuntu で `cd ~/nix-config-issue6 && scripts/install-case-fan-control-ubuntu.sh` を流して入れ、入れ終わったら知らせてください(学習中に入れるか、合間に入れるかは本人の判断で)。入れたあとの確かめはこちらで読むだけでします。
 - 2026-11-15 19:14 [agent] 本人が実機に入れた(19:09 JST = 10:09:26 UTC に fan2go.service 起動)。読むだけで確かめた(10:13:54 UTC): active・enabled・再起動 0 回、/etc/fan2go/fan2go.yaml の sha256 は --print-config の出力と同じ、case-fan-restore.conf は「nct6798 5 5」、pwm5 だけ enable=1(ほかは BIOS のまま)。初回の解析は 1 分 43.7 秒で通り、Min 77・Start 77・Max 255(見込みどおり)。学習中 GPU 67℃・Package 75℃ で pwm5=150・fan5=776 RPM、status は「ok 67 gpus=1」。負荷が下がって戻るまで、20 秒ごとの記録を裏で取っている。
+- 2026-11-15 19:19 [agent] 完了条件 2 を未済みにした: 印を外す: fan2go を入れたあとの chibihamuntu で試験を流すと 53 件中 16 件が落ちた(IdentifyTests。にせの hwmon の木でも本物の systemctl is-active fan2go を見るので「fan2go が動いています」で止まる)。試験が、流す機械で fan2go が動いているかに依っている。直してから確かめ直す。dekahamuntu の設定の sha256 は変わっていない(0fd88fd6…)。
