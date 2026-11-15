@@ -199,53 +199,53 @@ AMD（Zen）でも `intel_rapl_msr` が同じ `intel-rapl:0` に積算エネル�
 
 ### ケースファン（GPU の温度で回す）
 
-**chibihamuntu にはまだ入れていない（2026-11-15 時点）。どのチャネルがケースファンかも未確認**（本人が `--identify` で見分けている最中）。ケースファンはいまも BIOS の制御のまま。
+**ケースファンのチャネルは 5 に決まり（本人が `--identify` で確かめた、2026-11-15）、env は `CASE_FAN_CHANNELS=5`・`CASE_FAN_CONTROL=1` にした。実機に入れる（sudo）のは本人で、2026-11-15 の時点ではまだ入れていない。** ケースファンはいまも BIOS の制御のまま。
 
 ケースファンを GPU の温度に合わせて回す（issue 6）。仕組み（fan2go、ケースファン = max(GPU の曲線, CPU の曲線)、GPU の温度が読めないときは全開側に倒す、止めたとき・落ちたときは BIOS の制御へ戻す、初回の解析）は dekahamuntu と同じスクリプトで、説明は [dekahamuntu-setup.md の「ケースファン（GPU の温度で回す）」](dekahamuntu-setup.md#ケースファンgpu-の温度で回す)。ここには chibihamuntu に固有のことだけを書く。値は `hosts/ubuntu/chibihamuntu.env` の `CASE_FAN_*`（意味は `hosts/ubuntu/README.md`）。
 
-`configure-ubuntu-hardware.sh` は、env が `CASE_FAN_CONTROL=1` のときだけ `install-case-fan-control-ubuntu.sh` を流す。いまの chibihamuntu は 0 なので、`configure-ubuntu-hardware.sh` を流してもケースファンには触れない。1 にしたあとは、`configure-ubuntu-hardware.sh` を流すたびに入れるスクリプトも流れる（fan2go を止めて入れ直す）。
+`configure-ubuntu-hardware.sh` は、env が `CASE_FAN_CONTROL=1` のときだけ `install-case-fan-control-ubuntu.sh` を流す。chibihamuntu の env は 1 なので、`configure-ubuntu-hardware.sh` を流すと入れるスクリプトも流れる（入れたあとは、流すたびに fan2go を止めて入れ直す）。まだ入れていないうちは、流すと初回の解析（下の「初回の解析の見込み」）が走る。
 
 | 項目 | chibihamuntu |
 |---|---|
 | ボード・チップ | ASUS TUF GAMING B760M-PLUS D4（BIOS 1220）、Nuvoton NCT6798D。ドライバは `nct6775`、hwmon の name は `nct6798`（2026-11-15 に実機で確かめた）。ASUS WMI のボード一覧にあり、`acpi_enforce_resources=lax` は要らなかった（`CASE_FAN_ACPI_LAX=0`） |
-| 操るチャネル | **未確認**（`CASE_FAN_CHANNELS` は空。`--identify` 待ち）。ケースファンのヘッダー（CHA_FAN1〜3）につながったチャネルだけを入れる |
-| 操らないヘッダー | CPU_FAN・CPU_OPT・AIO_PUMP。CPU は簡易水冷（Cooler Master MasterLiquid 360L Core。ラジエーターのファン 120mm ×3、ポンプ）で、ラジエーターのファンとポンプは BIOS の制御のまま |
-| 最低のデューティ | 30%（`CASE_FAN_MIN_DUTY`）。どの pwm も mode=1（PWM、4pin の制御）。ケースファンが 30% で回り続けるかは未確認 |
+| 操るチャネル | 5（`CASE_FAN_CHANNELS=5`。回転数も fan5）。ケースの付属ファン 120mm ×6 が付属のハブ 1 つで 5 にまとまっている、という見立て（本人・執事）。6 つ全部が 5 につながっているかは未確認。操れる幅は約 475〜1,070 RPM（pwm=0 で約 475、全開で最大 1,071。2026-11-15 の `--identify`） |
+| 操らないチャネル | CPU のクーラーのチャネル: pwm2（ラジエーターのファン。本人が確かめた）と pwm6（ポンプと見られる。未確認）。CPU は簡易水冷（Cooler Master MasterLiquid 360L Core。ラジエーターのファン 120mm ×3、ポンプ）で、ラジエーターのファンとポンプは BIOS の制御のまま。pwm1・pwm4（何もつながっていない見込み）、pwm7（確かめていない）も入れない。issue 6 の「CPU_OPT は入れない」は執事の読みで、狙いは CPU のクーラーを操らないこと。そう読み替えた（本人・執事）。pwm5 は BIOS の曲線が pwm2 と同じなので、ボードの上では CPU_OPT のヘッダーかもしれない（pwm5 がボードのどのヘッダーかは未確認）が、つながっているのはケースファンなので操る |
+| 最低のデューティ | 30%（`CASE_FAN_MIN_DUTY`）。どの pwm も mode=1（PWM、4pin の制御）。fan5 は pwm=0 でも約 475 RPM で回り続けるので、30% は「止めない」ための下限というより曲線の下の値。30% のときの回転数は未確認 |
 | GPU の温度 | RTX 3090 1 枚。`NVIDIA_EXPECTED_GPUS=0` なので枚数は確かめない |
 | CPU の温度 | coretemp の temp1（Package id 0）。`CASE_FAN_CPU_HWMON=coretemp`、`CASE_FAN_CPU_TEMP_CHANNEL=1` |
 | 曲線 | まず dekahamuntu と同じ値（本人の方針）。GPU `45:30 60:45 70:65 78:85 83:100`、CPU `60:30 75:45 85:65 95:100`（℃:デューティ%） |
+| BIOS の制御のとき | 学習中（GPU 100%・約 340W、GPU 65〜66℃）に pwm5 が 124〜143、fan5 が 650〜750 RPM（本人、2026-11-15） |
 
 チャネルごとの回転数・pwm・BIOS の曲線と、どれが何かの見立て（未確認）は [machines.md の「ファン（2026-11-15）」](machines.md#ファン2026-11-15)。
 
 #### 入れ方（本人が実機で流す。sudo が要る）
 
+済んだこと（2026-11-15、本人）:
+
+1. `scripts/install-case-fan-control-ubuntu.sh --probe --load-module`（17:00 JST ごろ。nct6775 を一時的に読み込んで調べた。再起動で消える）
+2. `--identify 5`（18:25 ごろ。10 秒だけ全開）: fan5 だけが 685 → 最大 1,071 RPM に上がった。`--identify 5 --stop`（19:00 ごろ。10 秒だけ pwm=0）: fan5 が 676 → 475 RPM に下がったが止まらなかった。どちらも終わると元（enable=5 pwm=124）へ戻った。pwm2 はラジエーターのファン（音で確かめ、止めたら止まった）。pwm1・pwm4 は止めても目に見えて止まったファンはなかった。値は [machines.md の「ファン（2026-11-15）」](machines.md#ファン2026-11-15)
+3. `hosts/ubuntu/chibihamuntu.env` を `CASE_FAN_CHANNELS=5`・`CASE_FAN_CONTROL=1` にした
+
+これから流すもの:
+
 ```bash
 cd ~/.config/nix-config
 
-# 1. nct6775 を一時的に読み込んでから調べる（sudo。再起動で消える。ファンは変えない）
-#    2026-11-15 に流した。再起動したあとは --identify の前にもう一度流す
-scripts/install-case-fan-control-ubuntu.sh --probe --load-module
+# 1. 書く予定の fan2go.yaml を見る（sudo 不要。ファンは変えない）。fans が case_pwm5（pwmChannel 5、rpmChannel 5）の 1 つだけかを見る
+scripts/install-case-fan-control-ubuntu.sh --print-config
 
-# 2. どのチャネルがどのファンか。pwm のチャネル（1・2・4・5・6・7）ごとに 10 秒だけ全開にして、
-#    どのファンが回ったか・どの fan の RPM が上がったかを見る（sudo。終われば元に戻る）
-#    pwm6 は いま 255、pwm7 は enable=0（全開）なので、全開にしても変わって見えないことがある
-scripts/install-case-fan-control-ubuntu.sh --identify 1
-#    全開で音が分からなければ、--stop で 10 秒だけ止めて（pwm=0）、どのファンが止まったか・どの fan の RPM が下がったかを見る。
-#    止まらないファン（最低回転で回り続ける PWM ファンなど）は回転が下がるかを、fanN がいつも 0 のチャネル（1・4・7）は目で見る。
-#    pwm6（BIOS の曲線が全点 255）と pwm7（BIOS が全開、enable=0）は、簡易水冷のポンプなどと見られるので断られる（止めると CPU が冷えなくなる。--allow-pump で止められるが要らない）。
-#    どれが断られるかは --probe の「--identify --stop が断るチャネル」の行で分かる
-scripts/install-case-fan-control-ubuntu.sh --identify 1 --stop
-
-# 3. hosts/ubuntu/chibihamuntu.env を埋める
-#    CASE_FAN_CHANNELS="<ケースファンのチャネル。CPU_FAN・CPU_OPT・AIO_PUMP は入れない>"
-#      （回転数の fan の番号が pwm と違えば "pwm:rpm"）
-#    3pin（--probe で mode=0）のファンなら CASE_FAN_MIN_DUTY を 50 前後に
-#    CASE_FAN_CONTROL=1
-scripts/install-case-fan-control-ubuntu.sh --print-config   # 書く予定の fan2go.yaml を見る（sudo 不要。チャネルが空なら止まる）
-
-# 4. 入れる（sudo）。初回の解析でファンを止めたり全開にしたりするので、GPU が暇なときに流す
+# 2. 入れる（sudo）。初回の解析で pwm が曲線と関係なく 0〜255 を動く（fan5 は止まらず、最低で約 475 RPM）。
+#    学習中に入れるかは本人が決める。GPU が暇なときのほうが確か
+#    （configure-ubuntu-hardware.sh を流しても、env が 1 なのでこれが流れる）
 scripts/install-case-fan-control-ubuntu.sh
 ```
+
+初回の解析の見込み（別の作業者が fan2go 0.15.0 のソースを読んだ見込み。実機ではまだ確かめていない。時間は推測を含む）:
+
+- 失敗せずに通る見込み。fan5 は止まる点がないので start の境界は PWM 0 になるが、使われるのは設定の `minPwm: 77`・`startPwm: 77`・`maxPwm: 255`（設定に書いた値は解析の結果で上書きされない。`internal/fans/hwmon.go` の `SetStartPwm` など）。ログには「Analysis boundaries detected (before config overrides)」と出る
+- 解析のあいだ、pwm は曲線と関係なく動く: 127 → 63 → 31 → 15 → 7 → 3 → 1 → 0（止まる所の探索）、255〜191（最大の探索と確認）、32〜224（間の点）。1 点あたり約 5〜30 秒（`analysis.settleTimeout` の既定 30 秒）。合計はおそらく 1.5〜3 分、上限は約 11 分。fan5 が最低（約 475 RPM）付近にあるのはおそらく 1 分前後、最悪 4〜5 分。GPU 自身のファンは別に動く
+- 解析の途中で fan2go を止めると、解析が終わるまで終わらず（systemd の既定の 90 秒で SIGKILL）、そのときは unit の `ExecStopPost`（case-fan-restore-bios）が BIOS の制御へ戻す。測った結果は最後にまとめて保存するので、途中で止めると次の起動で解析は最初からやり直し
+- 動いている間の RPM の検査（平均が 0 なら minPwm を上げる・全開でも 0 なら止まる）には、fan5 はいつも約 475 RPM 以上なので当たらない見込み
 
 入れたあとの確かめ方:
 
@@ -269,11 +269,11 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 
 `--uninstall` のあとは env の `CASE_FAN_CONTROL` を 0 に戻す（1 のままだと、次に `configure-ubuntu-hardware.sh` を流したときに入れ直される）。
 
-#### 決まったら埋めるところ
+#### 入れたあとに埋めるところ
 
-- `hosts/ubuntu/chibihamuntu.env`: `CASE_FAN_CHANNELS`、`CASE_FAN_CONTROL=1`（3pin なら `CASE_FAN_MIN_DUTY`）
-- この節の表の「操るチャネル」「最低のデューティ」、冒頭の「まだ入れていない」
-- [machines.md の「ファン（2026-11-15）」](machines.md#ファン2026-11-15) の表の「つながっているもの」
+- 入れた日時（この節の冒頭の「まだ入れていない」を直す）
+- 初回の解析の結果（上の見込みどおりだったか。かかった時間、ログの境界の行）
+- GPU に負荷をかけたとき・止めたときの pwm5・fan5 の値（issue 6 の完了条件）
 
 ## ComfyUI
 

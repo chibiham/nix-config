@@ -91,6 +91,22 @@ class PrintConfigTests(unittest.TestCase):
         self.assertIn("ケースファン = GPU の曲線（CPU の曲線なし）", y)
         self.assertNotIn("max(GPU の曲線, CPU の曲線)", y)
 
+    def test_gpu_sensor_comment_with_expected_count(self):
+        r = self.run_print()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(
+            "  # NVIDIA の GPU の温度の最大（ミリ度）。読めないとき・枚数が 2 枚でないときは 100℃ を出す（全開）\n"
+            "  - id: gpu_max\n", r.stdout)
+
+    def test_gpu_sensor_comment_when_count_is_not_checked(self):
+        r = self.run_print(NVIDIA_EXPECTED_GPUS="0")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(
+            "  # NVIDIA の GPU の温度の最大（ミリ度）。読めないときは 100℃ を出す（全開）。枚数は確かめない（NVIDIA_EXPECTED_GPUS=0）\n"
+            "  - id: gpu_max\n", r.stdout)
+        self.assertNotIn("0 枚でない", r.stdout)
+        self.assertIn("args: ['0', '100']", r.stdout)
+
     def test_cpu_curve_is_combined_with_maximum(self):
         r = self.run_print(CASE_FAN_CPU_CURVE="60:30 95:100")
         self.assertEqual(r.returncode, 0, r.stderr)

@@ -332,6 +332,11 @@ render_curve() {
 render_config() {
   local pair pwm rpm expected="${NVIDIA_EXPECTED_GPUS:-0}"
   [[ "$expected" =~ ^[0-9]+$ ]] || expected=0
+  # 期待の枚数が 0 なら case-fan-gpu-temp は枚数を確かめないので、コメントもそう書く（1 以上のときの文は変えない）
+  local gpu_comment="読めないとき・枚数が $expected 枚でないときは ${GPU_FAILSAFE_C}℃ を出す（全開）"
+  if ((expected == 0)); then
+    gpu_comment="読めないときは ${GPU_FAILSAFE_C}℃ を出す（全開）。枚数は確かめない（NVIDIA_EXPECTED_GPUS=0）"
+  fi
   # ファンが指す曲線。fan2go 0.15.0 の function の曲線は 2 本以上が要るので、CPU の曲線がなければ GPU の曲線を直に指す
   local fan_curve=gpu_curve how="GPU の曲線（CPU の曲線なし）"
   if [[ ${#cpu_points[@]} -gt 0 ]]; then
@@ -382,7 +387,7 @@ EOF
   cat <<EOF
 
 sensors:
-  # NVIDIA の GPU の温度の最大（ミリ度）。読めないとき・枚数が $expected 枚でないときは ${GPU_FAILSAFE_C}℃ を出す（全開）
+  # NVIDIA の GPU の温度の最大（ミリ度）。$gpu_comment
   - id: gpu_max
     cmd:
       exec: $GPU_TEMP_BIN
