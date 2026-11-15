@@ -58,3 +58,4 @@ sudo が要るので、本人が実機で流す。執事が結果を読んでこ
 ## 作業ログ
 
 - 2026-11-15 18:11 [me] 完了条件の案を有効にした(ゴールのタスクにした)
+- 2026-11-15 18:13 [agent] 着手。chibihamuntu を sudo なしで読んだ(ssh、--probe と sysfs): hwmon nct6798、pwm 1・2・4・5・6・7(どれも mode=1)。BIOS の自動の曲線は pwm1 と pwm4 が同じ(20:153 45:178 60:216 70:255)、pwm2 と pwm5 が同じ(20:51 45:102 65:178 70:255)、pwm6 は常に 255。fan1・fan4・fan7 は 0 RPM。CASE_FAN_CHANNELS は --identify 待ち(推測で決めない)。試験は変更前の agent/6 を /tmp に写して chibihamuntu(bash 5.2)で 27 件 OK。
