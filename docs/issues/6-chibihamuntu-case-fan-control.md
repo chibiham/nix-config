@@ -7,7 +7,7 @@ goal:
   - text: hosts/ubuntu/chibihamuntu.env に CASE_FAN_CONTROL=1 と、実機で確かめた CASE_FAN_HWMON・CASE_FAN_CHANNELS(ケースファンのヘッダーだけ。CPU_FAN・CPU_OPT・AIO_PUMP は入れない)、CPU の温度の指定(coretemp の Package)が書いてある
     done: true
   - text: chibihamuntu で install-case-fan-control-ubuntu.sh --print-config が通り、出てくる設定が操るのはケースファンのチャネルだけで、GPU の温度が読めないときは全開側に倒れる形になっている
-    done: false
+    done: true
   - text: 試験(tests/test_case_fan_control.py)が Linux で通り、dekahamuntu の設定から出る fan2go の設定が変わっていない
     done: false
   - text: docs に、chibihamuntu のファンのつなぎ方(どのヘッダーに何がつながっているか)・入れ方・外し方が書いてある
@@ -67,3 +67,4 @@ sudo が要るので、本人が実機で流す。執事が結果を読んでこ
 - 2026-11-15 18:41 [agent] 返事待ち: chibihamuntu で上の `--identify <N> --stop`(pwm 1・4・5。要れば 7、6)を流した結果(どの位置のファンが止まったか、`fanN=` の行)を送ってください。ケースファンのチャネルが決まるまで、`CASE_FAN_CHANNELS` と `CASE_FAN_CONTROL=1` は書きません。
 - 2026-11-15 18:53 [agent] 本人の結果(19:00 JST、執事経由): --identify 5 --stop で fan5 は 676 → 約 475 RPM(pwm=0 でも止まらない)。全開は約 1,070 RPM。pwm2 はラジエーターのファン(止めたら止まった)。pwm1・pwm4 を止めても、目に見えて止まったファンはなかった。本人の見立て: ケースファン全体が fan5 の 1 チャネル(6 つ全部が 5 かは目では確かめきれていない)。CASE_FAN_CHANNELS=5、CASE_FAN_CONTROL=1 で進める。完了条件の「CPU_OPT は入れない」は「CPU のクーラーのチャネル(pwm2 のラジエーター、pwm6 のポンプ)は入れない」と読み替える(執事の指示)。
 - 2026-11-15 19:00 [agent] 完了条件 0 を済みにした: hosts/ubuntu/chibihamuntu.env(commit 551a83a)に CASE_FAN_CONTROL=1、CASE_FAN_HWMON=nct6798(実機の --probe で確かめた name)、CASE_FAN_CHANNELS=5(本人が --identify 5 と --identify 5 --stop で確かめた。fan5 が 475〜1,070 RPM で動く)、CASE_FAN_CPU_HWMON=coretemp・CASE_FAN_CPU_TEMP_CHANNEL=1(実機で temp1 = Package id 0)。pwm2(ラジエーターのファン)と pwm6(ポンプと見られる)は入れていない。条件の「CPU_OPT は入れない」は、執事の指示で「CPU のクーラーのチャネル(pwm2・pwm6)は入れない」と読み替えた(pwm5 はボードの上では CPU_OPT のヘッダーかもしれないが、つながっているのはケースファン。どのヘッダーかは未確認)。
+- 2026-11-15 19:00 [agent] 完了条件 1 を済みにした: chibihamuntu の ~/nix-config-issue6(commit 551a83a と同じ中身。sha256 を Mac の作業ツリーと突き合わせた)で scripts/install-case-fan-control-ubuntu.sh --print-config が exit 0(sudo なし、本物の hwmon)。fans は case_pwm5(platform nct6798、pwmChannel 5、rpmChannel 5)の 1 つだけ(pwmChannel の行は 1 つ)。gpu_max は /usr/local/sbin/case-fan-gpu-temp に ['0','100'] を渡し、gpu_curve の最後は 83: 255、case_fans は maximum(gpu_curve, cpu_curve)。実機で scripts/case-fan-gpu-temp.sh 0 100 は 66000、nvidia-smi を見つけられなくすると「全開側の 100℃ を出します」で 100000 を出した(→ 曲線の最後の 255 = 全開)。
