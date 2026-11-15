@@ -59,3 +59,4 @@ sudo が要るので、本人が実機で流す。執事が結果を読んでこ
 
 - 2026-11-15 18:11 [me] 完了条件の案を有効にした(ゴールのタスクにした)
 - 2026-11-15 18:13 [agent] 着手。chibihamuntu を sudo なしで読んだ(ssh、--probe と sysfs): hwmon nct6798、pwm 1・2・4・5・6・7(どれも mode=1)。BIOS の自動の曲線は pwm1 と pwm4 が同じ(20:153 45:178 60:216 70:255)、pwm2 と pwm5 が同じ(20:51 45:102 65:178 70:255)、pwm6 は常に 255。fan1・fan4・fan7 は 0 RPM。CASE_FAN_CHANNELS は --identify 待ち(推測で決めない)。試験は変更前の agent/6 を /tmp に写して chibihamuntu(bash 5.2)で 27 件 OK。
+- 2026-11-15 18:17 [agent] agent/6 に commit: (1) --identify を CASE_FAN_HWMON が空でも使えるように(pwm のある Super I/O が 1 つのときそれを使う。--probe に「--identify が使う hwmon」の行)。(2) chibihamuntu.env に確かめた値(nct6798、coretemp の temp1、曲線は dekahamuntu と同じ)。CASE_FAN_CHANNELS は空、CASE_FAN_CONTROL は 0 のまま。(3) docs/machines.md・docs/ubuntu-server.md に読めた値と入れ方・外し方の下書き(つなぎ方は未確認)。確かめ: 作業ツリーを chibihamuntu の /tmp に写して試験 31 件 OK。dekahamuntu の設定(にせの hwmon の木)から出る fan2go.yaml は、変更前(実機の develop 46daa25)と変更後で sha256 が同じ。
