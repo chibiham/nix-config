@@ -6,6 +6,8 @@ Uses a fake hwmon tree and a fake nvidia-smi. Needs bash 4 or later
 
 import os
 from pathlib import Path
+import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -217,6 +219,269 @@ class IdentifyHwmonTests(unittest.TestCase):
         self.assertIn("nct6799（hwmon0。hosts/ubuntu/no-such-host-for-tests.env の CASE_FAN_HWMON）", line)
         line = self.identify_line(CASE_FAN_HWMON="nct6797")
         self.assertIn("決まらない（hwmon nct6797 が1つに決まりません）", line)
+
+
+@unittest.skipUnless(sys.platform.startswith("linux"), "--identify は Linux 専用")
+class IdentifyTests(unittest.TestCase):
+    """--identify（全開・--stop）を、にせの hwmon の木に対して sudo なしで動かし、元に戻ることを確かめる"""
+
+    def setUp(self):
+        self.fx = Fixture()
+        self.addCleanup(self.fx.close)
+        nct = self.fx.nct
+        # pwm2: ふつうのファン（BIOS の曲線が 255 でない点を持つ）。pwm3: ポンプと見られる（全点 255）。pwm1: 曲線のファイルなし。
+        # pwm4: 曲線はふつうだが、BIOS が全開にしている（enable=0）
+        for m, v in enumerate([60, 90, 120, 200, 255], start=1):
+            (nct / f"pwm2_auto_point{m}_pwm").write_text(f"{v}\n")
+            (nct / f"pwm3_auto_point{m}_pwm").write_text("255\n")
+            (nct / f"pwm4_auto_point{m}_pwm").write_text(f"{v}\n")
+        (nct / "pwm3").write_text("255\n")
+        (nct / "pwm4").write_text("200\n")
+        (nct / "pwm4_enable").write_text("0\n")
+
+    def env(self, **env):
+        if os.geteuid() == 0:
+            self.skipTest("root では流さない（sudo なしの入口を試す）")
+        return {
+            **os.environ,
+            "UBUNTU_HOST": "no-such-host-for-tests",
+            "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
+            "CASE_FAN_HWMON": "nct6799",
+            "CASE_FAN_TEST_IDENTIFY_SECONDS": "1",
+            **env,
+        }
+
+    def run_identify(self, *args, **env):
+        return subprocess.run([BASH, str(INSTALL), "--identify", *args], env=self.env(**env),
+                              capture_output=True, text=True, timeout=60)
+
+    def state(self, ch):
+        return ((self.fx.nct / f"pwm{ch}_enable").read_text().strip(),
+                (self.fx.nct / f"pwm{ch}").read_text().strip())
+
+    def start_and_wait_first_tick(self, *args):
+        """長く動かし、最初の「1s:」の行が出たところで返す（そのとき pwm は変えたまま）"""
+        p = subprocess.Popen([BASH, str(INSTALL), "--identify", *args],
+                             env=self.env(CASE_FAN_TEST_IDENTIFY_SECONDS="60"),
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.addCleanup(lambda: p.poll() is None and p.kill())
+        assert p.stdout is not None and p.stderr is not None
+        lines = []
+        for line in p.stdout:
+            lines.append(line)
+            if line.strip().startswith("1s:"):
+                return p, lines
+        p.wait(timeout=10)
+        self.fail("1s: の行が出ませんでした: " + "".join(lines) + p.stderr.read())
+
+    def test_full_speed_restores(self):
+        # --stop なしは今までどおり 255 にして戻す
+        r = self.run_identify("2")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("全開にします（元: enable=5 pwm=90）", r.stdout)
+        self.assertIn("1s: fan1=1100 fan2=800 fan3=0 fan4=600", r.stdout)
+        self.assertIn("pwm2 を元（enable=5 pwm=90）へ戻しました", r.stdout)
+        self.assertEqual(self.state(2), ("5", "90"))
+
+    def test_full_speed_sets_255_while_running(self):
+        p, _ = self.start_and_wait_first_tick("2")
+        self.assertEqual(self.state(2), ("1", "255"))
+        p.send_signal(signal.SIGTERM)
+        p.communicate(timeout=10)
+        self.assertEqual(self.state(2), ("5", "90"))
+
+    def test_full_speed_does_not_check_for_pump(self):
+        r = self.run_identify("3")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("ポンプ", r.stdout + r.stderr)
+        self.assertEqual(self.state(3), ("5", "255"))
+
+    def test_stop_sets_zero_while_running(self):
+        p, lines = self.start_and_wait_first_tick("2", "--stop")
+        self.assertEqual(self.state(2), ("1", "0"))
+        out = "".join(lines)
+        self.assertIn("60 秒だけ止めます（pwm=0。元: enable=5 pwm=90）", out)
+        self.assertIn("止まらなければ、回転が下がるかを見る", out)
+        self.assertIn("目で見て止まるかを見る", out)
+        self.assertIn("1s: fan1=1100 fan2=800 fan3=0 fan4=600", out)
+        p.send_signal(signal.SIGTERM)
+        p.communicate(timeout=10)
+        self.assertEqual(self.state(2), ("5", "90"))
+
+    def test_stop_runs_to_the_end_and_restores(self):
+        r = self.run_identify("2", "--stop", CASE_FAN_TEST_IDENTIFY_SECONDS="2")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(" 2s: fan1=1100", r.stdout)
+        self.assertIn("pwm2 を元（enable=5 pwm=90）へ戻しました", r.stdout)
+        self.assertEqual(self.state(2), ("5", "90"))
+        # ほかのチャネルには触れない
+        self.assertEqual(self.state(1), ("5", "120"))
+        self.assertEqual(self.state(3), ("5", "255"))
+
+    def test_signals_restore(self):
+        for sig, code in [(signal.SIGINT, 130), (signal.SIGTERM, 143), (signal.SIGHUP, 129)]:
+            with self.subTest(sig=sig.name):
+                p, _ = self.start_and_wait_first_tick("2", "--stop")
+                self.assertEqual(self.state(2), ("1", "0"))
+                started = time.monotonic()
+                # Ctrl+C の端末とちがい、bash にだけ送る（前面の sleep は INT を受けない）
+                p.send_signal(sig)
+                out, err = p.communicate(timeout=10)
+                self.assertLess(time.monotonic() - started, 5)
+                self.assertEqual(p.returncode, code, err)
+                self.assertIn("pwm2 を元（enable=5 pwm=90）へ戻しました", out)
+                self.assertEqual(self.state(2), ("5", "90"))
+
+    def test_failure_midway_restores(self):
+        # pwm に書けない（途中の失敗）。enable は 1 にしたあとなので、EXIT の trap で戻ること
+        (self.fx.nct / "pwm2").chmod(0o444)
+        r = self.run_identify("2", "--stop")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertEqual(self.state(2), ("5", "90"))
+
+    def test_pump_is_refused_without_allow(self):
+        r = self.run_identify("3", "--stop")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("pwm3: ポンプと見られる（BIOS の曲線 pwm3_auto_point*_pwm = 255 255 255 255 255）", r.stderr)
+        self.assertIn("CPU が冷えなくなる", r.stderr)
+        self.assertNotIn("enable=0", r.stderr)
+        self.assertIn("--identify 3 --stop --allow-pump", r.stderr)
+        self.assertNotIn("止めます（pwm=0", r.stdout)
+        self.assertEqual(self.state(3), ("5", "255"))
+
+    def test_pump_with_allow_is_stopped_and_restored(self):
+        p, lines = self.start_and_wait_first_tick("3", "--stop", "--allow-pump")
+        self.assertEqual(self.state(3), ("1", "0"))
+        self.assertIn("--allow-pump があるので止めます", "".join(lines))
+        p.send_signal(signal.SIGINT)
+        p.communicate(timeout=10)
+        self.assertEqual(self.state(3), ("5", "255"))
+
+    def test_unreadable_curve_is_refused(self):
+        (self.fx.nct / "pwm2_auto_point3_pwm").write_text("garbage\n")
+        r = self.run_identify("2", "--stop")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("ポンプかどうか判定できない", r.stderr)
+        self.assertEqual(self.state(2), ("5", "90"))
+
+    def test_bios_full_speed_is_refused_without_allow(self):
+        r = self.run_identify("4", "--stop")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("pwm4: BIOS が全開にしている（enable=0）。ポンプなど、止めてはいけないものの見込み", r.stderr)
+        self.assertIn("--identify 4 --stop --allow-pump", r.stderr)
+        self.assertNotIn("止めます（pwm=0", r.stdout)
+        self.assertEqual(self.state(4), ("0", "200"))
+
+    def test_bios_full_speed_with_allow_is_stopped_and_restored(self):
+        p, lines = self.start_and_wait_first_tick("4", "--stop", "--allow-pump")
+        self.assertEqual(self.state(4), ("1", "0"))
+        self.assertIn("--allow-pump があるので止めます", "".join(lines))
+        p.send_signal(signal.SIGTERM)
+        out, _ = p.communicate(timeout=10)
+        self.assertIn("pwm4 を元（enable=0 pwm=200）へ戻しました", out)
+        self.assertEqual(self.state(4), ("0", "200"))
+
+    def test_bios_full_speed_and_pump_curve_both_reported(self):
+        (self.fx.nct / "pwm3_enable").write_text("0\n")
+        r = self.run_identify("3", "--stop")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("ポンプと見られる", r.stderr)
+        self.assertIn("BIOS が全開にしている（enable=0）", r.stderr)
+        self.assertEqual(self.state(3), ("0", "255"))
+
+    def test_full_speed_mode_ignores_bios_full_speed(self):
+        # --stop なしには効かせない
+        r = self.run_identify("4")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("ポンプ", r.stdout + r.stderr)
+        self.assertEqual(self.state(4), ("0", "200"))
+
+    def test_channel_without_curve_files_is_not_refused(self):
+        r = self.run_identify("1", "--stop")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("pwm1_auto_point*_pwm がありません", r.stdout)
+        self.assertIn("判定できない", r.stdout)
+        self.assertIn("止めます（pwm=0。元: enable=5 pwm=120）", r.stdout)
+        self.assertEqual(self.state(1), ("5", "120"))
+
+    def test_bad_arguments(self):
+        for args in [["2", "--allow-pump"], ["2", "--stop", "--stop"], ["2", "--allow-pump", "--stop"],
+                     ["2", "--stop", "--allow-pump", "x"], ["--stop", "2"]]:
+            with self.subTest(args=args):
+                r = self.run_identify(*args)
+                self.assertEqual(r.returncode, 2)
+                self.assertEqual(self.state(2), ("5", "90"))
+
+    def test_real_sysfs_is_not_entered_without_sudo(self):
+        # CASE_FAN_HWMON_ROOT が /sys の下・ないパスなら、試験の入口にならない（sudo で起動し直そうとする）。
+        # 本物の sudo には届かないように、PATH はにせの sudo と、起動し直す前に使う道具だけにする
+        fake_bin = self.fx.base / "bin"
+        fake_bin.mkdir()
+        log = self.fx.base / "sudo.log"
+        (fake_bin / "sudo").write_text(f"#!/bin/sh\necho \"$@\" > '{log}'\nexit 7\n")
+        (fake_bin / "sudo").chmod(0o755)
+        for tool in ["realpath", "dirname", "uname"]:
+            found = shutil.which(tool)
+            if found is None:
+                self.skipTest(f"{tool} がありません")
+            (fake_bin / tool).symlink_to(found)
+        bash = shutil.which(BASH)
+        if bash is None:
+            self.skipTest(f"{BASH} がありません")
+        for root in ["/sys/class/hwmon", "/sys/class/hwmon/", str(self.fx.base / "no-such-dir")]:
+            with self.subTest(root=root):
+                if log.exists():
+                    log.unlink()
+                r = subprocess.run([bash, str(INSTALL), "--identify", "2", "--stop"],
+                                   env=self.env(CASE_FAN_HWMON_ROOT=root, PATH=str(fake_bin)),
+                                   capture_output=True, text=True, timeout=60)
+                self.assertEqual(r.returncode, 7, r.stderr)
+                self.assertIn("--identify 2 --stop", log.read_text())
+
+
+@unittest.skipUnless(sys.platform.startswith("linux"), "--probe は Linux 専用")
+class ProbePumpLineTests(unittest.TestCase):
+    def setUp(self):
+        self.fx = Fixture()
+        self.addCleanup(self.fx.close)
+
+    def probe(self):
+        r = subprocess.run([BASH, str(INSTALL), "--probe"], env={
+            **os.environ,
+            "UBUNTU_HOST": "no-such-host-for-tests",
+            "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
+            "CASE_FAN_HWMON": "",
+        }, capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    LINE = "--identify --stop が断るチャネル（ポンプなど、止めてはいけないものと見られる。止めるなら --allow-pump）: "
+
+    def test_pump_line(self):
+        for m in range(1, 6):
+            (self.fx.nct / f"pwm3_auto_point{m}_pwm").write_text("255\n")
+            (self.fx.nct / f"pwm2_auto_point{m}_pwm").write_text(f"{50 * m}\n")
+        out = self.probe()
+        self.assertIn(self.LINE + "pwm3（BIOS の曲線が全点 255）\n", out)
+        self.assertIn("判定できないチャネル（--stop は注意を出して進める）: pwm1\n", out)
+
+    def test_pump_line_with_bios_full_speed(self):
+        # chibihamuntu と同じ形: 全点 255 のチャネルと、enable=0 のチャネル。両方に当たれば両方の理由
+        for m in range(1, 6):
+            (self.fx.nct / f"pwm3_auto_point{m}_pwm").write_text("255\n")
+            (self.fx.nct / f"pwm2_auto_point{m}_pwm").write_text(f"{50 * m}\n")
+            (self.fx.nct / f"pwm1_auto_point{m}_pwm").write_text("255\n")
+        (self.fx.nct / "pwm2_enable").write_text("0\n")
+        (self.fx.nct / "pwm1_enable").write_text("0\n")
+        out = self.probe()
+        self.assertIn(self.LINE + "pwm1（BIOS の曲線が全点 255、BIOS が全開 enable=0） pwm2（BIOS が全開 enable=0） "
+                      "pwm3（BIOS の曲線が全点 255）\n", out)
+        self.assertNotIn("判定できないチャネル", out)
+
+    def test_no_pump(self):
+        out = self.probe()
+        self.assertIn(self.LINE + "なし\n", out)
+        self.assertIn("判定できないチャネル（--stop は注意を出して進める）: pwm1 pwm2 pwm3\n", out)
 
 
 # にせの fan2go: viper と同じく、-c のパスの拡張子が .yaml / .yml でなければ読めずに落ちる

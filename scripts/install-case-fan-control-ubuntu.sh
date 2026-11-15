@@ -5,6 +5,7 @@
 #   install-case-fan-control-ubuntu.sh --probe                 # 読むだけ（sudo 不要）。ドライバ・pwm・fan・温度を出し、env の値の手がかりを出す
 #   install-case-fan-control-ubuntu.sh --probe --load-module   # Super I/O のドライバ（CASE_FAN_MODULE）を一時的に読み込んでから調べる（sudo。再起動で消える。ファンは変えない）
 #   install-case-fan-control-ubuntu.sh --identify <チャネル>   # そのチャネルを 10 秒だけ全開にして RPM を見せ、元に戻す（sudo。どのファンがどれかを見分ける。CASE_FAN_HWMON が空なら、pwm のある Super I/O が 1 つのときそれを使う）
+#   install-case-fan-control-ubuntu.sh --identify <チャネル> --stop [--allow-pump]   # 全開の代わりに 10 秒だけ止める（pwm=0）。BIOS の曲線が全点 255・BIOS が全開（enable=0）のチャネル（ポンプなど）は --allow-pump がないと断る
 #   install-case-fan-control-ubuntu.sh --print-config          # 書く予定の /etc/fan2go/fan2go.yaml を出すだけ（sudo 不要）
 #   install-case-fan-control-ubuntu.sh                         # 入れる・入れ直す（sudo）
 #   install-case-fan-control-ubuntu.sh --uninstall             # 外して BIOS の制御へ戻す（sudo）
@@ -38,13 +39,15 @@ SCRIPT_DIR="$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 usage() {
-  sed -n '2,10p' "$(realpath "${BASH_SOURCE[0]}")" | sed 's/^# \{0,1\}//' >&2
+  sed -n '2,11p' "$(realpath "${BASH_SOURCE[0]}")" | sed 's/^# \{0,1\}//' >&2
   exit 2
 }
 
 mode=install
 load_module=false
 identify_channel=""
+identify_stop=false
+allow_pump=false
 case "${1:-}" in
   "") ;;
   --probe)
@@ -59,7 +62,14 @@ case "${1:-}" in
   --identify)
     mode=identify
     identify_channel="${2:-}"
-    [[ "$identify_channel" =~ ^[0-9]+$ && $# -eq 2 ]] || usage
+    [[ "$identify_channel" =~ ^[0-9]+$ ]] || usage
+    # 形は --identify <N> / --identify <N> --stop / --identify <N> --stop --allow-pump だけ
+    case "$#:${3:-}:${4:-}" in
+      2::) ;;
+      3:--stop:) identify_stop=true ;;
+      4:--stop:--allow-pump) identify_stop=true; allow_pump=true ;;
+      *) usage ;;
+    esac
     ;;
   --print-config) mode=print-config; [[ $# -eq 1 ]] || usage ;;
   --uninstall) mode=uninstall; [[ $# -eq 1 ]] || usage ;;
@@ -75,9 +85,21 @@ case "${1:-}" in
   *) usage ;;
 esac
 
+# 試験だけ: CASE_FAN_HWMON_ROOT が /sys の外（にせの hwmon の木）を指しているときは、--identify を sudo なしで動かす。
+# /sys の下（本物）・空・ないパスなら今までどおり sudo で起動し直す（sudo 越しでは CASE_FAN_HWMON_ROOT は落ちる）
+fake_hwmon_root=false
+if [[ -n "${CASE_FAN_HWMON_ROOT:-}" ]]; then
+  fake_real="$(realpath -e -- "$CASE_FAN_HWMON_ROOT" 2>/dev/null || true)"
+  if [[ -n "$fake_real" && "$fake_real" != /sys && "$fake_real" != /sys/* ]]; then
+    fake_hwmon_root=true
+  fi
+  unset fake_real
+fi
+
 needs_root=false
 case "$mode" in
-  install | identify | uninstall) needs_root=true ;;
+  install | uninstall) needs_root=true ;;
+  identify) if ! "$fake_hwmon_root"; then needs_root=true; fi ;;
   probe) if "$load_module"; then needs_root=true; fi ;;
 esac
 # --print-config は試験のため Linux でなくても動く
@@ -150,6 +172,60 @@ pick_identify_hwmon() {
     id_why="CASE_FAN_HWMON が空で、pwm のある Super I/O の hwmon が ${#found[@]} 個あります（${listed[*]}）。どれを操るか決められないので、hosts/ubuntu/$UBUNTU_HOST.env に CASE_FAN_HWMON を書く"
   fi
   return 1
+}
+
+# --identify --stop の守り: hwmon $1 の pwm$2 が、ポンプと見られるか。BIOS の自動の曲線（pwmN_auto_pointM_pwm。あるものを全部）が
+# 全点 255 ならポンプ（止めると CPU が冷えなくなる）。pump_why に理由を入れる。
+# 返り値: 0 = ポンプと見られる、1 = 見られない、2 = 曲線のファイルがなく判定できない、3 = 曲線が読めず判定できない
+pump_check() {
+  local dir="$1" ch="$2" f v vals=() n=0
+  pump_why=""
+  for f in "$dir/pwm${ch}_auto_point"[0-9]*_pwm; do
+    [[ -e "$f" ]] || continue
+    n=$((n + 1))
+    v="$(cat "$f" 2>/dev/null)" || v=""
+    if [[ ! "$v" =~ ^[0-9]+$ ]]; then
+      pump_why="$(basename "$f") が読めません"
+      return 3
+    fi
+    vals+=("$v")
+  done
+  if ((n == 0)); then
+    pump_why="pwm${ch}_auto_point*_pwm がありません"
+    return 2
+  fi
+  pump_why="BIOS の曲線 pwm${ch}_auto_point*_pwm = ${vals[*]}"
+  for v in "${vals[@]}"; do
+    ((v == 255)) || return 1
+  done
+  return 0
+}
+
+# --identify --stop が断るか。断るなら 0 で返り、guard_why（文）と guard_short（--probe の短い理由）を入れる。
+# 断るのは、曲線が全点 255（pump_check が 0）・曲線が読めない（3）・BIOS が全開にしている（いまの enable=0）のどれか。
+# guard_nocurve は曲線のファイルがなく判定できない（pump_check が 2）とき true
+stop_guard() {
+  local dir="$1" ch="$2" rc=0 why=() short=()
+  guard_why="" guard_short="" guard_nocurve=false
+  pump_check "$dir" "$ch" || rc=$?
+  case "$rc" in
+    0) why+=("ポンプと見られる（$pump_why）"); short+=("BIOS の曲線が全点 255") ;;
+    2) guard_nocurve=true ;;
+    3) why+=("ポンプかどうか判定できない（$pump_why）"); short+=("曲線が読めない") ;;
+  esac
+  if [[ "$(read_value "$dir/pwm${ch}_enable")" == 0 ]]; then
+    why+=("BIOS が全開にしている（enable=0）。ポンプなど、止めてはいけないものの見込み")
+    short+=("BIOS が全開 enable=0")
+  fi
+  [[ ${#why[@]} -gt 0 ]] || return 1
+  # 「、」でつなぐ（IFS は 1 バイトしか使えないことがあるので、自分でつなぐ）
+  local i
+  guard_why=${why[0]} guard_short=${short[0]}
+  for ((i = 1; i < ${#why[@]}; i++)); do
+    guard_why+="、${why[i]}"
+    guard_short+="、${short[i]}"
+  done
+  return 0
 }
 
 # "45:30 60:45" → 1行に「温度 PWM(0..255)」。温度は増え続けること、デューティは 0..100
@@ -519,6 +595,20 @@ probe() {
   fi
   if pick_identify_hwmon; then
     echo "  --identify が使う hwmon: $id_name（$(basename "$id_dir")。$id_how）"
+    local f c refused=() nocurve=()
+    for f in "$id_dir"/pwm[0-9]*; do
+      [[ "$f" =~ /pwm([0-9]+)$ ]] || continue
+      c=${BASH_REMATCH[1]}
+      if stop_guard "$id_dir" "$c"; then
+        refused+=("pwm$c（$guard_short）")
+      elif "$guard_nocurve"; then
+        nocurve+=("pwm$c")
+      fi
+    done
+    echo "  --identify --stop が断るチャネル（ポンプなど、止めてはいけないものと見られる。止めるなら --allow-pump）: ${refused[*]:-なし}"
+    if [[ ${#nocurve[@]} -gt 0 ]]; then
+      echo "    BIOS の曲線（pwmN_auto_point*_pwm）がなく判定できないチャネル（--stop は注意を出して進める）: ${nocurve[*]}"
+    fi
   else
     echo "  --identify が使う hwmon: 決まらない（$id_why）"
   fi
@@ -526,24 +616,73 @@ probe() {
 
 # --- 変更する ---------------------------------------------------------------
 
+# --identify が変えた pwm を元へ戻す（EXIT の trap から呼ぶ）。途中で失敗しても、pwm と enable の両方を書きに行く
+restore_identify() {
+  set +e
+  printf '%s\n' "$id_old_pwm" > "$id_dir/pwm$id_ch" 2>/dev/null
+  printf '%s\n' "$id_old_enable" > "$id_dir/pwm${id_ch}_enable" 2>/dev/null
+  if [[ "$(cat "$id_dir/pwm${id_ch}_enable" 2>/dev/null)" == "$id_old_enable" ]]; then
+    echo "pwm$id_ch を元（enable=$id_old_enable pwm=$id_old_pwm）へ戻しました" 2>/dev/null
+  else
+    echo "pwm$id_ch の enable を $id_old_enable に戻せませんでした。sudo sh -c 'echo $id_old_enable > $id_dir/pwm${id_ch}_enable' か、再起動で BIOS の制御に戻す" >&2 2>/dev/null
+  fi
+}
+
 identify() {
-  local ch="$identify_channel" dir enable pwm i n
+  local ch="$identify_channel" dir i n seconds=10 target
   pick_identify_hwmon || die "$id_why"
   dir=$id_dir
+  if "$fake_hwmon_root"; then
+    # 試験の入口でも、本物の sysfs には書きに行かない。待つ秒数は試験のときだけ縮められる
+    [[ "$(realpath -e -- "$dir")" != /sys/* ]] || die "にせの hwmon の木の中に /sys を指すものがあります: $dir"
+    if [[ -n "${CASE_FAN_TEST_IDENTIFY_SECONDS:-}" ]]; then
+      [[ "$CASE_FAN_TEST_IDENTIFY_SECONDS" =~ ^[1-9][0-9]*$ ]] || die "CASE_FAN_TEST_IDENTIFY_SECONDS は 1 以上の整数"
+      seconds=$CASE_FAN_TEST_IDENTIFY_SECONDS
+    fi
+  fi
   [[ -n "$CASE_FAN_HWMON" ]] || echo "CASE_FAN_HWMON が空なので、Super I/O の hwmon $id_name（$dir）を使います"
   [[ -e "$dir/pwm$ch" && -e "$dir/pwm${ch}_enable" ]] || die "$id_name に pwm$ch がありません"
   if systemctl is-active --quiet fan2go 2>/dev/null; then
     die "fan2go が動いています。先に sudo systemctl stop fan2go（止めると BIOS の制御に戻る）"
   fi
-  enable="$(cat "$dir/pwm${ch}_enable")"
-  pwm="$(cat "$dir/pwm$ch")"
-  # 何があっても元へ戻す
-  # shellcheck disable=SC2064
-  trap "printf '%s\n' '$pwm' > '$dir/pwm$ch' 2>/dev/null; printf '%s\n' '$enable' > '$dir/pwm${ch}_enable'; echo 'pwm$ch を元（enable=$enable）へ戻しました'" EXIT
-  echo "pwm$ch を 10 秒だけ全開にします（元: enable=$enable pwm=$pwm）。どのファンの音が変わったかと、どの fan の RPM が上がったかを見る"
+  if "$identify_stop"; then
+    if stop_guard "$dir" "$ch"; then
+      local msg="pwm$ch: $guard_why。ポンプなら、止めると CPU が冷えなくなる"
+      if "$allow_pump"; then
+        warn "$msg。--allow-pump があるので止めます（$seconds 秒で戻します）"
+      else
+        die "$msg。止めません。それでも止めるなら: $0 --identify $ch --stop --allow-pump"
+      fi
+    elif "$guard_nocurve"; then
+      warn "$pump_why。ポンプかどうか判定できないので、確かめずに止めます（ポンプなら CPU が冷えなくなる。止めたら CPU の温度に気をつける）"
+    fi
+  fi
+  # 戻す値を先に読む。読めなければ何も変えずに止まる
+  id_ch=$ch
+  id_old_enable="$(cat "$dir/pwm${ch}_enable")"
+  id_old_pwm="$(cat "$dir/pwm$ch")"
+  [[ "$id_old_enable" =~ ^[0-9]+$ && "$id_old_pwm" =~ ^[0-9]+$ ]] ||
+    die "pwm$ch の今の値が読めません（enable=$id_old_enable pwm=$id_old_pwm）。何も変えていません"
+  # 何があっても元へ戻す。INT・TERM・HUP では明示に exit して EXIT の trap を走らせる
+  # （bash は trap のない INT を、前面の子が INT で死ななければ無視して続けることがある）。
+  # SIGPIPE は無視して、出力先が閉じたら書き込みの失敗（set -e）で EXIT の trap へ行く
+  trap restore_identify EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
+  trap '' PIPE
+  if "$identify_stop"; then
+    target=0
+    echo "pwm$ch を $seconds 秒だけ止めます（pwm=0。元: enable=$id_old_enable pwm=$id_old_pwm）。どのファンが止まったかと、どの fan の RPM が下がったかを見る"
+    echo "  pwm=0 でも止まらないファンがある（最低回転で回り続ける PWM ファン、3pin のポンプなど）。止まらなければ、回転が下がるかを見る"
+    echo "  fanN がいつも 0 のチャネル（回転を返さないハブ越し）は、目で見て止まるかを見る"
+  else
+    target=255
+    echo "pwm$ch を $seconds 秒だけ全開にします（元: enable=$id_old_enable pwm=$id_old_pwm）。どのファンの音が変わったかと、どの fan の RPM が上がったかを見る"
+  fi
   echo 1 > "$dir/pwm${ch}_enable"
-  echo 255 > "$dir/pwm$ch"
-  for i in $(seq 1 10); do
+  echo "$target" > "$dir/pwm$ch"
+  for i in $(seq 1 "$seconds"); do
     sleep 1
     printf '  %2ds:' "$i"
     for f in "$dir"/fan*_input; do

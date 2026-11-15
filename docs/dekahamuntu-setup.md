@@ -571,6 +571,9 @@ scripts/install-case-fan-control-ubuntu.sh --probe --load-module
 #    （env の CASE_FAN_HWMON を使う。dekahamuntu.env は nct6799。--probe の name と違えば、先に env を直す。
 #     空なら pwm のある Super I/O の hwmon が 1 つのときそれを使う。--probe の「--identify が使う hwmon」の行で分かる）
 scripts/install-case-fan-control-ubuntu.sh --identify 2
+#    全開で分からなければ --stop で 10 秒だけ止める（pwm=0。終われば・Ctrl+C でも元に戻る）。
+#    BIOS の曲線が全点 255・BIOS が全開（enable=0）のチャネルはポンプなどと見られるので断られる（--probe の「--identify --stop が断るチャネル」の行。止めるなら --allow-pump）
+scripts/install-case-fan-control-ubuntu.sh --identify 2 --stop
 
 # 4. hosts/ubuntu/dekahamuntu.env を埋める
 #    CASE_FAN_HWMON=<--probe の name、例 nct6799>

@@ -230,6 +230,11 @@ scripts/install-case-fan-control-ubuntu.sh --probe --load-module
 #    どのファンが回ったか・どの fan の RPM が上がったかを見る（sudo。終われば元に戻る）
 #    pwm6 は いま 255、pwm7 は enable=0（全開）なので、全開にしても変わって見えないことがある
 scripts/install-case-fan-control-ubuntu.sh --identify 1
+#    全開で音が分からなければ、--stop で 10 秒だけ止めて（pwm=0）、どのファンが止まったか・どの fan の RPM が下がったかを見る。
+#    止まらないファン（最低回転で回り続ける PWM ファンなど）は回転が下がるかを、fanN がいつも 0 のチャネル（1・4・7）は目で見る。
+#    pwm6（BIOS の曲線が全点 255）と pwm7（BIOS が全開、enable=0）は、簡易水冷のポンプなどと見られるので断られる（止めると CPU が冷えなくなる。--allow-pump で止められるが要らない）。
+#    どれが断られるかは --probe の「--identify --stop が断るチャネル」の行で分かる
+scripts/install-case-fan-control-ubuntu.sh --identify 1 --stop
 
 # 3. hosts/ubuntu/chibihamuntu.env を埋める
 #    CASE_FAN_CHANNELS="<ケースファンのチャネル。CPU_FAN・CPU_OPT・AIO_PUMP は入れない>"

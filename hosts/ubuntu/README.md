@@ -60,6 +60,6 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 
 `CUDA_VISIBLE_DEVICES` を書くときは、番号を `nvidia-smi` と揃えるため `CUDA_DEVICE_ORDER=PCI_BUS_ID` も書く。
 
-`sudo` で自分を起動し直すスクリプト（configure-ubuntu-hardware、install-hwe-kernel、install-gpu-led-off、install-rapl-power-access、install-case-fan-control）では、呼び出し側の環境変数は落ちる。値はこのファイルに書く。install-case-fan-control の `--identify` は、`CASE_FAN_HWMON` が空なら pwm のある Super I/O の hwmon（1 つのときだけ）を使うので、値を書く前でも使える。
+`sudo` で自分を起動し直すスクリプト（configure-ubuntu-hardware、install-hwe-kernel、install-gpu-led-off、install-rapl-power-access、install-case-fan-control）では、呼び出し側の環境変数は落ちる。値はこのファイルに書く。install-case-fan-control の `--identify` は、`CASE_FAN_HWMON` が空なら pwm のある Super I/O の hwmon（1 つのときだけ）を使うので、値を書く前でも使える（`--identify <N> --stop` の止めるモードも同じ。BIOS の曲線が全点 255 のチャネルと、BIOS が全開にしている（`pwmN_enable` が 0）チャネルはポンプなどと見て、`--allow-pump` がなければ断る）。
 
 新しいホストを足すときは、`<ホスト名>.env`、`home/hosts/<ホスト名>.nix`、`flake.nix` の `mkLinuxHome` のエントリの3つを足す（ADR 0002）。
