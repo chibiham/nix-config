@@ -245,6 +245,10 @@ class RadiatorPrintConfigTests(unittest.TestCase):
         self.fx = Fixture()
         self.addCleanup(self.fx.close)
         add_radiator(self.fx)
+        # BIOS のモードの記録（case-fan-restore.conf）の置き場。流す機械の /etc/fan2go は読まない
+        self.etc = self.fx.base / "etc-fan2go"
+        self.etc.mkdir()
+        self.record = self.etc / "case-fan-restore.conf"
 
     def run_print(self, **env):
         full = {
@@ -254,6 +258,7 @@ class RadiatorPrintConfigTests(unittest.TestCase):
             "CASE_FAN_HWMON": "nct6799",
             "CASE_FAN_CPU_CURVE": "60:30 95:100",
             "NVIDIA_EXPECTED_GPUS": "0",
+            "CASE_FAN_TEST_CONFIG_DIR": str(self.etc),
             **RAD_OFF,
             **RAD_ON,
             **env,
@@ -295,7 +300,8 @@ class RadiatorPrintConfigTests(unittest.TestCase):
         self.assertIn("  - id: rad_fans\n    function:\n      type: maximum\n      curves:\n"
                       "        - rad_gpu_curve\n        - rad_cpu_curve\n        - rad_cpu_backup_curve\n\n", y)
         # 比べが通ったことは標準エラーへ（設定には混ぜない）
-        self.assertIn("ラジエーターの pwm2: CASE_FAN_RAD_CPU_CURVE は、BIOS の曲線（temp9。5 点）より弱い所がない（両方の点の温度 9 か所で比べた）",
+        self.assertIn("ラジエーターの pwm2: CASE_FAN_RAD_CPU_CURVE は、BIOS の曲線（temp9。5 点）より弱い所がない"
+                      "（BIOS のモード: SmartFan IV（pwm2_enable=5。いまの値）。両方の点の温度 9 か所で比べた）",
                       r.stderr)
         self.assertNotIn("BIOS の曲線（", y)
 
@@ -413,10 +419,105 @@ class RadiatorPrintConfigTests(unittest.TestCase):
                 self.assertIn("より弱い所がない", r.stderr)
 
     def test_compared_even_when_fan2go_is_driving(self):
-        # 比べるのは BIOS の曲線。いまの enable（fan2go が操っていれば 1）には依らない
+        # fan2go が操っている（enable=1）ときは、BIOS のモードを記録から取り、BIOS の曲線と比べる
         (self.fx.nct / "pwm2_enable").write_text("1\n")
+        self.record.write_text("# 記録\nnct6799 3 5\nnct6799 2 5\n")
         r = self.run_print(CASE_FAN_RAD_CPU_CURVE="20:20 45:40 65:60 70:100")
         self.assert_refused(r, "65℃ で BIOS 178、こちら 153")
+        r = self.run_print()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("より弱い所がない（BIOS のモード: SmartFan IV（pwm2_enable=5。いまは pwm2_enable=1 なので、"
+                      f"{self.record} の記録）。", r.stderr)
+
+    def test_bios_full_speed_is_refused(self):
+        # BIOS が全開（enable=0）なら、どの温度でも 255。使われていない auto_point の曲線と比べて通してはいけない
+        (self.fx.nct / "pwm2_enable").write_text("0\n")
+        for env in [{}, {"CASE_FAN_RAD_CPU_HWMON": "coretemp", "CASE_FAN_RAD_CPU_TEMP_CHANNEL": "1"}]:
+            with self.subTest(env=env):
+                r = self.run_print(**env)
+                self.assert_refused(r, "ラジエーターの pwm2: BIOS が全開にしている（pwm2_enable=0。いまの値）チャネルは、"
+                                       "ラジエーターの組に入れられない", "SmartFan")
+                self.assertNotIn("より弱い所がない", r.stderr)
+                self.assertNotIn("自分で確かめる", r.stderr)
+
+    def test_bios_full_speed_in_the_record_is_refused(self):
+        (self.fx.nct / "pwm2_enable").write_text("1\n")
+        self.record.write_text("nct6799 2 0\n")
+        r = self.run_print()
+        self.assert_refused(r, "BIOS が全開にしている（pwm2_enable=0。いまは pwm2_enable=1 なので、", "の記録）チャネルは")
+
+    def test_bios_mode_other_than_smartfan4_is_refused(self):
+        for mode in ["2", "3", "4", "7"]:
+            with self.subTest(mode=mode):
+                (self.fx.nct / "pwm2_enable").write_text(f"{mode}\n")
+                r = self.run_print()
+                self.assert_refused(r, f"BIOS の制御が SmartFan IV（5）でない（pwm2_enable={mode}。いまの値）ので、曲線を比べられない",
+                                    "弱くならないと確かめられないので止める")
+
+    def test_manual_without_record_is_refused(self):
+        # いま 1 で記録がない（記録のファイルがない・その行がない・記録も 1）。--print-config では BIOS のモードが分からない
+        (self.fx.nct / "pwm2_enable").write_text("1\n")
+        for record in [None, "nct6799 3 5\nnct6798 2 5\n", "nct6799 2 1\n"]:
+            with self.subTest(record=record):
+                if record is None:
+                    self.record.unlink(missing_ok=True)
+                else:
+                    self.record.write_text(record)
+                r = self.run_print()
+                self.assert_refused(r, "ラジエーターの pwm2: いまは手動（pwm2_enable=1）で、BIOS のモードの記録がない",
+                                    "fan2go を止めて BIOS の制御に戻す（再起動）か、記録を確かめる")
+
+    def test_fake_tree_does_not_read_the_real_record(self):
+        # にせの木で CASE_FAN_TEST_CONFIG_DIR がなければ、本物の /etc/fan2go の記録は読まず、記録なしとして扱う
+        (self.fx.nct / "pwm2_enable").write_text("1\n")
+        for value in ["", None]:
+            with self.subTest(value=value):
+                env = {k: v for k, v in os.environ.items() if k != "CASE_FAN_TEST_CONFIG_DIR"}
+                full = {**env, "UBUNTU_HOST": "no-such-host-for-tests", "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
+                        "CASE_FAN_HWMON": "nct6799", "CASE_FAN_CPU_CURVE": "60:30 95:100", **RAD_OFF, **RAD_ON}
+                if value is not None:
+                    full["CASE_FAN_TEST_CONFIG_DIR"] = value
+                r = subprocess.run([BASH, str(INSTALL), "--print-config"], env=full, capture_output=True, text=True)
+                self.assert_refused(r, "BIOS のモードの記録がない")
+
+    def test_record_override_is_refused_for_a_real_tree(self):
+        # 本物の木（/sys の下・ないパス）では、記録の場所の差し替えを受け付けない
+        for root in ["/sys/class/hwmon", str(self.fx.base / "no-such-dir")]:
+            with self.subTest(root=root):
+                r = self.run_print(CASE_FAN_HWMON_ROOT=root)
+                self.assert_refused(r, "CASE_FAN_TEST_CONFIG_DIR は、にせの hwmon の木")
+
+    def write_bios_curve(self, points):
+        for f in self.fx.nct.glob("pwm2_auto_point*"):
+            f.unlink()
+        for m, (t, v) in enumerate(points, start=1):
+            (self.fx.nct / f"pwm2_auto_point{m}_temp").write_text(f"{t * 1000}\n")
+            (self.fx.nct / f"pwm2_auto_point{m}_pwm").write_text(f"{v}\n")
+
+    def test_bios_step_is_compared_on_the_high_side(self):
+        # 62℃ に点が 2 つ（178 → 255 の段差）。63℃ では BIOS 255、こちら 194.2。段差の温度で高いほうと比べて止まる
+        self.write_bios_curve([(20, 51), (45, 102), (62, 178), (62, 255), (125, 255)])
+        r = self.run_print()
+        self.assert_refused(r, "より弱い所があります: 62℃ で BIOS 255、こちら 179（PWM 0..255）")
+
+    def test_bios_step_at_the_first_point_is_compared_on_the_high_side(self):
+        # 最初の温度に点が 2 つ: 最初の点より下も、高いほう（102）と比べる
+        self.write_bios_curve([(20, 51), (20, 102), (45, 102), (65, 178), (70, 255)])
+        r = self.run_print()
+        self.assert_refused(r, "17℃ で BIOS 102、こちら 51")
+
+    def test_stronger_than_bios_step_passes(self):
+        self.write_bios_curve([(20, 51), (45, 102), (62, 178), (62, 255), (125, 255)])
+        r = self.run_print(CASE_FAN_RAD_CPU_CURVE="17:20 42:40 60:100")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("BIOS の曲線（temp9。5 点）より弱い所がない", r.stderr)
+        self.assertIn("7 か所で比べた", r.stderr)
+
+    def test_duplicate_bios_point_with_the_same_value_is_harmless(self):
+        self.write_bios_curve([(20, 51), (45, 102), (65, 178), (70, 255), (125, 255), (125, 255)])
+        r = self.run_print()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("BIOS の曲線（temp9。6 点）より弱い所がない", r.stderr)
 
     def assert_warned(self, r, message):
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -594,10 +695,10 @@ class IdentifyTests(unittest.TestCase):
         return ((self.fx.nct / f"pwm{ch}_enable").read_text().strip(),
                 (self.fx.nct / f"pwm{ch}").read_text().strip())
 
-    def start_and_wait_first_tick(self, *args):
-        """長く動かし、最初の「1s:」の行が出たところで返す（そのとき pwm は変えたまま）"""
+    def start_and_wait_first_tick(self, *args, seconds="60"):
+        """長く動かし（既定 60 秒）、最初の「1s:」の行が出たところで返す（そのとき pwm は変えたまま）"""
         p = subprocess.Popen([BASH, str(INSTALL), "--identify", *args],
-                             env=self.env(CASE_FAN_TEST_IDENTIFY_SECONDS="60"),
+                             env=self.env(CASE_FAN_TEST_IDENTIFY_SECONDS=seconds),
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.addCleanup(lambda: p.poll() is None and p.kill())
         assert p.stdout is not None and p.stderr is not None
@@ -684,6 +785,49 @@ class IdentifyTests(unittest.TestCase):
         r = self.run_identify("2", "--stop")
         self.assertNotEqual(r.returncode, 0)
         self.assertEqual(self.state(2), ("5", "90"))
+
+    def test_failed_restore_is_reported(self):
+        # 止めている・全開にしている途中で pwm か enable のファイルを書けなくする。戻しが失敗したら、
+        # 「戻しました」を出さず、何が戻っていないかと手で戻すコマンドを出し、0 でない終了コードで終わる
+        for before in [("1", "90"), ("5", "90")]:
+            for args in [["2", "--stop"], ["2"]]:
+                for broken in ["pwm2", "pwm2_enable"]:
+                    with self.subTest(before=before, args=args, broken=broken):
+                        (self.fx.nct / "pwm2").chmod(0o644)
+                        (self.fx.nct / "pwm2_enable").chmod(0o644)
+                        (self.fx.nct / "pwm2_enable").write_text(before[0] + "\n")
+                        (self.fx.nct / "pwm2").write_text(before[1] + "\n")
+                        p, _ = self.start_and_wait_first_tick(*args, seconds="2")
+                        (self.fx.nct / broken).chmod(0o444)
+                        out, err = p.communicate(timeout=10)
+                        self.assertEqual(p.returncode, 1, out + err)
+                        self.assertNotIn("戻しました", out)
+                        self.assertIn(f"pwm2 を元へ戻せませんでした（戻したい値: enable={before[0]} pwm={before[1]}。いま: enable=", err)
+                        self.assertIn(f"{broken} への書き込みが失敗", err)
+                        self.assertIn(f"sudo sh -c 'echo {before[1]} > {self.fx.nct}/pwm2; "
+                                      f"echo {before[0]} > {self.fx.nct}/pwm2_enable'", err)
+                        self.assertIn("再起動でも BIOS の制御に戻る", err)
+        (self.fx.nct / "pwm2").chmod(0o644)
+        (self.fx.nct / "pwm2_enable").chmod(0o644)
+
+    def test_failed_restore_keeps_the_signal_exit_code(self):
+        (self.fx.nct / "pwm2_enable").write_text("1\n")
+        p, _ = self.start_and_wait_first_tick("2", "--stop")
+        (self.fx.nct / "pwm2").chmod(0o444)
+        p.send_signal(signal.SIGINT)
+        out, err = p.communicate(timeout=10)
+        (self.fx.nct / "pwm2").chmod(0o644)
+        self.assertEqual(p.returncode, 130, out + err)
+        self.assertNotIn("戻しました", out)
+        self.assertIn("pwm2 を元へ戻せませんでした（戻したい値: enable=1 pwm=90。いま: enable=1 pwm=0。", err)
+
+    def test_manual_channel_restores_both_values(self):
+        # 元が手動（enable=1 / pwm=90）でも、書き戻しが通れば「戻しました」で 0
+        (self.fx.nct / "pwm2_enable").write_text("1\n")
+        r = self.run_identify("2", "--stop")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("pwm2 を元（enable=1 pwm=90）へ戻しました", r.stdout)
+        self.assertEqual(self.state(2), ("1", "90"))
 
     def test_pump_is_refused_without_allow(self):
         r = self.run_identify("3", "--stop")
@@ -886,6 +1030,25 @@ class ProbeTests(unittest.TestCase):
         self.assertIn("ラジエーターの pwm2: BIOS の温度の源は temp9", out)
         out = self.probe(**{**env, "CASE_FAN_RAD_CPU_CURVE": ""})
         self.assertIn("CASE_FAN_RAD_CPU_CURVE が空か読めない", out)
+
+    def test_radiator_bios_mode_lines(self):
+        # 見立ての行も、入れるときと同じく BIOS のモードを見る（にせの木なので記録は CASE_FAN_TEST_CONFIG_DIR から）
+        add_radiator(self.fx)
+        etc = self.fx.base / "etc-fan2go"
+        etc.mkdir()
+        env = {**RAD_ON, "CASE_FAN_HWMON": "nct6799", "CASE_FAN_TEST_CONFIG_DIR": str(etc)}
+        out = self.probe(**env)
+        self.assertIn("より弱い所がない（BIOS のモード: SmartFan IV（pwm2_enable=5。いまの値）。", out)
+        (self.fx.nct / "pwm2_enable").write_text("0\n")
+        out = self.probe(**env)
+        self.assertIn("ラジエーターの pwm2: BIOS が全開にしている（pwm2_enable=0。いまの値）チャネルは、ラジエーターの組に入れられない", out)
+        self.assertIn("入れるスクリプトは止まる", out)
+        (self.fx.nct / "pwm2_enable").write_text("1\n")
+        out = self.probe(**env)
+        self.assertIn("ラジエーターの pwm2: いまは手動（pwm2_enable=1）で、BIOS のモードの記録がない", out)
+        (etc / "case-fan-restore.conf").write_text("nct6799 2 5\n")
+        out = self.probe(**env)
+        self.assertIn("より弱い所がない（BIOS のモード: SmartFan IV（pwm2_enable=5。いまは pwm2_enable=1 なので、", out)
 
 
 # にせの fan2go: viper と同じく、-c のパスの拡張子が .yaml / .yml でなければ読めずに落ちる
@@ -1116,8 +1279,18 @@ class RestoreConfTests(unittest.TestCase):
         (self.fx.nct / "pwm2_enable").write_text("1\n")
         r = self.run_write()
         self.assertNotEqual(r.returncode, 0)
-        self.assertIn("pwm2 が手動（enable=1）のまま", r.stderr)
+        # 記録を書く前に、BIOS の曲線との比べ（BIOS のモードが分からない）で止まる
+        self.assertIn("いまは手動（pwm2_enable=1）で、BIOS のモードの記録がない", r.stderr)
         self.assertEqual(self.conf.read_text(), "# old\nnct6799 3 2\n")
+
+    def test_manual_case_fan_channel_without_record_is_refused(self):
+        # ケースファンの組のチャネルは、今までどおり記録を書くところで止まる
+        self.conf.write_text("# old\nnct6799 2 5\n")
+        (self.fx.nct / "pwm3_enable").write_text("1\n")
+        r = self.run_write()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("pwm3 が手動（enable=1）のまま", r.stderr)
+        self.assertEqual(self.conf.read_text(), "# old\nnct6799 2 5\n")
 
 
 class RestoreTests(unittest.TestCase):

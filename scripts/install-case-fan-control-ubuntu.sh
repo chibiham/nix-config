@@ -14,6 +14,8 @@
 # （case-fan-restore-bios）が BIOS の制御へ戻す。GPU の温度が読めないときは全開側に倒す（case-fan-gpu-temp）。
 # CASE_FAN_RAD_CHANNELS があれば、CPU の簡易水冷のラジエーターのファンを別の曲線（max(GPU, CPU[, CPU の保険])）で回す。
 # その CPU の曲線は BIOS の曲線より弱くしない（BIOS と同じ温度の源なら、sysfs の BIOS の曲線と比べて、弱い所があれば止まる）。
+# BIOS のモード（戻し先の pwmN_enable。いま 1 なら case-fan-restore.conf の記録）が全開（0）・SmartFan IV（5）でない・分からないチャネルも止まる。
+# --identify は、元へ戻せなかったら（pwm・enable の書き戻しの失敗、読み戻しの食い違い）手で戻すコマンドを出し、0 でない終了コードで終わる。
 # OS の再起動はしない。acpi_enforce_resources=lax（GRUB）は CASE_FAN_ACPI_LAX=1 のときだけ入れる。
 set -euo pipefail
 
@@ -30,6 +32,8 @@ CONFIG_FILE=$CONFIG_DIR/fan2go.yaml
 # 検査してから置き換えるための一時の設定。fan2go（viper）は拡張子で形式を決めるので .yaml で終える
 CONFIG_NEW=$CONFIG_DIR/fan2go.new.yaml
 RESTORE_CONF=$CONFIG_DIR/case-fan-restore.conf
+# ラジエーターの組の比べで、BIOS のモード（pwmN_enable）を引く記録。下の試験の入口でだけ差し替わる
+BIOS_MODE_RECORD=$RESTORE_CONF
 UNIT_FILE=/etc/systemd/system/fan2go.service
 MODULES_LOAD_FILE=/etc/modules-load.d/case-fan-control.conf
 GRUB_DROPIN=/etc/default/grub.d/60-case-fan-acpi-lax.cfg
@@ -102,6 +106,15 @@ if [[ -n "${CASE_FAN_HWMON_ROOT:-}" ]]; then
     fake_hwmon_root=true
   fi
   unset fake_real
+fi
+# 試験だけ: にせの木のときは、BIOS のモードの記録に本物の /etc/fan2go を読まない（CASE_FAN_TEST_CONFIG_DIR があればその中、なければ記録なし）。
+# 本物の木では差し替えを受け付けない（--test-write-* は今までどおり書く先だけを差し替え、記録は本物を読む）
+if "$fake_hwmon_root"; then
+  BIOS_MODE_RECORD=""
+  [[ -z "${CASE_FAN_TEST_CONFIG_DIR:-}" ]] || BIOS_MODE_RECORD=$CASE_FAN_TEST_CONFIG_DIR/case-fan-restore.conf
+elif [[ -n "${CASE_FAN_TEST_CONFIG_DIR:-}" && "$mode" != test-write-* ]]; then
+  echo "CASE_FAN_TEST_CONFIG_DIR は、にせの hwmon の木（CASE_FAN_HWMON_ROOT が /sys の外）の試験のときだけ使えます" >&2
+  exit 1
 fi
 
 needs_root=false
@@ -291,15 +304,67 @@ check_temp_source() {
   [[ -e "$dir/temp${ch}_input" ]] || die "$name に temp${ch}_input がありません（${label}_TEMP_CHANNEL）"
 }
 
+# hwmon の dir $1 の pwm$2 の「BIOS のモード」（fan2go が止まったときに戻る pwmN_enable）を決める。
+# いまの値が 1 以外ならそれ。1（fan2go が操っている・手動のまま）なら、記録（BIOS_MODE_RECORD。<name> <チャネル> <enable> の行。
+# 同じチャネルが何行もあれば最後の行。case-fan-restore-bios は上から順に書くので最後が効く）の値。記録がない・1 なら空（分からない）。
+# bios_mode に値（分からなければ空）、bios_mode_from に出所の文を入れる
+rad_bios_mode() {
+  local dir="$1" ch="$2" now rec=""
+  bios_mode="" bios_mode_from=""
+  now="$(cat "$dir/pwm${ch}_enable" 2>/dev/null)" || now=""
+  if [[ ! "$now" =~ ^[0-9]+$ ]]; then
+    bios_mode_from="pwm${ch}_enable が読めない（${now:-空}）"
+    return 0
+  fi
+  if [[ "$now" != 1 ]]; then
+    bios_mode=$now bios_mode_from="いまの値"
+    return 0
+  fi
+  if [[ -n "$BIOS_MODE_RECORD" ]]; then
+    rec="$(awk -v n="$CASE_FAN_HWMON" -v c="$ch" '$1 == n && $2 == c { v = $3 } END { print v }' "$BIOS_MODE_RECORD" 2>/dev/null || true)"
+  fi
+  if [[ "$rec" =~ ^[0-9]+$ && "$rec" != 1 ]]; then
+    bios_mode=$rec bios_mode_from="いまは pwm${ch}_enable=1 なので、$BIOS_MODE_RECORD の記録"
+  fi
+}
+
 # BIOS の曲線と、こちらの CPU の曲線（"温度 PWM" の行。$3 以降）を比べる。hwmon の dir $1 の pwm$2 について。
-# BIOS の曲線は pwmN_auto_pointM_temp（ミリ度）・_pwm（あるものを全部）。どちらの曲線も、点の間は直線、
-# 最初の点より下は最初の値、最後の点より上は最後の値。2 本の折れ線の差は、両方の点の温度のどこかで最小になるので、
-# 両方の点の温度の全部で比べれば足りる。cmp_msg に結果の文を入れる。
-# 返り値: 0 = どこでも BIOS 以上、1 = 弱い所がある、2 = 比べられない（源が違う・曲線のファイルがない）、3 = BIOS の曲線が読めない
+# まず BIOS のモード（rad_bios_mode）を見る: 5（SmartFan IV）だけ曲線を比べる。0（全開）・ほかの値・分からないときは止まる
+# （全開はどの温度でも 255 なので、fan2go で操れば必ず弱くなる。ほかのモードは auto_point の曲線を使わず、比べるものがない）。
+# BIOS の曲線は pwmN_auto_pointM_temp（ミリ度）・_pwm（あるものを全部）。点の間は直線、最初の点より下は最初の値、
+# 最後の点より上は最後の値。BIOS の曲線は同じ温度に点が複数あってよい（段差）: その温度ちょうどでは、その温度の点の
+# PWM の最大（段差の左右の高いほう。端の点でも同じ）。点の間は、すぐ左の点（同じ温度が複数あれば最後）とすぐ右の点
+# （同じ温度が複数あれば最初）の直線。こちらの曲線は温度が増え続ける（curve_points）ので段差はない。
+# 両方の点の温度で区切った区間の中では、2 本とも直線なので、差の最小は区間の端（の極限）で出る。段差の温度での
+# BIOS の左右の極限はどちらもその温度の点の最大以下で、こちらの曲線は連続なので、点の温度の全部で最大と比べれば足りる。
+# cmp_msg に結果の文を入れる。
+# 返り値: 0 = どこでも BIOS 以上、1 = 弱い所がある、2 = 比べられない（源が違う・曲線のファイルがない）、3 = BIOS の曲線が読めない、
+# 4 = BIOS のモードのせいで入れられない（全開・SmartFan IV でない・分からない）
 rad_bios_compare() {
-  local dir="$1" ch="$2" sel f m t p bios=() n=0
+  local dir="$1" ch="$2" sel f m t p bios=() n=0 mode_text
   shift 2
   cmp_msg=""
+  # BIOS のモードは、温度の源の比べより先に見る（源が違っても、全開のチャネルは入れない）
+  rad_bios_mode "$dir" "$ch"
+  case "$bios_mode" in
+    5) mode_text="SmartFan IV（pwm${ch}_enable=5。$bios_mode_from）" ;;
+    0)
+      cmp_msg="BIOS が全開にしている（pwm${ch}_enable=0。$bios_mode_from）チャネルは、ラジエーターの組に入れられない（fan2go で操ると必ず BIOS より弱くなる）。BIOS の設定を自動（SmartFan）に変えるか、組から外す"
+      return 4
+      ;;
+    "")
+      if [[ -n "$bios_mode_from" ]]; then
+        cmp_msg="$bios_mode_from ので、BIOS のモードが分からない。弱くならないと確かめられないので止める"
+      else
+        cmp_msg="いまは手動（pwm${ch}_enable=1）で、BIOS のモードの記録がない（${BIOS_MODE_RECORD:-記録の場所なし}）。弱くならないと確かめられないので止める。fan2go を止めて BIOS の制御に戻す（再起動）か、記録を確かめる"
+      fi
+      return 4
+      ;;
+    *)
+      cmp_msg="BIOS の制御が SmartFan IV（5）でない（pwm${ch}_enable=$bios_mode。$bios_mode_from）ので、曲線を比べられない（2 = Thermal Cruise・3 = Fan Speed Cruise・4 = SmartFan III は auto_point の曲線を使わない）。弱くならないと確かめられないので止める"
+      return 4
+      ;;
+  esac
   if [[ "$CASE_FAN_RAD_CPU_HWMON" != "$CASE_FAN_HWMON" ]]; then
     cmp_msg="CPU の温度の源（$CASE_FAN_RAD_CPU_HWMON の temp$CASE_FAN_RAD_CPU_TEMP_CHANNEL）が BIOS の側の hwmon（$CASE_FAN_HWMON）と違うので、BIOS の曲線とは比べられません"
     return 2
@@ -333,11 +398,28 @@ rad_bios_compare() {
   local result rc=0
   # 点の番号の順に並べ（glob は文字の順なので 10 が 2 より前に来る）、温度はミリ度のまま、こちらの温度は ×1000 で比べる
   result="$(printf '%s\n' "${bios[@]}" | sort -n -k1,1 | awk -v ours="$(printf '%s;' "$@")" '
+    # こちらの曲線（温度が増え続ける）
     function ev(k, T, P, x,   i) {
       if (x <= T[1]) return P[1]
       for (i = 2; i <= k; i++)
-        if (x <= T[i]) return (T[i] == T[i-1]) ? P[i] : P[i-1] + (P[i] - P[i-1]) * (x - T[i-1]) / (T[i] - T[i-1])
+        if (x <= T[i]) return P[i-1] + (P[i] - P[i-1]) * (x - T[i-1]) / (T[i] - T[i-1])
       return P[k]
+    }
+    # 温度 y の点の PWM の最大
+    function top(k, T, P, y,   i, v) {
+      v = -1
+      for (i = 1; i <= k; i++) if (T[i] == y && P[i] > v) v = P[i]
+      return v
+    }
+    # BIOS の曲線（同じ温度の点が複数あってよい。上の説明のとおり安全側に）
+    function evb(k, T, P, x,   i) {
+      if (x <= T[1]) return top(k, T, P, T[1])
+      if (x >= T[k]) return top(k, T, P, T[k])
+      for (i = 1; i <= k; i++) if (T[i] == x) return top(k, T, P, x)
+      # T[i] < x < T[i+1] になる i（i は温度 T[i] の点の最後、i+1 は温度 T[i+1] の点の最初）
+      for (i = 1; i < k; i++)
+        if (T[i] < x && x < T[i+1]) return P[i] + (P[i+1] - P[i]) * (x - T[i]) / (T[i+1] - T[i])
+      return top(k, T, P, T[k])
     }
     function fmt(v) { v = sprintf("%.1f", v); sub(/\.0$/, "", v); return v }
     { nb++; BT[nb] = $2; BP[nb] = $3
@@ -354,14 +436,14 @@ rad_bios_compare() {
         x = X[i]
         if (x in seen) continue
         seen[x] = 1; nu++
-        b = ev(nb, BT, BP, x); o = ev(k, OT, OP, x)
+        b = evb(nb, BT, BP, x); o = ev(k, OT, OP, x)
         if (o < b - 1e-9) bad = bad (bad == "" ? "" : "、") fmt(x / 1000) "℃ で BIOS " fmt(b) "、こちら " fmt(o)
       }
       if (bad != "") { print bad; exit 1 }
       print nu
     }')" || rc=$?
   case "$rc" in
-    0) cmp_msg="CASE_FAN_RAD_CPU_CURVE は、BIOS の曲線（temp$sel。${n} 点）より弱い所がない（両方の点の温度 $result か所で比べた）" ;;
+    0) cmp_msg="CASE_FAN_RAD_CPU_CURVE は、BIOS の曲線（temp$sel。${n} 点）より弱い所がない（BIOS のモード: $mode_text。両方の点の温度 $result か所で比べた）" ;;
     1) cmp_msg="CASE_FAN_RAD_CPU_CURVE が BIOS の曲線（temp$sel）より弱い所があります: $result（PWM 0..255）" ;;
     *) cmp_msg="BIOS の曲線が読めません: ${result:-pwm${ch}_auto_point*}"; return 3 ;;
   esac
@@ -477,7 +559,8 @@ check_rad_settings() {
   fi
   rad_min_pwm=$(((CASE_FAN_RAD_MIN_DUTY * 255 + 50) / 100))
 
-  # CPU の冷却を BIOS より弱くしない: BIOS と同じ温度の源なら、BIOS の曲線と比べて弱い所があれば止まる。
+  # CPU の冷却を BIOS より弱くしない: BIOS のモードが全開・SmartFan IV でない・分からないなら止まる。SmartFan IV で
+  # BIOS と同じ温度の源なら、BIOS の曲線と比べて弱い所があれば止まる。
   # 比べられないとき（源が違う・曲線のファイルがない）は注意だけ（標準エラー。--print-config の出力に混ぜない）
   local rc
   for pair in "${rad_pairs[@]}"; do
@@ -487,6 +570,7 @@ check_rad_settings() {
     case "$rc" in
       0) echo "ラジエーターの pwm$pwm: $cmp_msg" >&2 ;;
       2) warn "ラジエーターの pwm$pwm: $cmp_msg。CPU の曲線が BIOS より弱くないかは、自分で確かめる" >&2 ;;
+      4) die "ラジエーターの pwm$pwm: $cmp_msg（CPU の冷却を BIOS より弱くしないため）" ;;
       *) die "ラジエーターの pwm$pwm: $cmp_msg。CPU の冷却を BIOS より弱くしないため、止めます（CASE_FAN_RAD_CPU_CURVE を BIOS の曲線以上にする）" ;;
     esac
   done
@@ -844,7 +928,7 @@ probe() {
   [[ -z "$CASE_FAN_RAD_CHANNELS" ]] || probe_rad_bios
 }
 
-# --probe の見立て: ラジエーターの組の CPU の曲線と BIOS の曲線の比べ（入れるときの守りと同じ。読むだけ）
+# --probe の見立て: ラジエーターの組の BIOS のモードと、CPU の曲線と BIOS の曲線の比べ（入れるときの守りと同じ。読むだけ）
 probe_rad_bios() {
   local dir out pts=() pwm rc
   if ! dir="$(find_hwmon "${CASE_FAN_HWMON:-?}" 2>/dev/null)"; then
@@ -863,23 +947,39 @@ probe_rad_bios() {
     case "$rc" in
       0) ok "ラジエーターの pwm$pwm: $cmp_msg" ;;
       2) warn "ラジエーターの pwm$pwm: $cmp_msg" ;;
-      *) ng "ラジエーターの pwm$pwm: $cmp_msg。入れるスクリプトは止まる" ;;
+      # 4（BIOS のモード）も含め、入れるときに止まるもの
+    *) ng "ラジエーターの pwm$pwm: $cmp_msg。入れるスクリプトは止まる" ;;
     esac
   done <<<"$out"
 }
 
 # --- 変更する ---------------------------------------------------------------
 
-# --identify が変えた pwm を元へ戻す（EXIT の trap から呼ぶ）。途中で失敗しても、pwm と enable の両方を書きに行く
+# --identify が変えた pwm を元へ戻す（EXIT の trap から呼ぶ）。途中で失敗しても、pwm と enable の両方を書きに行く。
+# 戻ったか: 書き込みが 2 つとも通り、enable を読み戻して元と同じ。元が手動（enable=1）なら pwm も読み戻して元と同じ
+# （BIOS の自動なら pwm は BIOS が決めるので比べない）。戻らなければ、何が戻っていないかと手で戻すコマンドを
+# 標準エラーに出し、0 でない終了コードで終わる（もとの終了コードが 0 でなければ、INT の 130 などそれを保つ）
 restore_identify() {
+  local rc=$? pwm_f="$id_dir/pwm$id_ch" enable_f="$id_dir/pwm${id_ch}_enable" now_pwm now_enable why=()
   set +e
-  printf '%s\n' "$id_old_pwm" > "$id_dir/pwm$id_ch" 2>/dev/null
-  printf '%s\n' "$id_old_enable" > "$id_dir/pwm${id_ch}_enable" 2>/dev/null
-  if [[ "$(cat "$id_dir/pwm${id_ch}_enable" 2>/dev/null)" == "$id_old_enable" ]]; then
-    echo "pwm$id_ch を元（enable=$id_old_enable pwm=$id_old_pwm）へ戻しました" 2>/dev/null
-  else
-    echo "pwm$id_ch の enable を $id_old_enable に戻せませんでした。sudo sh -c 'echo $id_old_enable > $id_dir/pwm${id_ch}_enable' か、再起動で BIOS の制御に戻す" >&2 2>/dev/null
+  # 2>/dev/null を先に書く（開けないときのシェルのメッセージも捨て、下で自分の文を出す）
+  printf '%s\n' "$id_old_pwm" 2>/dev/null >"$pwm_f" || why+=("pwm$id_ch への書き込みが失敗")
+  printf '%s\n' "$id_old_enable" 2>/dev/null >"$enable_f" || why+=("pwm${id_ch}_enable への書き込みが失敗")
+  now_pwm="$(cat "$pwm_f" 2>/dev/null)" || now_pwm="?"
+  now_enable="$(cat "$enable_f" 2>/dev/null)" || now_enable="?"
+  [[ "$now_enable" == "$id_old_enable" ]] || why+=("enable を読み戻すと ${now_enable:-空}")
+  if [[ "$id_old_enable" == 1 && "$now_pwm" != "$id_old_pwm" ]]; then
+    why+=("元が手動（enable=1）なのに pwm を読み戻すと ${now_pwm:-空}")
   fi
+  if [[ ${#why[@]} -eq 0 ]]; then
+    echo "pwm$id_ch を元（enable=$id_old_enable pwm=$id_old_pwm）へ戻しました" 2>/dev/null
+    exit "$rc"
+  fi
+  local i reasons=${why[0]}
+  for ((i = 1; i < ${#why[@]}; i++)); do reasons+="、${why[i]}"; done
+  echo "pwm$id_ch を元へ戻せませんでした（戻したい値: enable=$id_old_enable pwm=$id_old_pwm。いま: enable=$now_enable pwm=$now_pwm。$reasons）。"$'\n'"  手で戻す: sudo sh -c 'echo $id_old_pwm > $pwm_f; echo $id_old_enable > $enable_f'（再起動でも BIOS の制御に戻る）" >&2 2>/dev/null
+  ((rc != 0)) || rc=1
+  exit "$rc"
 }
 
 identify() {
