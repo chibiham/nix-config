@@ -22,7 +22,8 @@ let
       split       GPU 0 = ComfyUI、GPU 1 = Qwen（既定。再起動後もこの形）。
                   ComfyUIが載せているモデルを降ろさせる（RAMの重みをQwenに空ける）
       image-dual  splitの形にしたうえでQwenのモデルを降ろし、GPU 1 をH3 Imageのテキストエンコーダーの計算
-                  （Select CLIP Device = gpu:1）に空ける（Routerは止めない。次にQwenへ問うと読み込み直す）
+                  （Select CLIP Device = gpu:1）に空ける（Routerは止めない。次にQwenへ問うと読み込み直す）。
+                  降りたのを確かめてから戻る（確かめられなければ失敗で終わる）
       llm-dual    ComfyUIとQwen（1枚）を止め、2枚を束ねたQwenを起動
       applio      GPU 0 でApplioを起動（ComfyUIは止まる。GPU 1 のQwenはそのまま）
       stop        すべて停止（LoRA学習は止めない）
@@ -32,7 +33,8 @@ let
     }
 
     # Router（qwen38・qwen38-dual のどちらか、8080）のロード済みモデルを降ろす（loaded・sleeping・loading）。
-    # 束ねたQwenを止める前（VRAMを早く空ける）と image-dual で使う
+    # split・llm-dual で、束ねたQwenを止める前に使う（VRAMを早く空ける）。降りるのを待たず、失敗しても続ける
+    # （このあと unit を止めるので、待たなくてもVRAMは空く）。image-dual は下の unload_models_wait を使う
     unload_models() {
       local models model
       models=$(${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:8080/models 2>/dev/null \
@@ -42,6 +44,62 @@ let
         ${pkgs.curl}/bin/curl -fsS --max-time 30 -H 'Content-Type: application/json' \
           -d "{\"model\":\"$model\"}" http://127.0.0.1:8080/models/unload >/dev/null || true
       done
+    }
+
+    # Router の /models のうち status が unloaded でないものを「id status」で1行ずつ出す。
+    # Router が応答しない・JSONが読めないときは 1
+    router_models() {
+      local body
+      body=$(${pkgs.curl}/bin/curl -fsS --max-time 5 http://127.0.0.1:8080/models 2>/dev/null) || return 1
+      ${pkgs.jq}/bin/jq -r '.data[] | select(.status.value != "unloaded") | "\(.id) \(.status.value)"' <<<"$body" 2>/dev/null
+    }
+
+    # image-dual 用: Qwen のモデルを降ろし、全部の status が unloaded になるまで待つ。
+    # llama.cpp（0.6.0）の Router の /models/unload は停止を頼むだけで、子プロセスの終了・VRAMの解放を待たずに返る。
+    # 待たずに戻ると、直後の H3 Image（gpu:1）が GPU 1 に残った Qwen とぶつかって OutOfMemoryError になる。
+    # unload_models と違い、確かめられなければ失敗（1）で終わる。
+    # 上限（秒）: AI_MODE_UNLOAD_TIMEOUT（降りるのを待つ、既定 60）、AI_MODE_ROUTER_TIMEOUT（Router が応答するのを待つ、既定 20。
+    # qwen38 を起動したばかりのとき。起動直後の Router はモデルを載せていない）
+    unload_models_wait() {
+      local timeout="''${AI_MODE_UNLOAD_TIMEOUT:-60}" router_timeout="''${AI_MODE_ROUTER_TIMEOUT:-20}"
+      local remaining model status waited=0
+      until remaining=$(router_models); do
+        if ((waited >= router_timeout)); then
+          echo "Qwen の Router（127.0.0.1:8080）に聞けないので、GPU 1 が空いたかを確かめられません（$router_timeout 秒待った）" >&2
+          return 1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+      done
+      if [[ -z "$remaining" ]]; then
+        echo "Qwenのモデルは載っていません" >&2
+        return 0
+      fi
+      while read -r model status; do
+        echo "Qwenのモデルをアンロード: $model（$status）" >&2
+        if ! ${pkgs.curl}/bin/curl -fsS --max-time 30 -H 'Content-Type: application/json' \
+          -d "{\"model\":\"$model\"}" http://127.0.0.1:8080/models/unload >/dev/null; then
+          echo "Qwenのモデル $model のアンロードを頼めませんでした" >&2
+          return 1
+        fi
+      done <<<"$remaining"
+      waited=0
+      while ((waited < timeout)); do
+        sleep 1
+        waited=$((waited + 1))
+        if remaining=$(router_models); then
+          if [[ -z "$remaining" ]]; then
+            echo "GPU 1 が空きました（Qwen のモデルが降りるまで $waited 秒）" >&2
+            return 0
+          fi
+        else
+          remaining="（Router に聞けません）"
+        fi
+      done
+      echo "Qwen のモデルが $timeout 秒たっても降りていません:" >&2
+      echo "$remaining" >&2
+      echo "H3 Image を投げる前にもう一度 ai-mode image-dual を流すか、ai-mode status で確かめてください" >&2
+      return 1
     }
 
     # ComfyUIが載せているモデルを降ろさせる。実行中のものが終わってから降ろす（キューは消えない）。
@@ -81,7 +139,7 @@ let
           systemctl --user stop qwen38-dual.service
         fi
         systemctl --user start comfyui.service qwen38.service
-        unload_models
+        unload_models_wait || exit 1
         ;;
       llm-dual)
         guard_training

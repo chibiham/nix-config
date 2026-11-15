@@ -465,7 +465,7 @@ GGUF の大きい絵の VRAM・RAM（写し 2 枚、向きは逆。MiB）:
 
 - B: テキストエンコーダーの計算を GPU 1、本体を GPU 0。ComfyUI に 2 枚を見せ（`COMFY_CUDA_DEVICES=0,1`）、テキストエンコーダーは本体のノード `Select CLIP Device`（`gpu:1`）で GPU 1 に回す。既定のデバイスは GPU 0 のままで、今までのワークフローは変わらない（本番で確かめた）
 - ComfyUI を更新するのは dekahamuntu だけ（v0.45.2、`COMFY_REF`。2026-11-14 22:27 UTC に上げた）。chibihamuntu は `e3bee7ff` のままで、2 台の版が分かれた
-- Qwen の Router は止めない。使い終わったモデルは 600 秒で自動で降りる（`QWEN_SLEEP_IDLE_SECONDS`）。Qwen が載っているときに H3 Image を使うなら、`ai-mode image-dual`（switch の前は `/models/unload` の curl）で降ろすか、A の形（w4a8）を使う。載ったまま B を投げると、黙って遅くなるのではなく OutOfMemoryError（device 1）で止まる（1 枚目は通ることがある）。H3 Image のあとに Qwen を使うときは、何もしなくても読み込める
+- Qwen の Router は止めない。使い終わったモデルは 600 秒で自動で降りる（`QWEN_SLEEP_IDLE_SECONDS`）。Qwen が載っているときに H3 Image を使うなら、`ai-mode image-dual`（降りたのを `/models` で確かめてから戻る。switch の前は `/models/unload` の curl のあと、`/models` の status が `unloaded` になるのを見る）で降ろすか、A の形（w4a8）を使う。載ったまま B を投げると、黙って遅くなるのではなく OutOfMemoryError（device 1）で止まる（1 枚目は通ることがある）。H3 Image のあとに Qwen を使うときは、何もしなくても読み込める
 
 既定にする本体の版（エージェントの決め、2026-11-14。本人が spec の絵を見て変えるかもしれない）:
 

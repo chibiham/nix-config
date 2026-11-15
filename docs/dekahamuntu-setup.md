@@ -353,14 +353,16 @@ COMFY_CUDA_DEVICES=0 scripts/install-comfyui-ubuntu.sh --unit-only
 | `ai-mode` | 動く unit | すること |
 |---|---|---|
 | `split`（既定） | comfyui・qwen38 | ComfyUI に `/free`（モデルを降ろさせる。実行中のものが終わってから）。B のテキストエンコーダーの重みは RAM にあるので、これは主に RAM を Qwen（Flash-Next は RAM に約 52GB）に空ける意味になる |
-| `image-dual` | comfyui・qwen38 | Qwen のモデルを `/models/unload` で降ろす（Router は止めない。次に問うと読み込み直す）。GPU 1 を H3 Image のエンコードに空ける |
+| `image-dual` | comfyui・qwen38 | Qwen のモデルを `/models/unload` で降ろす（Router は止めない。次に問うと読み込み直す）。GPU 1 を H3 Image のエンコードに空ける。Router の unload は停止を頼むだけで戻るので、`/models` の status が全部 `unloaded` になるまで待ってから戻る（上限 60 秒、`AI_MODE_UNLOAD_TIMEOUT`）。Router に聞けない・unload を頼めない・上限までに降りないときは終了コード 1（その場合は H3 Image を投げない） |
 | `llm-dual` | qwen38-dual | 2 枚を束ねた Qwen（前と同じ） |
 
 `image-dual` と `split` の `/free` は `home/hosts/dekahamuntu.nix` に入れたが、home-manager switch をしていないので、実機の `ai-mode` はまだ古い（switch は本人がやる）。それまでの手での代わり（どちらも実機で使って確かめた）:
 
 ```bash
-# Qwen のモデルを降ろす（image-dual の代わり）
+# Qwen のモデルを降ろす（image-dual の代わり）。unload は頼むだけで戻るので、
+# 下の /models の status が unloaded になるのを見てから H3 Image を投げる
 curl -fsS -H 'Content-Type: application/json' -d '{"model":"<モデル名>"}' http://127.0.0.1:8080/models/unload
+curl -fsS http://127.0.0.1:8080/models | jq -r '.data[] | "\(.id) \(.status.value)"'
 # ComfyUI のモデルを降ろす（split の /free の代わり）
 curl -fsS -X POST -H 'Content-Type: application/json' -d '{"unload_models":true,"free_memory":true}' http://127.0.0.1:8188/free
 ```
