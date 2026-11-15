@@ -86,6 +86,7 @@ goal:
 - 2026-11-15 09:17 [agent] 完了条件 3 を済みにした: 差し戻し(2/3)で抜けを埋めた: GGUF Q5_K_M・Q4_K_M を 2880²・4096² でも A/B で計った(写しを CUDA_VISIBLE_DEVICES=1,0 で起動して 16 回。2026-11-14 23:51〜11-15 00:13 UTC。前後 32 回の確かめで本番のキューとループは空)。Q5: 2880² A 75.8(1 枚目)/ 69.8(替え)、B 67.4 / 65.5 秒、4096² は A・B とも 4 回とも KSampler の OutOfMemoryError(5〜8 秒)で載らない。Q4: 2880² A 67.4 / 65.9、B 66.9 / 62.4、4096² A 147.2 / 146.9、B 144.0 / 144.0 秒。VRAM・RAM・温度(最大 65℃)も記録。表は docs/ai-server-placement.md(a61ed85)、絵 12 枚と失敗の記録は spec docs/specs/5/h3-image/index.html(作り直して 58MB、画像 164 枚)。既定の判断は変わらない(公式 int8 を B、w4a8 を A 用、GGUF は使わない)
 - 2026-11-15 09:18 [agent] 再々レビュー開始。develop..agent/5 の6コミット（先頭18fccf9）・14ファイルを対象に、前回のGGUF大解像度比較の補完、前々回3修正、残る正しさと要件充足を確認する。コード・コミット・実機設定は変更しない。
 - 2026-11-15 09:22 [agent] 前回未達のGGUF比較は補完済み。docs/ai-server-placement.md:357-409にQ5/Q4の2880² A/B初回・替え、4096²のQ5 OOM 4回/Q4成功、VRAM/RAM・温度・fan2goを確認。画像specをChromiumで開き、追加12画像と比較表示を目視。実HTTPのキューガードは空/接続拒否を許可し、実行中/HTTP500/5秒タイムアウトを拒否。モデル取得の固定URL/revision/hashにも追加指摘なし。Routerアンロード完了待ちの挙動を追加確認中。
+- 2026-11-15 09:24 [agent] 追加P2を確認: home/hosts/dekahamuntu.nix:83-84 の image-dual は /models/unload のHTTP成功で終了し、モデルがunloadedになるのを待たない。固定されたllama.cpp v0.6.0のserver-models.cpp:1267-1287/2144-2159はSTOPを非同期キューへ積んで即successを返し、子の終了後にunloadedへ変わる。対応する隔離HTTP環境で、停止を2秒遅らせるとimage-dualは0.331秒・rc=0で終了し、その時点でモデルはloaded（再照会なし）。直後のH3 B生成がGPU 1解放と競合する。実GPUでのこの競合/OOM再現はしていない。変更shell6ファイルのbash -nは通過。コード・コミット・実機設定は変更していない。
 
 ## エージェントの結果(2026-11-15 08:32)
 
