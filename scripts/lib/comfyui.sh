@@ -24,12 +24,16 @@ comfy_queue_is_idle() {
     echo "何も変えずに止めます。確かめずに進めるなら --force" >&2
     return 1
   fi
+  # queue_running・queue_pending の両方が配列のときだけ数える（{}・null などを「空」と読まない。読めなければ下で止まる）
   if command -v jq >/dev/null; then
-    counts="$(jq -r '"\(.queue_running | length) \(.queue_pending | length)"' <<<"$body" 2>/dev/null)" || counts=""
+    counts="$(jq -r 'if (.queue_running | type) == "array" and (.queue_pending | type) == "array"
+      then "\(.queue_running | length) \(.queue_pending | length)" else error("not arrays") end' <<<"$body" 2>/dev/null)" || counts=""
   elif command -v python3 >/dev/null; then
     counts="$(python3 -I -c '
 import json, sys
 d = json.load(sys.stdin)
+if not (isinstance(d, dict) and isinstance(d.get("queue_running"), list) and isinstance(d.get("queue_pending"), list)):
+    sys.exit("not arrays")
 print(len(d["queue_running"]), len(d["queue_pending"]))
 ' <<<"$body" 2>/dev/null)" || counts=""
   else
