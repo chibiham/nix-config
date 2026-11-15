@@ -11,7 +11,7 @@ goal:
   - text: 試験(tests/test_case_fan_control.py)が Linux で通り、dekahamuntu の設定から出る fan2go の設定が変わっていない
     done: true
   - text: docs に、chibihamuntu のファンのつなぎ方(どのヘッダーに何がつながっているか)・入れ方・外し方が書いてある
-    done: false
+    done: true
   - text: 本人が実機に入れたあと、fan2go.service が active で、GPU に負荷をかけるとケースファンの pwm と回転数が上がり、負荷を止めると下がるのを実機で確かめてある
     done: false
 ---
@@ -69,3 +69,4 @@ sudo が要るので、本人が実機で流す。執事が結果を読んでこ
 - 2026-11-15 19:00 [agent] 完了条件 0 を済みにした: hosts/ubuntu/chibihamuntu.env(commit 551a83a)に CASE_FAN_CONTROL=1、CASE_FAN_HWMON=nct6798(実機の --probe で確かめた name)、CASE_FAN_CHANNELS=5(本人が --identify 5 と --identify 5 --stop で確かめた。fan5 が 475〜1,070 RPM で動く)、CASE_FAN_CPU_HWMON=coretemp・CASE_FAN_CPU_TEMP_CHANNEL=1(実機で temp1 = Package id 0)。pwm2(ラジエーターのファン)と pwm6(ポンプと見られる)は入れていない。条件の「CPU_OPT は入れない」は、執事の指示で「CPU のクーラーのチャネル(pwm2・pwm6)は入れない」と読み替えた(pwm5 はボードの上では CPU_OPT のヘッダーかもしれないが、つながっているのはケースファン。どのヘッダーかは未確認)。
 - 2026-11-15 19:00 [agent] 完了条件 1 を済みにした: chibihamuntu の ~/nix-config-issue6(commit 551a83a と同じ中身。sha256 を Mac の作業ツリーと突き合わせた)で scripts/install-case-fan-control-ubuntu.sh --print-config が exit 0(sudo なし、本物の hwmon)。fans は case_pwm5(platform nct6798、pwmChannel 5、rpmChannel 5)の 1 つだけ(pwmChannel の行は 1 つ)。gpu_max は /usr/local/sbin/case-fan-gpu-temp に ['0','100'] を渡し、gpu_curve の最後は 83: 255、case_fans は maximum(gpu_curve, cpu_curve)。実機で scripts/case-fan-gpu-temp.sh 0 100 は 66000、nvidia-smi を見つけられなくすると「全開側の 100℃ を出します」で 100000 を出した(→ 曲線の最後の 255 = 全開)。
 - 2026-11-15 19:00 [agent] 完了条件 2 を済みにした: commit 551a83a を git archive で chibihamuntu(Ubuntu、bash 5.2)の /tmp に写し、python3 -m unittest tests/test_case_fan_control.py → Ran 53 tests、OK(もとの 27 件に、--identify の hwmon の選び方・止めるモード・シグナルで戻ること・設定のコメントの試験を足した)。dekahamuntu の設定: 同じにせの hwmon の木(nct6799・k10temp)で UBUNTU_HOST=dekahamuntu の --print-config の sha256 が、変更前(実機の develop 46daa25)と変更後で同じ 0fd88fd6…ce1cd5。hosts/ubuntu/dekahamuntu.env は変えていない。
+- 2026-11-15 19:00 [agent] 完了条件 3 を済みにした: docs/machines.md の chibihamuntu の「ファン（2026-11-15）」に、チャネル 1〜7 ごとの回転数・pwm・BIOS の曲線・つながっているもの(2 = ラジエーターのファン、5 = ケースファン、6 = ポンプと見られる、1・4 = 何もつながっていない見込み、7 = 確かめていない。未確認は未確認と書いた)と --identify の値。docs/ubuntu-server.md の「ケースファン（GPU の温度で回す）」に、構成の表・入れ方(済んだことと、これから流すコマンド)・入れたあとの確かめ方・外し方(stop / disable / --uninstall と env を 0 に戻す)・初回の解析の見込み。差分を読んで確かめた(commit 44be500・da44c29・551a83a)。入れた日時と入れたあとの値は、本人が入れたあとに書き足す。
