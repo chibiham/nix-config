@@ -97,6 +97,7 @@ goal:
 - 2026-11-15 09:37 [agent] 再レビュー完了（develop..agent/5、先頭dbb0673）。前回のimage-dual非同期アンロード競合は修正済み。GGUF大解像度の比較も補完済み。追加P2 1件: キュー応答が {} / null の場合に空キューと誤認して再起動を許すため、両フィールドが配列である確認が必要。隔離実行で確認、判定REVIEW_NG。モデル取得・Qwen設定の担当範囲に追加指摘なし。変更shell6ファイルのbash -nとdekahamuntuのnix eval通過。コード・コミット・実機設定は変更していない。
 - 2026-11-15 09:37 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合が1件あります。前回の `image-dual` のアンロード完了待ちは修正済みです。
 - 2026-11-15 09:37 [agent] 返事待ち: TASK_DONE を受けたが、まだ develop に入れていない: 実装レビューで指摘があった。worktree /Users/chibiham/.subako/worktrees/nix-config/5 で直して commit し、TASK_DONE で返す: 修正が必要な不具合が1件あります。前回の `image-dual` のアンロード完了待ちは修正済みです。 1. **[P2] 不完全なキュー応答を「空」と誤認し、再起動を許可する** `scripts/lib/comfyui.sh:27–28` `/queue` が HTTP 200 で `{}` または `{"queue_running":null,"queue_pending":null}` を返すと、jq の `length(null) = 0` により「実行中0・待ち0」と判定します。キュー状態を確認できていないのに、更新・`--unit-only` が再起動へ進め…(自動の差し戻しが上限 3 回に達した)
+- 2026-11-15 09:43 [agent] 執事からの差し戻し(キューの確かめが {}・null を「空」と読む)を直した(agent/5 の 9bcfe34。変えたのは scripts/lib/comfyui.sh だけ)。queue_running・queue_pending の両方が配列のときだけ数え、そうでなければ「応答を読めませんでした」で止まる(jq は type を確かめ、python3 は list でなければ失敗。--force は今のまま)。確かめ: にせの curl で {}・null 2 つ・片方 null・文字列・オブジェクト・[]・null・0 の 8 通りを jq と python3 の両方で流し、update と --unit-only が git・unit・restart に触らず終了コード 1(47 件通過。直す前は 6 件で進んでしまうのを再現)、空のキューは進み、実行中あり・壊れた JSON・curl の 28・22 は止まる。前からの試験 33 件 + 30 件も通過、bash -n・shellcheck。私も手元で {}・null・[] が jq・python3 とも rc=1、空のキューが rc=0 を確かめ、実機の本物の /queue は「キューは空です」(rc=0)、--unit-only は「何もしません」。実機の計測のやり直しはしていない
 
 ## エージェントの結果(2026-11-15 08:32)
 
