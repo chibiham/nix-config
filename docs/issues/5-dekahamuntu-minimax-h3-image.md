@@ -93,6 +93,7 @@ goal:
 - 2026-11-15 09:32 [agent] 完了条件 2 を済みにした: 差し戻し(3/3)で「前に降ろす」の穴を直した(bbc1389): ai-mode image-dual は全部のモデルの status が unloaded になるまで待ち(上限 60 秒)、Router に聞けない・unload が失敗・上限を超えたときは終了コード 1。実機で確かめた: /models/unload は 0.005 秒で戻るがその時点では loaded のままで、GPU 1 が空いて unloaded になるのは約 1.3 秒後(指摘の隙間は実機にもあった)。直した ai-mode(nix から取り出した本文。差し替えは shebang と curl・jq のパスだけ)を実機の Router で流すと、UD-Q3_K_XL が載った状態(GPU 1 15,071MiB)から 1.0 秒で rc=0、戻った時点で status は全部 unloaded・GPU 1 は 304MiB。直後に H3 Image(B、w4a8)をプロンプトを変えて 2 枚投げて 2 枚とも通った(31.3 秒(読み込み込み)/ 11.2 秒)。何も載っていないときは「載っていません」で rc=0。にせの Router の試験(2 秒遅れ・降りない・応答しない・500・sleeping/loading)も通過、split・llm-dual・applio・stop・status の呼び出しは変更前と同じ。nix eval は dekahamuntu だけが develop と違う。実機の ai-mode 自体は home-manager switch(本人)まで古いまま
 - 2026-11-15 09:33 [agent] 再レビュー開始。develop..agent/5 の7コミット（先頭dbb0673）・14ファイルを対象に、image-dualのアンロード完了待ちと前回までの修正、要件充足を確認する。コード・コミット・実機設定は変更しない。
 - 2026-11-15 09:36 [agent] image-dualの修正を隔離HTTPで確認: 1.7秒遅れる非同期アンロードは2.5秒後・unloaded確認後にrc=0、sleeping/loadingも完了待ち。降りない・HTTP500・不正JSON・unload失敗はrc=1（8ケース）。実curlのキューガードも空/接続拒否は許可、実行中/500/5秒タイムアウトは拒否。変更shell6ファイルのbash -n、dekahamuntuのnix eval通過。実機は変更していない。
+- 2026-11-15 09:37 [agent] 追加P2を隔離実行で確認: scripts/lib/comfyui.sh:27-28 は HTTP200 の {} や queue_running/queue_pending が null の応答を jq の length(null)=0 により空キューと誤認する。実curlで両方ともrc=0。使い捨てHOME・systemctlスタブで install-comfyui --unit-only を流すと、/queue={}でもdaemon-reload/restartまで実行しrc=0。キュー状態を確認できない応答は拒否すべき。実機がこの応答を返した事実や実ジョブ中断は確認していない。
 
 ## エージェントの結果(2026-11-15 08:32)
 
