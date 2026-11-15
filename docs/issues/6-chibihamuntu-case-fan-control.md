@@ -1,5 +1,5 @@
 ---
-status: todo
+status: doing
 created: 2026-11-15
 updated: 2026-11-15
 goal:
