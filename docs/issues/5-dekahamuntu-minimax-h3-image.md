@@ -90,6 +90,7 @@ goal:
 - 2026-11-15 09:25 [agent] 再々レビュー完了（develop..agent/5、先頭18fccf9）。前回のGGUF大解像度比較は画像込みで補完済み、前々回3修正も維持。新規P2 1件: ai-mode image-dualが非同期アンロードの完了を待たず成功するため、直後のH3 B生成がQwenのGPU解放と競合する。unloadedを確認してから成功し、確認不能/タイムアウトは失敗させる必要がある。判定REVIEW_NG。実機の生成・停止・設定変更、コード変更、コミットはしていない。
 - 2026-11-15 09:25 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合が1件あります。前回のGGUF大解像度比較の不足と、それ以前の3指摘は解消済みです。
 - 2026-11-15 09:25 [agent] 実装レビューの差し戻し(3/3): ai-mode image-dual が /models/unload の HTTP の成功だけで戻り、Qwen の子プロセスが降りきる前に H3 Image を投げると OOM になる競合が残る、との指摘。全部のモデルの status が unloaded になるまで待ち、Router に聞けない・上限を超えたときは失敗で終わる形に直す(サブエージェントに依頼中)。直したら、取り出した ai-mode を実機の Router で流して、戻った時点で GPU 1 が空いているかを確かめる
+- 2026-11-15 09:32 [agent] 完了条件 2 を済みにした: 差し戻し(3/3)で「前に降ろす」の穴を直した(bbc1389): ai-mode image-dual は全部のモデルの status が unloaded になるまで待ち(上限 60 秒)、Router に聞けない・unload が失敗・上限を超えたときは終了コード 1。実機で確かめた: /models/unload は 0.005 秒で戻るがその時点では loaded のままで、GPU 1 が空いて unloaded になるのは約 1.3 秒後(指摘の隙間は実機にもあった)。直した ai-mode(nix から取り出した本文。差し替えは shebang と curl・jq のパスだけ)を実機の Router で流すと、UD-Q3_K_XL が載った状態(GPU 1 15,071MiB)から 1.0 秒で rc=0、戻った時点で status は全部 unloaded・GPU 1 は 304MiB。直後に H3 Image(B、w4a8)をプロンプトを変えて 2 枚投げて 2 枚とも通った(31.3 秒(読み込み込み)/ 11.2 秒)。何も載っていないときは「載っていません」で rc=0。にせの Router の試験(2 秒遅れ・降りない・応答しない・500・sleeping/loading)も通過、split・llm-dual・applio・stop・status の呼び出しは変更前と同じ。nix eval は dekahamuntu だけが develop と違う。実機の ai-mode 自体は home-manager switch(本人)まで古いまま
 
 ## エージェントの結果(2026-11-15 08:32)
 
