@@ -1,6 +1,18 @@
 ---
 status: todo
 created: 2026-11-15
+updated: 2026-11-15
+goal:
+  - text: hosts/ubuntu/chibihamuntu.env に CASE_FAN_CONTROL=1 と、実機で確かめた CASE_FAN_HWMON・CASE_FAN_CHANNELS(ケースファンのヘッダーだけ。CPU_FAN・CPU_OPT・AIO_PUMP は入れない)、CPU の温度の指定(coretemp の Package)が書いてある
+    done: false
+  - text: chibihamuntu で install-case-fan-control-ubuntu.sh --print-config が通り、出てくる設定が操るのはケースファンのチャネルだけで、GPU の温度が読めないときは全開側に倒れる形になっている
+    done: false
+  - text: 試験(tests/test_case_fan_control.py)が Linux で通り、dekahamuntu の設定から出る fan2go の設定が変わっていない
+    done: false
+  - text: docs に、chibihamuntu のファンのつなぎ方(どのヘッダーに何がつながっているか)・入れ方・外し方が書いてある
+    done: false
+  - text: 本人が実機に入れたあと、fan2go.service が active で、GPU に負荷をかけるとケースファンの pwm と回転数が上がり、負荷を止めると下がるのを実機で確かめてある
+    done: false
 ---
 # chibihamuntu のケースファンを GPU の温度に合わせて回す
 
@@ -41,3 +53,7 @@ sudo が要るので、本人が実機で流す。執事が結果を読んでこ
 - 試験(`tests/test_case_fan_control.py`)は Linux で流す(macOS の bash 3.2 では mapfile がなく落ちる。前からの挙動)。
 - dekahamuntu の設定と挙動を変えない。
 - 文書: docs/machines.md(ファンのつなぎ方)、ホストの手順の文書(chibihamuntu の節)、hosts/ubuntu/README.md(要れば)に、構成・入れ方・外し方を書く。
+
+## 作業ログ
+
+- 2026-11-15 18:11 [me] 完了条件の案を有効にした(ゴールのタスクにした)
