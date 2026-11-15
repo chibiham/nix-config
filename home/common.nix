@@ -329,6 +329,18 @@ in
     # デフォルト値は matchBlocks."*"（darwin.nix）で明示管理
     enableDefaultConfig = false;
     matchBlocks = {
+      "deka" = {
+        hostname = "dekahamuntu";
+        user = "chibiham";
+      };
+      "chibi" = {
+        hostname = "chibihamuntu";
+        user = "chibiham";
+      };
+      "mini" = {
+        hostname = "chibihammac-mini";
+        user = "chibiham";
+      };
       "github.com" = {
         hostname = "github.com";
         user = "git";
