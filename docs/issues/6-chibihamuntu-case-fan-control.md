@@ -91,6 +91,7 @@ sudo が要るので、本人が実機で流す。執事が結果を読んでこ
 - 2026-11-15 23:59 [agent] 再レビュー開始。指定範囲 develop..agent/6 の8 commit・9ファイルを確認する。前回指摘3件の修正と追加の安全性境界を読む。コード変更・コミット・sudo・実機ファン操作はしない。
 - 2026-11-16 00:01 [agent] 再レビューのLinuxスモーク: 前回3件は修正を確認。偽hwmonでBIOS全開・同温度の段差は--print-config終了1、PWM復元失敗は終了1と手動復元コマンドを表示。実機には読むだけの--print-configを実行し、case_pwm5・rad_pwm2だけ、sha256 5742d5e1…aaaa0b9で現在の/etc/fan2go/fan2go.yamlと一致。
 - 2026-11-16 00:01 [agent] 再レビュー完了(develop..agent/6、先頭1e6af78)。修正すべき正しさの不具合は見つからなかった。前回3件はLinuxの偽hwmonで修正確認、Linux試験106件OK(skip1: rootを要する本物fan2go検査)。dekahamuntuの生成設定はdevelopとバイト一致(sha256 0fd88fd6…ce1cd5)。実機への読むだけの--print-configは現在の設定と一致。コード変更・コミット・sudo・実機ファン操作なし。一時の検証用コピーは削除済み。判定REVIEW_OK。
+- 2026-11-16 00:01 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正すべき正しさの不具合は見つかりませんでした。`develop..agent/6`（8 commit、先頭 `1e6af78`）をレビューしました。
 
 ## エージェントの結果(2026-11-15 23:46)
 
