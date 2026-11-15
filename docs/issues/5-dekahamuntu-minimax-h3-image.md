@@ -88,6 +88,7 @@ goal:
 - 2026-11-15 09:22 [agent] 前回未達のGGUF比較は補完済み。docs/ai-server-placement.md:357-409にQ5/Q4の2880² A/B初回・替え、4096²のQ5 OOM 4回/Q4成功、VRAM/RAM・温度・fan2goを確認。画像specをChromiumで開き、追加12画像と比較表示を目視。実HTTPのキューガードは空/接続拒否を許可し、実行中/HTTP500/5秒タイムアウトを拒否。モデル取得の固定URL/revision/hashにも追加指摘なし。Routerアンロード完了待ちの挙動を追加確認中。
 - 2026-11-15 09:24 [agent] 追加P2を確認: home/hosts/dekahamuntu.nix:83-84 の image-dual は /models/unload のHTTP成功で終了し、モデルがunloadedになるのを待たない。固定されたllama.cpp v0.6.0のserver-models.cpp:1267-1287/2144-2159はSTOPを非同期キューへ積んで即successを返し、子の終了後にunloadedへ変わる。対応する隔離HTTP環境で、停止を2秒遅らせるとimage-dualは0.331秒・rc=0で終了し、その時点でモデルはloaded（再照会なし）。直後のH3 B生成がGPU 1解放と競合する。実GPUでのこの競合/OOM再現はしていない。変更shell6ファイルのbash -nは通過。コード・コミット・実機設定は変更していない。
 - 2026-11-15 09:25 [agent] 再々レビュー完了（develop..agent/5、先頭18fccf9）。前回のGGUF大解像度比較は画像込みで補完済み、前々回3修正も維持。新規P2 1件: ai-mode image-dualが非同期アンロードの完了を待たず成功するため、直後のH3 B生成がQwenのGPU解放と競合する。unloadedを確認してから成功し、確認不能/タイムアウトは失敗させる必要がある。判定REVIEW_NG。実機の生成・停止・設定変更、コード変更、コミットはしていない。
+- 2026-11-15 09:25 [agent] 実装レビュー(gpt-6.1-sol)が終わった: 修正が必要な不具合が1件あります。前回のGGUF大解像度比較の不足と、それ以前の3指摘は解消済みです。
 
 ## エージェントの結果(2026-11-15 08:32)
 
