@@ -373,11 +373,13 @@ journalctl -u fan2go -b --no-pager | grep -E "analyzed|boundar|PWM settings"   #
 
 - 初回の解析は走らない（`case_pwm5` の id は変わらず、解析の結果は `/var/lib/fan2go/fan2go.db` に残っている）。ラジエーターの組がないので、解析の注意も出ない
 - 入れ直しのあいだ、ラジエーターのファンは fan2go が止まった時点で BIOS の曲線（temp9 で引く）へ戻り、そのあとずっと BIOS のまま。学習中なら pwm2 は約 190 から BIOS の値（temp9 55℃ ごろで約 140）へ、fan2 は約 1,420 → 約 1,210 RPM へ下がる見込み（BIOS は遅れなしで値を置く）。ケースファンは止めてから起動するまでの数秒だけ BIOS の制御で、そのあと最初の曲線へ毎秒 15 ずつ寄る（学習中 GPU 64〜66℃ なら pwm5 約 135〜150）
+- 2026-11-16 02:51 JST の再起動のあと、fan2go は GPU の温度を読めずに全開になっている（下の「残っていること」）。そのまま入れ直すと、止めた時点で pwm2・pwm5 は全開（255）から BIOS の値へ下がり、起動し直した fan2go は GPU の温度を読める見込み（`/dev/nvidia*` はもうある）。入れたあと `case-fan-gpu-temp.status` が「ok」になっているかも見る
 
 入れたあとに読むだけで確かめること:
 
 ```bash
 systemctl is-active fan2go; systemctl show fan2go -p NRestarts     # active、0
+cat /run/fan2go/case-fan-gpu-temp.status                            # 「<時刻> ok <GPU の℃> gpus=1」（failsafe でない）
 cat /etc/fan2go/case-fan-restore.conf                               # 「nct6798 5 5」の 1 行
 d=$(grep -l '^nct6798$' /sys/class/hwmon/hwmon*/name | xargs dirname)
 for c in 2 5 6; do echo "pwm$c enable=$(cat $d/pwm${c}_enable) pwm=$(cat $d/pwm$c) fan=$(cat $d/fan${c}_input)"; done
@@ -399,7 +401,7 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 #### 残っていること
 
 - 実機のチェックアウト（`~/.config/nix-config`）は origin/develop のまま（env は `CASE_FAN_CONTROL=0` の古い版）。この変更が develop に入ったら、実機で `git pull` する。それまで実機のチェックアウトで入れるスクリプトを流すと「切ってあります。何も変えていません」で終わる（外しはしない）。pull のあと、写し `~/nix-config-issue6` は消してよい
-- 再起動のあとに nct6775 が自動で読み込まれ、fan2go が自分で立ち上がること（未確認）
+- **再起動のあと、fan2go が GPU の温度を読めず全開になる（2026-11-16 02:51 JST の起動で見た。読むだけで確かめた。直していない）。** nct6775 は自動で読み込まれ（`/etc/modules-load.d/case-fan-control.conf`）、fan2go も自分で立ち上がった（active・enabled、再起動 0 回）。ただし `case-fan-gpu-temp.status` が「failsafe 100 nvidia-smi が失敗した: Failed to initialize NVML: Unknown Error」のままで、ケースファンとラジエーターのファンが全開（pwm5・pwm2 とも 255。fan5 約 1,025 RPM、fan2 約 1,690 RPM）。同じとき、ログインした端末からの `nvidia-smi` は読めた（43℃）。原因の見立て: systemd が fan2go を起動した時刻（02:51:34.842）には `/dev/nvidia*` がまだなく（「Couldn't stat device /dev/nvidia0: No such file or directory」ほか、`/dev/nvidiactl`・`/dev/nvidia-uvm` も）、unit の `DeviceAllow=/dev/nvidia0` などが許す一覧に入らなかった。ノードができたのは 0.03 秒あと（02:51:34.870）。入れ直し（`systemctl restart`）や `sudo systemctl restart fan2go` で、その起動のあいだは直る見込み。直すなら、unit の NVIDIA の `DeviceAllow` をパスでなくデバイスの種類（`char-nvidia`・`char-nvidia-uvm`・`char-nvidia-caps`。`/proc/devices` の名前で、起動の時点でドライバが読み込まれていれば効く）で書く案がある（dekahamuntu と同じ unit なので、両方で確かめる）。このとき pwm5・pwm2 の `enable` は 0（全開）と読めた（fan2go が操っているときの 1 ではなかった。理由は確かめていない）
 - `systemctl stop fan2go` で pwm2・pwm5 が BIOS の制御（enable=5）へ戻ること。入れ直しのときに pwm5 が戻ったのはログで見た。pwm2 は、2026-11-16 の戻しの入れ直しで確かめる（上の「戻した（2026-11-16）」）
 - （ラジエーターの組をやめたので、いまは要らない。もう一度試すときに）CPU だけに強い負荷がかかったとき（GPU が冷えているとき）の pwm2。記録は学習と合間だけ。BIOS の曲線をわずかに下回った 3 回（上の「pwm2 と BIOS の曲線」）を受けて、主の CPU の曲線の寄せを広げるかは本人が決める
 - ケースの付属ファン 6 つが全部 pwm5 につながっているか
