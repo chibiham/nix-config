@@ -52,8 +52,36 @@
   - sda = Fanxiang S101 2T（SATA、1.9T）。Ubuntu はこれに入っている。sda1 `/boot/efi` 1G、sda2 `/boot` 2G、sda3 LVM → `/` 1.9T（使用 894G・空き 886G）
   - nvme0n1 = Lexar SSD NM790 2TB（NVMe、PCIe 4.0 x4、ファームウェア 11296）。中は EFI 100M・16M・NTFS 1.9T・NTFS 889M。Ubuntu からはマウントしていない（Windows の並びに見える）
 - ネットワーク: 有線 eno1 = Realtek RTL8125（2.5GbE）、1,000Mb/s でつながっている。Wi-Fi wlp6s0 = Realtek RTL8852BE（802.11ax）、up。Bluetooth あり
-- ファン: Super I/O のドライバ（nct6775 など）は読み込んでいない（hwmon に pwm・fan がない）。BIOS まかせ
+- ファン: Super I/O のドライバ（nct6775 など）は読み込んでいない（hwmon に pwm・fan がない）。BIOS まかせ。2026-11-15 に一時的に読み込んで読んだ値は下の「ファン（2026-11-15）」
 - そのほか: USB に ASUS AURA LED Controller
+
+### ファン（2026-11-15）
+
+本人が 17:00 JST ごろ `scripts/install-case-fan-control-ubuntu.sh --probe --load-module` を流し、そのあと sudo なしの `--probe` と sysfs で読んだ。ケースファンの制御（fan2go）はまだ入れていない（[ubuntu-server.md](ubuntu-server.md#ケースファンgpu-の温度で回す)）。
+
+- 環境: BIOS 1220、カーネル 7.0.0-43-generic。fan2go は入っていない。libsensors5 はある
+- Super I/O: `nct6775: Found NCT6798D or compatible chip at 0x2e:0x290`。hwmon の name は `nct6798`。nct6775 の ASUS WMI のボード一覧にこのボードがあり、`acpi_enforce_resources=lax` なしで掴めた。読み込みは一時的（再起動で消える）
+- pwm は 1・2・4・5・6・7（pwm3 はない）。どれも mode=1（PWM、4pin の制御）。`pwmN_enable` は 1・2・4・5・6 が 5（BIOS の自動）、7 が 0（全開）
+- fan は 1〜7 の入力がある
+- CPU の温度: coretemp（hwmon の name `coretemp`）の temp1 が Package id 0。nct6798 の temp8（PECI Agent 0）も同じ値
+- GPU（RTX 3090 1 枚）: アイドルで 50℃・ファン 66%・129W（18:11 JST）
+
+チャネルごとの値（回転数と pwm は、学習中 GPU 65℃・CPU Package 67℃ → 学習の合間 GPU 41℃ → 18:12 JST GPU 64℃・Package 60℃ の 3 回）:
+
+| チャネル | 回転数（RPM） | pwm（0..255） | enable | BIOS の自動の曲線（℃:PWM） | temp_sel | つながっているもの |
+|---|---|---|---|---|---|---|
+| 1 | 0 | 205 → 183 → 185 | 5 | 20:153 45:178 60:216 70:255 | 9 | 未確認（--identify 待ち） |
+| 2 | 1,237 → 1,065 → 約 1,100 | 143 → 109 → 113 | 5 | 20:51 45:102 65:178 70:255 | 9 | 未確認（--identify 待ち） |
+| 3 | 0 | pwm3 はない | — | — | — | 未確認（--identify 待ち。pwm がないので --identify では見分けられない） |
+| 4 | 0 | 205 → 183 → 185 | 5 | 20:153 45:178 60:216 70:255 | 9 | 未確認（--identify 待ち） |
+| 5 | 744 → 632 → 約 653 | 143 → 109 → 113（pwm2 といつも同じ値） | 5 | 20:51 45:102 65:178 70:255 | 9 | 未確認（--identify 待ち） |
+| 6 | 約 2,600 | 255 | 5 | 全点 255 | 9 | 未確認（--identify 待ち） |
+| 7 | 0 | 255 | 0（全開） | 25:140 35:170 45:200 55:230 100:255 | 3 | 未確認（--identify 待ち） |
+
+- 曲線は sysfs の `pwmN_auto_pointM_temp`・`pwmN_auto_pointM_pwm`。enable=0 の pwm7 は曲線を使っていない（全開）
+- temp_sel（`pwmN_temp_sel`）の 9・3 は nct6798 の temp9・temp3 ではなく、温度の源の番号。何を指すかは確かめていない
+- 見立て（未確認）: fan2 = CPU_FAN（ラジエーターのファン）、fan6 = ポンプ（AIO_PUMP、常に全開）、fan5 = CPU_OPT かケースファン（pwm2 と同じ曲線・同じ値）。pwm1・pwm4 は pwm2 とは別の曲線で、回転数を返さない（何もつながっていないか、回転の線のないハブ）
+- ケースの付属ファン 120mm ×6（背面 1・側面 2・底面 3、ARGB）がどのヘッダーにつながっているか、3pin か 4pin かは未確認
 
 ### 本人の一覧・仕様と実機の食い違い
 
@@ -72,7 +100,8 @@
 - 電源 HX1200 の版（型番）。12V-2x6 があるか
 - Lexar NM790 がどの M.2 スロット（CPU 側の M.2_1 かチップセット側の M.2_2）に挿さっているか、Windows の用途
 - Wi-Fi のカードの出どころ（ボード付属か後付けか）
-- ケースファンの数・型番と、どのヘッダーにつながっているか。簡易水冷のファン・ポンプのつなぎ先
+- ケースファンの数・型番と、どのヘッダーにつながっているか（3pin か 4pin か）。簡易水冷のファン・ポンプのつなぎ先。チャネルごとの値と見立ては上の「ファン（2026-11-15）」。`--identify` で本人が見分けたら、表の「つながっているもの」を埋める
+- BIOS の自動の曲線の temp_sel（9・3）が、どの温度を指すか
 - ラジエーターの取り付け位置
 
 ---

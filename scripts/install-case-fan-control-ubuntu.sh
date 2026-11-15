@@ -4,7 +4,7 @@
 #
 #   install-case-fan-control-ubuntu.sh --probe                 # 読むだけ（sudo 不要）。ドライバ・pwm・fan・温度を出し、env の値の手がかりを出す
 #   install-case-fan-control-ubuntu.sh --probe --load-module   # Super I/O のドライバ（CASE_FAN_MODULE）を一時的に読み込んでから調べる（sudo。再起動で消える。ファンは変えない）
-#   install-case-fan-control-ubuntu.sh --identify <チャネル>   # そのチャネルを 10 秒だけ全開にして RPM を見せ、元に戻す（sudo。どのファンがどれかを見分ける）
+#   install-case-fan-control-ubuntu.sh --identify <チャネル>   # そのチャネルを 10 秒だけ全開にして RPM を見せ、元に戻す（sudo。どのファンがどれかを見分ける。CASE_FAN_HWMON が空なら、pwm のある Super I/O が 1 つのときそれを使う）
 #   install-case-fan-control-ubuntu.sh --print-config          # 書く予定の /etc/fan2go/fan2go.yaml を出すだけ（sudo 不要）
 #   install-case-fan-control-ubuntu.sh                         # 入れる・入れ直す（sudo）
 #   install-case-fan-control-ubuntu.sh --uninstall             # 外して BIOS の制御へ戻す（sudo）
@@ -116,6 +116,41 @@ find_hwmon() {
 
 # Super I/O のファン制御のチップ（nct6775 の系統と、nct6683 の系統）の name か
 is_superio_name() { [[ "$1" =~ ^(nct6[0-9]{3}|nct5[0-9]{3})$ ]]; }
+
+# --identify が操る hwmon を決め、id_dir・id_name・id_how を決める。決まらなければ理由を id_why に入れて 1 で返る。
+# CASE_FAN_HWMON が書いてあればその name。空なら、Super I/O の name で pwm のある hwmon がちょうど 1 つのときそれ（env に書く前に使うため）
+pick_identify_hwmon() {
+  id_dir="" id_name="" id_how="" id_why=""
+  if [[ -n "$CASE_FAN_HWMON" ]]; then
+    id_dir="$(find_hwmon "$CASE_FAN_HWMON")" || { id_why="hwmon $CASE_FAN_HWMON が1つに決まりません"; return 1; }
+    id_name=$CASE_FAN_HWMON
+    id_how="hosts/ubuntu/$UBUNTU_HOST.env の CASE_FAN_HWMON"
+    return 0
+  fi
+  local d name found=() listed=()
+  for d in "$HWMON_ROOT"/hwmon*; do
+    name="$(read_value "$d/name")"
+    is_superio_name "$name" || continue
+    if compgen -G "$d/pwm[0-9]" >/dev/null; then
+      found+=("$d")
+      listed+=("$(basename "$d"): $name")
+    else
+      listed+=("$(basename "$d"): $name（pwm なし）")
+    fi
+  done
+  if [[ ${#found[@]} -eq 1 ]]; then
+    id_dir=${found[0]}
+    id_name="$(read_value "$id_dir/name")"
+    id_how="CASE_FAN_HWMON が空なので、pwm のある Super I/O から選んだ"
+    return 0
+  fi
+  if [[ ${#found[@]} -eq 0 ]]; then
+    id_why="CASE_FAN_HWMON が空で、pwm のある Super I/O の hwmon がありません（見つかった Super I/O: ${listed[*]:-なし}）。$0 --probe --load-module で調べる"
+  else
+    id_why="CASE_FAN_HWMON が空で、pwm のある Super I/O の hwmon が ${#found[@]} 個あります（${listed[*]}）。どれを操るか決められないので、hosts/ubuntu/$UBUNTU_HOST.env に CASE_FAN_HWMON を書く"
+  fi
+  return 1
+}
 
 # "45:30 60:45" → 1行に「温度 PWM(0..255)」。温度は増え続けること、デューティは 0..100
 curve_points() {
@@ -464,7 +499,8 @@ probe() {
     done
     if "$fan_capable"; then
       echo "  次: 上の fan の RPM で、ファンがつながっているチャネルを見る。どれが CPU_FAN かは --identify <チャネル> で確かめる（CPU_FAN は入れない）"
-      echo "      hosts/ubuntu/$UBUNTU_HOST.env に CASE_FAN_HWMON=${superio[0]}、CASE_FAN_CHANNELS=\"<ケースファンの番号>\" を書く"
+      echo "      （--identify は env に書く前から使える。CASE_FAN_HWMON が空なら、pwm のある Super I/O が 1 つのときそれを操る。下の「--identify が使う hwmon」）"
+      echo "      決まったら hosts/ubuntu/$UBUNTU_HOST.env に CASE_FAN_HWMON=${superio[0]}、CASE_FAN_CHANNELS=\"<ケースファンの番号>\" を書く"
       if [[ ! -e "$MODULES_LOAD_FILE" ]]; then
         echo "      （いまの読み込みが一時的なら、再起動で消える。常に読み込む設定 $MODULES_LOAD_FILE は、入れるときにスクリプトが書く）"
       fi
@@ -481,15 +517,21 @@ probe() {
     echo "  チップが nct6775 の系統でない見込み。nct6683（NCT6683/6686/6687）を試すなら: sudo modprobe nct6683 → --probe"
     echo "  （nct6683 は多くのボードで読むだけ。pwm が出なければ、このやり方ではケースファンを操れない）"
   fi
+  if pick_identify_hwmon; then
+    echo "  --identify が使う hwmon: $id_name（$(basename "$id_dir")。$id_how）"
+  else
+    echo "  --identify が使う hwmon: 決まらない（$id_why）"
+  fi
 }
 
 # --- 変更する ---------------------------------------------------------------
 
 identify() {
   local ch="$identify_channel" dir enable pwm i n
-  [[ -n "$CASE_FAN_HWMON" ]] || die "CASE_FAN_HWMON が空です（--probe の出力の Super I/O の name を env に書く）"
-  dir="$(find_hwmon "$CASE_FAN_HWMON")" || die "hwmon $CASE_FAN_HWMON が1つに決まりません"
-  [[ -e "$dir/pwm$ch" && -e "$dir/pwm${ch}_enable" ]] || die "$CASE_FAN_HWMON に pwm$ch がありません"
+  pick_identify_hwmon || die "$id_why"
+  dir=$id_dir
+  [[ -n "$CASE_FAN_HWMON" ]] || echo "CASE_FAN_HWMON が空なので、Super I/O の hwmon $id_name（$dir）を使います"
+  [[ -e "$dir/pwm$ch" && -e "$dir/pwm${ch}_enable" ]] || die "$id_name に pwm$ch がありません"
   if systemctl is-active --quiet fan2go 2>/dev/null; then
     die "fan2go が動いています。先に sudo systemctl stop fan2go（止めると BIOS の制御に戻る）"
   fi

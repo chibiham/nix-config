@@ -164,6 +164,61 @@ class PrintConfigTests(unittest.TestCase):
         self.assertIn("minPwm: 128", r.stdout)
 
 
+@unittest.skipUnless(sys.platform.startswith("linux"), "--probe は Linux 専用")
+class IdentifyHwmonTests(unittest.TestCase):
+    """--identify が操る hwmon の選び方を、--probe の「--identify が使う hwmon」の行で確かめる（root 不要）"""
+
+    def setUp(self):
+        self.fx = Fixture()
+        self.addCleanup(self.fx.close)
+
+    def identify_line(self, **env):
+        full = {
+            **os.environ,
+            "UBUNTU_HOST": "no-such-host-for-tests",
+            "CASE_FAN_HWMON_ROOT": str(self.fx.hwmon),
+            "CASE_FAN_HWMON": "",
+            **env,
+        }
+        r = subprocess.run([BASH, str(INSTALL), "--probe"], env=full,
+                           capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        lines = [l for l in r.stdout.splitlines() if "--identify が使う hwmon:" in l]
+        self.assertEqual(len(lines), 1, r.stdout)
+        return lines[0]
+
+    def test_empty_hwmon_picks_the_only_superio_with_pwm(self):
+        # pwm のない Super I/O は数えない
+        make_hwmon(self.fx.hwmon, 2, "nct6686", {"fan1_input": 500})
+        line = self.identify_line()
+        self.assertIn("nct6799（hwmon0。CASE_FAN_HWMON が空なので", line)
+
+    def test_empty_hwmon_without_superio_pwm_is_refused(self):
+        (self.fx.nct / "pwm1").unlink()
+        (self.fx.nct / "pwm2").unlink()
+        (self.fx.nct / "pwm3").unlink()
+        line = self.identify_line()
+        self.assertIn("決まらない", line)
+        self.assertIn("hwmon0: nct6799（pwm なし）", line)
+        self.assertIn("--probe --load-module", line)
+
+    def test_empty_hwmon_with_two_superio_is_refused(self):
+        make_hwmon(self.fx.hwmon, 2, "nct6798", {"pwm1": 1, "pwm1_enable": 5, "fan1_input": 1})
+        line = self.identify_line()
+        self.assertIn("決まらない", line)
+        self.assertIn("2 個", line)
+        self.assertIn("hwmon0: nct6799", line)
+        self.assertIn("hwmon2: nct6798", line)
+
+    def test_written_hwmon_is_used_as_is(self):
+        # 書いてあれば Super I/O から選ばない（もう 1 つあっても決まる）
+        make_hwmon(self.fx.hwmon, 2, "nct6798", {"pwm1": 1, "pwm1_enable": 5, "fan1_input": 1})
+        line = self.identify_line(CASE_FAN_HWMON="nct6799")
+        self.assertIn("nct6799（hwmon0。hosts/ubuntu/no-such-host-for-tests.env の CASE_FAN_HWMON）", line)
+        line = self.identify_line(CASE_FAN_HWMON="nct6797")
+        self.assertIn("決まらない（hwmon nct6797 が1つに決まりません）", line)
+
+
 # にせの fan2go: viper と同じく、-c のパスの拡張子が .yaml / .yml でなければ読めずに落ちる
 FAKE_FAN2GO = """#!/bin/sh
 printf '%s\\n' "$*" >> "$FAKE_LOG"

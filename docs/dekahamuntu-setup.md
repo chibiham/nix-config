@@ -568,7 +568,8 @@ scripts/install-case-fan-control-ubuntu.sh --probe --load-module
 
 # 3. どのチャネルがどのファンか（--probe の fanN の RPM が 0 でないものが、つながっているヘッダー）
 #    CPU_FAN がどれかを必ず確かめる。そのチャネルを 10 秒だけ全開にして RPM を見せ、元に戻す（sudo）
-#    （env の CASE_FAN_HWMON を使う。既定の nct6799 と --probe の name が違えば、先に env を直す）
+#    （env の CASE_FAN_HWMON を使う。dekahamuntu.env は nct6799。--probe の name と違えば、先に env を直す。
+#     空なら pwm のある Super I/O の hwmon が 1 つのときそれを使う。--probe の「--identify が使う hwmon」の行で分かる）
 scripts/install-case-fan-control-ubuntu.sh --identify 2
 
 # 4. hosts/ubuntu/dekahamuntu.env を埋める
