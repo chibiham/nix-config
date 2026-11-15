@@ -2,9 +2,10 @@
 status: doing
 created: 2026-11-15
 updated: 2026-11-15
+assignee: agent
 goal:
   - text: hosts/ubuntu/chibihamuntu.env に CASE_FAN_CONTROL=1 と、実機で確かめた CASE_FAN_HWMON・CASE_FAN_CHANNELS(ケースファンのヘッダーだけ。CPU_FAN・CPU_OPT・AIO_PUMP は入れない)、CPU の温度の指定(coretemp の Package)が書いてある
-    done: false
+    done: true
   - text: chibihamuntu で install-case-fan-control-ubuntu.sh --print-config が通り、出てくる設定が操るのはケースファンのチャネルだけで、GPU の温度が読めないときは全開側に倒れる形になっている
     done: false
   - text: 試験(tests/test_case_fan_control.py)が Linux で通り、dekahamuntu の設定から出る fan2go の設定が変わっていない
@@ -13,7 +14,6 @@ goal:
     done: false
   - text: 本人が実機に入れたあと、fan2go.service が active で、GPU に負荷をかけるとケースファンの pwm と回転数が上がり、負荷を止めると下がるのを実機で確かめてある
     done: false
-assignee: agent
 ---
 # chibihamuntu のケースファンを GPU の温度に合わせて回す
 
@@ -66,3 +66,4 @@ sudo が要るので、本人が実機で流す。執事が結果を読んでこ
 - 2026-11-15 18:41 [agent] agent/6 に commit(da44c29): --identify <N> --stop(10 秒だけ pwm=0 にして元へ戻す)。BIOS の曲線が全点 255・曲線が読めない・BIOS が全開(enable=0)のチャネルは --allow-pump がないと断る。戻す守りに INT・TERM・HUP の trap を足した。確かめ: chibihamuntu の /tmp の写しで試験 51 件 OK(途中の SIGINT・SIGTERM・SIGHUP で戻る試験を含む)。dekahamuntu の設定から出る fan2go.yaml の sha256 は変更前と同じ。直した版(scripts と hosts)を実機の ~/nix-config-issue6/ に置いた(実機のチェックアウトは触っていない)。読むだけの --probe で「--stop が断るチャネル: pwm6(曲線が全点 255) pwm7(enable=0)」と出るのを確かめた。sudo・--identify は流していない。本人の --identify --stop(pwm 1・4・5、要れば 7・6)の結果待ち。
 - 2026-11-15 18:41 [agent] 返事待ち: chibihamuntu で上の `--identify <N> --stop`(pwm 1・4・5。要れば 7、6)を流した結果(どの位置のファンが止まったか、`fanN=` の行)を送ってください。ケースファンのチャネルが決まるまで、`CASE_FAN_CHANNELS` と `CASE_FAN_CONTROL=1` は書きません。
 - 2026-11-15 18:53 [agent] 本人の結果(19:00 JST、執事経由): --identify 5 --stop で fan5 は 676 → 約 475 RPM(pwm=0 でも止まらない)。全開は約 1,070 RPM。pwm2 はラジエーターのファン(止めたら止まった)。pwm1・pwm4 を止めても、目に見えて止まったファンはなかった。本人の見立て: ケースファン全体が fan5 の 1 チャネル(6 つ全部が 5 かは目では確かめきれていない)。CASE_FAN_CHANNELS=5、CASE_FAN_CONTROL=1 で進める。完了条件の「CPU_OPT は入れない」は「CPU のクーラーのチャネル(pwm2 のラジエーター、pwm6 のポンプ)は入れない」と読み替える(執事の指示)。
+- 2026-11-15 19:00 [agent] 完了条件 0 を済みにした: hosts/ubuntu/chibihamuntu.env(commit 551a83a)に CASE_FAN_CONTROL=1、CASE_FAN_HWMON=nct6798(実機の --probe で確かめた name)、CASE_FAN_CHANNELS=5(本人が --identify 5 と --identify 5 --stop で確かめた。fan5 が 475〜1,070 RPM で動く)、CASE_FAN_CPU_HWMON=coretemp・CASE_FAN_CPU_TEMP_CHANNEL=1(実機で temp1 = Package id 0)。pwm2(ラジエーターのファン)と pwm6(ポンプと見られる)は入れていない。条件の「CPU_OPT は入れない」は、執事の指示で「CPU のクーラーのチャネル(pwm2・pwm6)は入れない」と読み替えた(pwm5 はボードの上では CPU_OPT のヘッダーかもしれないが、つながっているのはケースファン。どのヘッダーかは未確認)。
