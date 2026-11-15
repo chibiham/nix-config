@@ -13,6 +13,7 @@ goal:
     done: false
   - text: 本人が実機に入れたあと、fan2go.service が active で、GPU に負荷をかけるとケースファンの pwm と回転数が上がり、負荷を止めると下がるのを実機で確かめてある
     done: false
+assignee: agent
 ---
 # chibihamuntu のケースファンを GPU の温度に合わせて回す
 
