@@ -1,10 +1,16 @@
 # install-case-fan-control-ubuntu.sh が /etc/systemd/system/fan2go.service として置く。
 # fan2go の公式の unit（0.16.0 の fan2go.service）をもとに、実行ファイルの場所と、止まったときに
-# BIOS の制御へ戻す ExecStopPost を足した。設定は /etc/fan2go/fan2go.yaml（同じスクリプトが書く）。
+# BIOS の制御へ戻す ExecStopPost を足し、NVIDIA のデバイスの許しをデバイスの種類で書いた。設定は /etc/fan2go/fan2go.yaml（同じスクリプトが書く）。
 [Unit]
 Description=fan2go: case fans follow the GPU temperature
 Documentation=https://github.com/markusressel/fan2go
 After=systemd-modules-load.service nvidia-persistenced.service
+# 下の DeviceAllow=char-nvidia は、起動の時点で /proc/devices に「nvidia」があるときだけ許す一覧に入る
+# （man systemd.resource-control）。NVIDIA のドライバ（nvidia.ko）を先に読み込ませる。modprobe@ は
+# 失敗しても成功で終わる（ExecStart=-）ので、GPU もドライバもない機械・GPU がバスから落ちた機械でも
+# fan2go は起動し、GPU の温度が読めなければ全開側で回る
+Wants=modprobe@nvidia.service
+After=modprobe@nvidia.service
 
 [Service]
 Type=simple
@@ -30,18 +36,21 @@ LogsDirectoryMode=0755
 ConfigurationDirectory=fan2go
 ConfigurationDirectoryMode=0755
 
-# cmd センサー（case-fan-gpu-temp → nvidia-smi）が GPU を読むため、NVIDIA のデバイスを許す
+# cmd センサー（case-fan-gpu-temp → nvidia-smi）が GPU を読むため、NVIDIA のデバイスを許す。
+# パス（/dev/nvidia0 など）で書かない: パスは起動の時点で stat して番号に直すので、そのときノードが
+# まだないと許す一覧に入らず、あとでノードができても読めない（2026-11-16 の chibihamuntu の再起動で、
+# fan2go の起動はノードができる 0.03 秒前で、nvidia-smi が「Failed to initialize NVML: Unknown Error」の
+# まま全開になった）。デバイスの種類（/proc/devices の名前）なら、メジャー番号で許すので、ノードが
+# あとからできても読める。
+#   char-nvidia: メジャー 195（/dev/nvidia0〜N・/dev/nvidiactl・/dev/nvidia-modeset）。nvidia-smi が要るのは
+#     /dev/nvidiactl と /dev/nvidiaN だけ（/dev/nvidia-uvm と /dev/nvidia-caps/* は拒んでも読めた。2026-11-16 に
+#     chibihamuntu で strace の inject で確かめた）ので、uvm・caps は許さない
+#   char-nvidia-frontend: 古いドライバでの 195 の名前（いまの 595 では「nvidia」。名前がなければ何も足さない）
 PrivateDevices=false
 DeviceAllow=/dev/null rw
 DeviceAllow=/dev/zero rw
-DeviceAllow=/dev/nvidiactl rw
-DeviceAllow=/dev/nvidia0 rw
-DeviceAllow=/dev/nvidia1 rw
-DeviceAllow=/dev/nvidia2 rw
-DeviceAllow=/dev/nvidia3 rw
-DeviceAllow=/dev/nvidia-uvm rw
-DeviceAllow=/dev/nvidia-uvm-tools rw
-DeviceAllow=/dev/nvidia-caps/* r
+DeviceAllow=char-nvidia rw
+DeviceAllow=char-nvidia-frontend rw
 DeviceAllow=/dev/urandom r
 DeviceAllow=char-hwmon rw
 DeviceAllow=char-thermal rw

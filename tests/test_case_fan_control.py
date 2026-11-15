@@ -1218,6 +1218,102 @@ class GpuTempTests(unittest.TestCase):
             self.assertLess(self.elapsed, 1.8)
 
 
+UNIT = REPO / "systemd/fan2go.service"
+
+
+def read_unit(path=UNIT):
+    """systemd の unit を（節, 鍵）→ 値の一覧で読む。同じ鍵が何度も出てよい（configparser では読めない）"""
+    entries = {}
+    section = None
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith(("#", ";")):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line[1:-1]
+            continue
+        key, _, value = line.partition("=")
+        entries.setdefault((section, key.strip()), []).append(value.strip())
+    return entries
+
+
+class UnitFileTests(unittest.TestCase):
+    """systemd/fan2go.service の中身。起動の時点で /dev/nvidia* がまだなくても、あとで GPU を読めること"""
+
+    def setUp(self):
+        self.unit = read_unit()
+
+    def values(self, section, key):
+        return self.unit.get((section, key), [])
+
+    def words(self, section, key):
+        return [w for v in self.values(section, key) for w in v.split()]
+
+    def device_allow(self):
+        return [tuple(v.split()) for v in self.values("Service", "DeviceAllow")]
+
+    def test_nvidia_devices_are_allowed_by_group_not_by_path(self):
+        # パスは起動の時点で stat して番号に直す。そのときないノードは、あとでできても許されない
+        allowed = self.device_allow()
+        for spec, _ in allowed:
+            self.assertFalse(spec.startswith("/dev/nvidia"), f"NVIDIA のデバイスをパスで許している: {spec}")
+        self.assertIn(("char-nvidia", "rw"), allowed)
+
+    def test_nvidia_permission_is_not_wider_than_needed(self):
+        # nvidia-smi に要るのはメジャー 195（nvidiactl と nvidiaN）だけ。種類のワイルドカードや、uvm・caps は許さない
+        for spec, access in self.device_allow():
+            if "nvidia" in spec:
+                self.assertIn(spec, ("char-nvidia", "char-nvidia-frontend"))
+                self.assertNotIn("*", spec)
+                self.assertNotIn("m", access)
+
+    def test_path_specs_have_no_wildcards(self):
+        # パスの指定にはワイルドカードが効かない（man systemd.resource-control）
+        for spec, _ in self.device_allow():
+            if spec.startswith("/"):
+                self.assertNotIn("*", spec)
+                self.assertNotIn("?", spec)
+
+    def test_nvidia_driver_is_loaded_before_start(self):
+        # 種類の指定も、起動の時点で /proc/devices にあるものだけが許す一覧に入る
+        self.assertIn("modprobe@nvidia.service", self.words("Unit", "Wants"))
+        self.assertIn("modprobe@nvidia.service", self.words("Unit", "After"))
+
+    def test_waiting_for_nvidia_cannot_stop_the_start(self):
+        # GPU やドライバがなくても fan2go は起動して全開側で回る: 強い依存（Requires・BindsTo・Requisite）や、
+        # デバイスのノードを待つ ExecStartPre・条件を足さない
+        for key in ("Requires", "BindsTo", "Requisite"):
+            self.assertFalse([w for w in self.words("Unit", key) if "nvidia" in w], key)
+        for key, value in self.unit.items():
+            if key[0] == "Unit" and key[1].startswith(("Condition", "Assert")):
+                self.fail(f"{key[1]} があると、満たないとき fan2go が起動しない")
+        for value in self.values("Service", "ExecStartPre"):
+            self.assertNotIn("nvidia", value)
+
+    def test_bios_restore_and_hardening_are_kept(self):
+        self.assertEqual(self.values("Service", "ExecStopPost"), ["+/usr/local/sbin/case-fan-restore-bios"])
+        self.assertEqual(self.values("Service", "Restart"), ["always"])
+        for key, value in (
+            ("ProtectSystem", "strict"), ("ProtectHome", "true"), ("NoNewPrivileges", "true"),
+            ("PrivateTmp", "true"), ("ProtectKernelModules", "true"), ("ProtectKernelTunables", "true"),
+            ("IPAddressDeny", "any"),
+        ):
+            self.assertEqual(self.values("Service", key), [value], key)
+        # DeviceAllow があるので、一覧にないデバイスは拒まれる（auto のまま）
+        self.assertNotIn("DevicePolicy", [k for _, k in self.unit])
+
+    @unittest.skipUnless(shutil.which("systemd-analyze"), "systemd-analyze がない")
+    def test_systemd_analyze_verify(self):
+        # 実行ファイル（/usr/local/bin/fan2go など）がない機械でも読めるよう、その文句だけは除く
+        r = subprocess.run(["systemd-analyze", "verify", str(UNIT)], capture_output=True, text=True, timeout=60)
+        problems = [
+            line for line in r.stderr.splitlines()
+            if "fan2go.service" in line and "is not executable" not in line and "No such file" not in line
+            and "Command " not in line
+        ]
+        self.assertEqual(problems, [], r.stderr)
+
+
 class RestoreConfTests(unittest.TestCase):
     """BIOS の pwmN_enable の記録（case-fan-restore.conf）に、ラジエーターのチャネルの行も入る"""
 
