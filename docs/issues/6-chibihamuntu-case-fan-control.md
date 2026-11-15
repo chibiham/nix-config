@@ -1,7 +1,7 @@
 ---
-status: doing
+status: done
 created: 2026-11-15
-updated: 2026-11-15
+updated: 2026-11-16
 assignee: agent
 goal:
   - text: hosts/ubuntu/chibihamuntu.env に CASE_FAN_CONTROL=1 と、実機で確かめた CASE_FAN_HWMON・CASE_FAN_CHANNELS(ケースファンのヘッダーだけ。CPU_FAN・CPU_OPT・AIO_PUMP は入れない)、CPU の温度の指定(coretemp の Package)が書いてある
