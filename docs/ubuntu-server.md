@@ -199,33 +199,30 @@ AMD（Zen）でも `intel_rapl_msr` が同じ `intel-rapl:0` に積算エネル�
 
 ### ケースファン（GPU の温度で回す）
 
-**本人が実機に入れた（2026-11-15 19:09 JST = 10:09 UTC。チャネル 5、GPU の曲線は dekahamuntu と同じ値）。初回の解析は失敗せずに通った（1 分 43.7 秒。下の「初回の解析」）。そのあと本人が GPU の曲線を前へ寄せると決め、env に新しい曲線を書いた。実機への入れ直し（sudo）は本人がこれから（2026-11-15 19:20 JST 時点）。** いま実機で動いているのは最初の曲線。
-
-**同じ日（19:25 JST ごろ）に本人が範囲を広げた: 簡易水冷のラジエーターのファン（pwm2。天面）も fan2go で操り、max(GPU の曲線, CPU の曲線) で回す（下の「ラジエーターのファン（pwm2）も操る」）。env とスクリプトは変えたが、まだ実機には入れていない（2026-11-15 19:30 JST 時点）。** 入れ直しは、GPU の曲線の入れ直しと合わせて 1 回で済む。
+**本人が実機に入れた（2026-11-15 19:09 JST = 10:09 UTC。チャネル 5、GPU の曲線は dekahamuntu と同じ値）。そのあと本人が GPU の曲線を前へ寄せ、ラジエーターのファン（pwm2）も操ると決め、22:59 JST（13:59 UTC）に入れ直した（写し `~/nix-config-issue6`、commit b15ddf3 と同じ中身から）。** いま fan2go が操っているのは pwm5（ケースファン）と pwm2（ラジエーターのファン）。値と結果は下の表と「入れ直しの結果」。
 
 ケースファンを GPU の温度に合わせて回す（issue 6）。仕組み（fan2go、ケースファン = max(GPU の曲線, CPU の曲線)、GPU の温度が読めないときは全開側に倒す、止めたとき・落ちたときは BIOS の制御へ戻す、初回の解析）は dekahamuntu と同じスクリプトで、説明は [dekahamuntu-setup.md の「ケースファン（GPU の温度で回す）」](dekahamuntu-setup.md#ケースファンgpu-の温度で回す)。ここには chibihamuntu に固有のことだけを書く。値は `hosts/ubuntu/chibihamuntu.env` の `CASE_FAN_*`（意味は `hosts/ubuntu/README.md`）。
 
-`configure-ubuntu-hardware.sh` は、env が `CASE_FAN_CONTROL=1` のときだけ `install-case-fan-control-ubuntu.sh` を流す。chibihamuntu の env は 1 なので、`configure-ubuntu-hardware.sh` を流すと入れるスクリプトも流れる（入れたあとは、流すたびに fan2go を止めて入れ直す。下の「曲線を変えたあとの入れ直し」）。
+`configure-ubuntu-hardware.sh` は、env が `CASE_FAN_CONTROL=1` のときだけ `install-case-fan-control-ubuntu.sh` を流す。chibihamuntu の env は 1 なので、`configure-ubuntu-hardware.sh` を流すと入れるスクリプトも流れる（入れたあとは、流すたびに fan2go を止めて入れ直す。下の「入れ直しでスクリプトがすること」）。
 
 | 項目 | chibihamuntu |
 |---|---|
 | ボード・チップ | ASUS TUF GAMING B760M-PLUS D4（BIOS 1220）、Nuvoton NCT6798D。ドライバは `nct6775`、hwmon の name は `nct6798`（2026-11-15 に実機で確かめた）。ASUS WMI のボード一覧にあり、`acpi_enforce_resources=lax` は要らなかった（`CASE_FAN_ACPI_LAX=0`） |
-| 操るチャネル | 5 と 2。<br>5 = ケースファンの組（`CASE_FAN_CHANNELS=5`。回転数も fan5）。ケースの付属ファン 120mm ×6 が付属のハブ 1 つで 5 にまとまっている、という見立て（本人・執事）。6 つ全部が 5 につながっているかは未確認。操れる幅は約 475〜1,070 RPM（pwm=0 で約 475、全開で最大 1,071。2026-11-15 の `--identify`）。<br>2 = ラジエーターの組（`CASE_FAN_RAD_CHANNELS=2`。回転数も fan2）。簡易水冷（Cooler Master MasterLiquid 360L Core）のラジエーター（天面）のファン 120mm ×3（本人が確かめた）。仕様は 650〜1,750 RPM。pwm=0 で止まる（本人が `--identify 2 --stop` で見た）。まだ実機には入れていない |
-| 操らないチャネル | pwm6（ポンプと見られる。BIOS の曲線が全点 255、約 2,600 RPM。未確認）は操らない（BIOS の制御のまま全開）。pwm1・pwm4（何もつながっていない見込み）、pwm7（確かめていない）も入れない。<br>はじめは CPU のクーラーのチャネル（pwm2・pwm6）を両方とも入れないことにしていた（issue 6 の「CPU_OPT は入れない」を執事が「CPU のクーラーを操らない」と読み替えた。本人・執事）。issue の本文の「CPU のクーラーは操らない」「操るのはケースファンのチャネルだけ」は、本人の決め（2026-11-15 19:25 JST ごろ）で上書きした: ラジエーターのファン（pwm2）は操る。ポンプ（pwm6）は操らない。<br>pwm5 は BIOS の曲線が pwm2 と同じなので、ボードの上では CPU_OPT のヘッダーかもしれない（pwm5 がボードのどのヘッダーかは未確認）が、つながっているのはケースファンなので操る |
-| 最低のデューティ | 30%（`CASE_FAN_MIN_DUTY`）。どの pwm も mode=1（PWM、4pin の制御）。fan5 は pwm=0 でも約 475 RPM で回り続けるので、30% は「止めない」ための下限というより曲線の下の値。30% のときの回転数は未確認 |
+| 操るチャネル | 5 と 2（どちらも enable=1。2026-11-15 22:59 JST から）。<br>5 = ケースファンの組（`CASE_FAN_CHANNELS=5`。回転数も fan5）。ケースの付属ファン 120mm ×6 が付属のハブ 1 つで 5 にまとまっている、という見立て（本人・執事）。6 つ全部が 5 につながっているかは未確認。操れる幅は約 475〜1,070 RPM（pwm=0 で約 475、全開で最大 1,071。2026-11-15 の `--identify`）。<br>2 = ラジエーターの組（`CASE_FAN_RAD_CHANNELS=2`。回転数も fan2）。簡易水冷（Cooler Master MasterLiquid 360L Core）のラジエーター（天面）のファン 120mm ×3（本人が確かめた）。仕様は 650〜1,750 RPM。pwm=0 でも約 680 RPM で回り続ける（初回の解析で、pwm 0〜64 のあいだ 681〜773 RPM。全開で 1,541〜1,711 RPM）。前に書いた「pwm=0 で止まる」（本人が `--identify 2 --stop` で「止まってるみたい」と見た）は、回転数の上では当たらなかった |
+| 操らないチャネル | pwm6（ポンプと見られる。BIOS の曲線が全点 255、約 2,600 RPM。未確認）は操らない（BIOS の制御のまま全開。入れ直しのあとも 255・約 2,580〜2,610 RPM で変わらず）。pwm1・pwm4（何もつながっていない見込み。enable=5）、pwm7（確かめていない。enable=0）も入れない。<br>はじめは CPU のクーラーのチャネル（pwm2・pwm6）を両方とも入れないことにしていた（issue 6 の「CPU_OPT は入れない」を執事が「CPU のクーラーを操らない」と読み替えた。本人・執事）。issue の本文の「CPU のクーラーは操らない」「操るのはケースファンのチャネルだけ」は、本人の決め（2026-11-15 19:25 JST ごろ）で上書きした: ラジエーターのファン（pwm2）は操る。ポンプ（pwm6）は操らない。<br>pwm5 は BIOS の曲線が pwm2 と同じなので、ボードの上では CPU_OPT のヘッダーかもしれない（pwm5 がボードのどのヘッダーかは未確認）が、つながっているのはケースファンなので操る |
+| 最低のデューティ | ケースファン 30%（`CASE_FAN_MIN_DUTY`）、ラジエーターのファン 20%（`CASE_FAN_RAD_MIN_DUTY`。BIOS の最低 51 と同じ）。どの pwm も mode=1（PWM、4pin の制御）。fan5 は pwm=0 でも約 475 RPM で回り続けるので、30% は「止めない」ための下限というより曲線の下の値。30%（pwm5 77）のときは fan5 約 520〜531 RPM（学習の合間、2026-11-15 23:20 JST ごろ） |
 | GPU の温度 | RTX 3090 1 枚。`NVIDIA_EXPECTED_GPUS=0` なので枚数は確かめない |
-| CPU の温度 | coretemp の temp1（Package id 0）。`CASE_FAN_CPU_HWMON=coretemp`、`CASE_FAN_CPU_TEMP_CHANNEL=1` |
-| 曲線 | GPU `45:30 55:50 65:75 72:90 78:100`、CPU `60:30 75:45 85:65 95:100`（℃:デューティ%）。dekahamuntu と違うのは GPU の曲線だけ（CPU の曲線は同じ値）。GPU の曲線は、最初は dekahamuntu と同じ `45:30 60:45 70:65 78:85 83:100` で入れ（2026-11-15 19:09 JST）、同じ日の 19:20 JST ごろに本人が前へ寄せると決めた。本人の言葉は「もう少し曲線を前にしよう。GPUは冷やしたいし、上部はCPUのラジエーターのファンにしているから排気が弱いとおもうんだよね」。新しい曲線の PWM は 45℃ 77・55℃ 128・65℃ 191・72℃ 230・78℃ 255。学習中の 66〜67℃ なら約 77〜79%（PWM 197〜202）の計算（前の曲線では約 59%・150）。fan5 は全開で約 1,070 RPM。新しい曲線は実機にまだ入れていない |
-| 前の曲線のとき（実機） | 学習中（GPU 100%・約 335〜340W。2026-11-15 19:13〜19:15 JST、20 秒ごと 6 回）に GPU 66〜67℃、CPU Package 70〜76℃、pwm5 149〜150（enable=1）、fan5 767〜776 RPM。曲線の計算（67℃ → 約 59% = 150）と合う。BIOS のままのほかのチャネルは pwm2 151〜158・fan2 1,248〜1,291 RPM、fan6 約 2,570 RPM。`case-fan-gpu-temp.status` は「<時刻> ok 67 gpus=1」 |
-| BIOS の制御のとき | 学習中（GPU 100%・約 340W、GPU 65〜66℃）に pwm5 が 124〜143、fan5 が 650〜750 RPM（本人、2026-11-15） |
-| ラジエーターの組の曲線 | GPU `45:30 55:50 65:75 72:90 78:100`（ケースファンの新しい曲線と同じ）、CPU（主）`17:20 42:40 62:70 67:100`（nct6798 の temp9）、CPU（保険）`40:35 60:50 75:65 85:85 92:100`（coretemp の temp1 = Package）。ファン = max(この 3 本)。最低は 20%（`CASE_FAN_RAD_MIN_DUTY=20`。BIOS の最低 51 と同じ）。理由は下の「ラジエーターのファン（pwm2）も操る」。まだ実機には入れていない |
-| ラジエーターのファンの BIOS の制御（実機） | 学習中（Package 70〜76℃）は pwm2 151〜158（fan2 1,246〜1,291 RPM）。合間（Package 39〜58℃。1 秒単位で上下する）は temp9 38〜45℃、pwm2 87〜109、fan2 927〜1,032 RPM（2026-11-15、読むだけ） |
+| CPU の温度 | ケースファン: coretemp の temp1（Package id 0。`CASE_FAN_CPU_HWMON=coretemp`、`CASE_FAN_CPU_TEMP_CHANNEL=1`）。ラジエーターのファン: 主は nct6798 の temp9（BIOS と同じ源）、保険は coretemp の temp1 |
+| ケースファンの曲線 | GPU `45:30 55:50 65:75 72:90 78:100`、CPU `60:30 75:45 85:65 95:100`（℃:デューティ%）。dekahamuntu と違うのは GPU の曲線だけ（CPU の曲線は同じ値）。GPU の曲線は、最初は dekahamuntu と同じ `45:30 60:45 70:65 78:85 83:100` で入れ（2026-11-15 19:09 JST）、同じ日の 19:20 JST ごろに本人が前へ寄せると決め、22:59 JST に入れ直した。本人の言葉は「もう少し曲線を前にしよう。GPUは冷やしたいし、上部はCPUのラジエーターのファンにしているから排気が弱いとおもうんだよね」。新しい曲線の PWM は 45℃ 77・55℃ 128・65℃ 191・72℃ 230・78℃ 255。fan5 は全開で約 1,070 RPM |
+| ラジエーターの組の曲線 | GPU `45:30 55:50 65:75 72:90 78:100`（ケースファンの新しい曲線と同じ）、CPU（主）`17:20 42:40 62:70 67:100`（nct6798 の temp9）、CPU（保険）`40:35 60:50 75:65 85:85 92:100`（coretemp の temp1 = Package）。ファン = max(この 3 本)。理由は下の「ラジエーターのファン（pwm2）も操る」 |
+| 最初の曲線のとき（実機） | 学習中（GPU 100%・約 335〜340W。2026-11-15 19:13〜19:15 JST、20 秒ごと 6 回）に GPU 66〜67℃、CPU Package 70〜76℃、pwm5 149〜150（enable=1）、fan5 767〜776 RPM。曲線の計算（67℃ → 約 59% = 150）と合う。BIOS のままのほかのチャネルは pwm2 151〜158・fan2 1,248〜1,291 RPM、fan6 約 2,570 RPM。`case-fan-gpu-temp.status` は「<時刻> ok 67 gpus=1」 |
+| BIOS の制御のとき | 学習中（GPU 100%・約 340W、GPU 65〜66℃）に pwm5 が 124〜143、fan5 が 650〜750 RPM（本人、2026-11-15）。ラジエーターのファンは、学習中（Package 70〜76℃）に pwm2 151〜158（fan2 1,246〜1,291 RPM）、合間（Package 39〜58℃。1 秒単位で上下する）に temp9 38〜45℃、pwm2 87〜109、fan2 927〜1,032 RPM（2026-11-15、読むだけ） |
 
 チャネルごとの回転数・pwm・BIOS の曲線と、どれが何かの見立て（未確認）は [machines.md の「ファン（2026-11-15）」](machines.md#ファン2026-11-15)。
 
 #### ラジエーターのファン（pwm2）も操る
 
-経緯（2026-11-15 19:25 JST ごろ）: 本人の言葉は「GPUは冷やしたいし、上部はCPUのラジエーターのファンにしているから排気が弱いとおもうんだよね」。執事が「天面のラジエーターのファン（pwm2）は CPU の温度だけで回っていて、学習中は GPU が熱くても天面の排気が上がらない。ここも GPU と CPU の高いほうで回すようにすれば排気が増える。高いほうに合わせる形なら CPU の冷却は弱くならない。やる?」と聞き、本人が「やっとこう」と答えた。ポンプ（pwm6）は操らない。
+経緯（2026-11-15 19:25 JST ごろ）: 本人の言葉は「GPUは冷やしたいし、上部はCPUのラジエーターのファンにしているから排気が弱いとおもうんだよね」。執事が「天面のラジエーターのファン（pwm2）は CPU の温度だけで回っていて、学習中は GPU が熱くても天面の排気が上がらない。ここも GPU と CPU の高いほうで回すようにすれば排気が増える。高いほうに合わせる形なら CPU の冷却は弱くならない。やる?」と聞き、本人が「やっとこう」と答えた。ポンプ（pwm6）は操らない。22:59 JST に入れた。
 
 仕組み: ケースファンの組とは別の「ラジエーターの組」（`CASE_FAN_RAD_*`。意味は `hosts/ubuntu/README.md`）。fan2go の設定には、ファン `rad_pwm2`（曲線 `rad_fans` = maximum(`rad_gpu_curve`, `rad_cpu_curve`, `rad_cpu_backup_curve`)）と、センサー `rad_cpu`（nct6798 の temp9）・`rad_cpu_backup`（coretemp の temp1）が足される。ケースファンの `case_pwm5`・`gpu_max`・`cpu`・`gpu_curve`・`cpu_curve`・`case_fans` は、id も中身も変えない。組がないホスト（dekahamuntu）では、出力は 1 バイトも変わらない。
 
@@ -235,61 +232,108 @@ AMD（Zen）でも `intel_rapl_msr` が同じ `intel-rapl:0` に積算エネル�
 - **BIOS の曲線を 3℃ 前へ寄せた**: BIOS の曲線は 20℃:51、45℃:102、65℃:178、70℃:255（5 点目 125℃:255）。点の間は直線で、`pwm2_step_up_time=0`・`pwm2_step_down_time=0`・`pwm2_temp_tolerance=0`。主の CPU の曲線 `17:20 42:40 62:70 67:100` は、PWM で 17℃ 51、42℃ 102、62℃ 179、67℃ 255
 - **機械の確かめ**: 入れるスクリプト（と `--print-config`）は、温度の源が BIOS と同じ（`CASE_FAN_RAD_CPU_HWMON` が `CASE_FAN_HWMON` と同じで、`pwm2_temp_sel` が `CASE_FAN_RAD_CPU_TEMP_CHANNEL` と同じ）なら、sysfs の BIOS の曲線（`pwm2_auto_point*`。fan2go が動いていても読める。今の enable には依らない）と主の CPU の曲線を、両方の点の温度の全部で比べる（2 本の折れ線の差は、どちらかの点の温度で最小になる）。1 か所でも BIOS より小さければ、どの温度で BIOS がいくつ・こちらがいくつかを出して止まる。源が違う・BIOS の曲線のファイルがないときは、比べられないと注意を出して進める（標準エラー）。`--probe` の見立てにも比べの結果が出る
 - **Package に BIOS の数字をそのまま当てない理由**: Package は temp9 より高く出る（Package 40℃ のとき temp9 36.0、64℃ のとき 50.5）。学習中は Package 70〜76℃ なので、BIOS の数字を当てると、ラジエーターのファンが学習中ずっと全開になる
-- **平均の遅れの判断**: fan2go は温度を約 10 秒の指数移動平均でならす（下の「fan2go の動き」）。窓はセンサーごとには変えられず、全体の窓を短くすると dekahamuntu の設定も変わるので変えない。BIOS は遅れなし。3℃ の寄せは、毎秒 0.3℃ までの上がり方なら、ならした温度の遅れ（速さ × 約 10 秒）を埋める。それより速い上がり（CPU の負荷の急な立ち上がり）では、全開に届くのが BIOS より約 10 秒遅れうる。簡易水冷は冷却水とラジエーターの熱容量があり、ファンの 10 秒ほどの遅れで冷却水の温度はほとんど変わらない（250W で 10 秒 = 2.5kJ。冷却水とラジエーターの熱容量を約 1〜1.5kJ/K と見て、放熱がまったくなくても 2℃ ほど。見積もり）。ポンプは BIOS のまま全開
-- **保険の曲線（Package）**: 主の源（temp9。ラベルに undocumented とある源）が固まる・0 を返すようになっても、Package の温度でファンが上がる。値 `40:35 60:50 75:65 85:85 92:100` は、観測した BIOS の動き（Package 40℃ → pwm2 83、64℃ → 120、70〜76℃ → 151〜158）以上になるようにした: PWM は 40℃ 89、60℃ 128、75℃ 166、85℃ 217、92℃ 255（64℃ → 138、70℃ → 153、76℃ → 171）。ふだんは保険の曲線のほうが主の曲線より少し高い値を出すので、合間のファンは BIOS より少し（PWM で 10〜20）高く回る見込み
-- GPU の曲線は、まずケースファンと同じ（本人・執事）。学習中（GPU 66〜67℃）は PWM 197〜202 の計算（BIOS のときは 151〜158・fan2 約 1,250〜1,290 RPM）。ラジエーターのファンはケースファンよりうるさくなりうるので、入れたあとの音と温度を見て本人が決める
+- **平均の遅れの判断**: fan2go は温度を約 10 秒の指数移動平均でならす（下の「fan2go の動き」）。窓はセンサーごとには変えられず、全体の窓を短くすると dekahamuntu の設定も変わるので変えない。BIOS は遅れなし。3℃ の寄せは、毎秒 0.3℃ までの上がり方なら、ならした温度の遅れ（速さ × 約 10 秒）を埋める。それより速い上がり（CPU の負荷の急な立ち上がり）では、全開に届くのが BIOS より約 10 秒遅れうる。簡易水冷は冷却水とラジエーターの熱容量があり、ファンの 10 秒ほどの遅れで冷却水の温度はほとんど変わらない（250W で 10 秒 = 2.5kJ。冷却水とラジエーターの熱容量を約 1〜1.5kJ/K と見て、放熱がまったくなくても 2℃ ほど。見積もり）。ポンプは BIOS のまま全開。入れたあとの記録で、この遅れのぶん BIOS をわずかに下回った所が 3 回あった（下の「入れ直しの結果」）
+- **保険の曲線（Package）**: 主の源（temp9。ラベルに undocumented とある源）が固まる・0 を返すようになっても、Package の温度でファンが上がる。値 `40:35 60:50 75:65 85:85 92:100` は、観測した BIOS の動き（Package 40℃ → pwm2 83、64℃ → 120、70〜76℃ → 151〜158）以上になるようにした: PWM は 40℃ 89、60℃ 128、75℃ 166、85℃ 217、92℃ 255（64℃ → 138、70℃ → 153、76℃ → 171）。入れる前は「合間のファンは BIOS より少し（PWM で 10〜20）高く回る」と見込んでいたが、入れたあとの合間の pwm2 は平均 98 で、BIOS のときの合間（平均 94）とほぼ同じだった
+- GPU の曲線は、まずケースファンと同じ（本人・執事）。ラジエーターのファンはケースファンよりうるさくなりうるので、音と効き目を見て、曲線を戻す・変えるのは本人が決める
 
-fan2go の動き（fan2go 0.15.0 のソースを別の作業者が読んだもの。実機では未確認の所は見込み）:
+fan2go の動き（fan2go 0.15.0 のソースを別の作業者が読んだもの。実機で確かめた所はそう書く。ほかは見込み）:
 
-- `function: maximum` に 3 本以上の曲線を渡せる。同じセンサー（`gpu_max`）を複数の曲線が使ってよい。同じ platform（nct6798）をファンとセンサーの両方に使ってよい。hwmon のセンサーの `channel: 9` は `temp9_input`
+- `function: maximum` に 3 本以上の曲線を渡せる。同じセンサー（`gpu_max`）を複数の曲線が使ってよい。同じ platform（nct6798）をファンとセンサーの両方に使ってよい。hwmon のセンサーの `channel: 9` は `temp9_input`。実機で確かめた: この形の設定（3 本の maximum、nct6798 の channel 9 のセンサー）が、入れるスクリプトの中の root での `fan2go config validate`（本物の 0.15.0）を通り、そのまま動いている
 - 温度の平均は指数移動平均（1 秒ごとに `avg ← avg + (x − avg)/10`。時定数 約 9.5 秒）。50→80℃ のステップで平均が 70℃ に届くのは約 10.4 秒。PWM は 200ms に 3（毎秒 15）まで動く
-- センサーが読めないとき（見込み）: 動いている間の読みの失敗は、前の平均を保ったまま固まる（毎秒の警告だけ。制御は続く）。0 や負の値はそのまま平均に入り、その曲線は最初の点の値まで下がる（そのときは保険の曲線と GPU の曲線が支える）。起動時にセンサーが見つからないと、それを使う曲線の評価がエラーになり、そのファンの controller が止まって BIOS へ戻る（ほかのファンは動き続ける）
-- 止まる・落ちるとき: ファンごとに `onExit: restore` が元の mode（BIOS なら enable=5）を書き戻す。強制終了のときは、unit の `ExecStopPost`（`case-fan-restore-bios`）が `/etc/fan2go/case-fan-restore.conf` の行ごとに戻す。入れるスクリプトは pwm2 の行もそこに書く
+- センサーが読めないとき（見込み。実機では確かめていない）: 動いている間の読みの失敗は、前の平均を保ったまま固まる（毎秒の警告だけ。制御は続く）。0 や負の値はそのまま平均に入り、その曲線は最初の点の値まで下がる（そのときは保険の曲線と GPU の曲線が支える）。起動時にセンサーが見つからないと、それを使う曲線の評価がエラーになり、そのファンの controller が止まって BIOS へ戻る（ほかのファンは動き続ける）
+- 止まる・落ちるとき: ファンごとに `onExit: restore` が元の mode（BIOS なら enable=5）を書き戻す。強制終了のときは、unit の `ExecStopPost`（`case-fan-restore-bios`）が `/etc/fan2go/case-fan-restore.conf` の行ごとに戻す。入れるスクリプトは pwm2 の行もそこに書く（実機の記録は 2 行。下の「入れ直しの結果」）
 
-#### 入れ方（本人が実機で流す。sudo が要る）
+#### 入れ方（本人が実機で流した。sudo が要る）
 
 済んだこと（2026-11-15 JST、本人）:
 
 1. `scripts/install-case-fan-control-ubuntu.sh --probe --load-module`（17:00 JST ごろ。nct6775 を一時的に読み込んで調べた。再起動で消える）
-2. `--identify 5`（18:25 ごろ。10 秒だけ全開）: fan5 だけが 685 → 最大 1,071 RPM に上がった。`--identify 5 --stop`（19:00 ごろ。10 秒だけ pwm=0）: fan5 が 676 → 475 RPM に下がったが止まらなかった。どちらも終わると元（enable=5 pwm=124）へ戻った。pwm2 はラジエーターのファン（音で確かめ、止めたら止まった）。pwm1・pwm4 は止めても目に見えて止まったファンはなかった。値は [machines.md の「ファン（2026-11-15）」](machines.md#ファン2026-11-15)
+2. `--identify 5`（18:25 ごろ。10 秒だけ全開）: fan5 だけが 685 → 最大 1,071 RPM に上がった。`--identify 5 --stop`（19:00 ごろ。10 秒だけ pwm=0）: fan5 が 676 → 475 RPM に下がったが止まらなかった。どちらも終わると元（enable=5 pwm=124）へ戻った。pwm2 はラジエーターのファン（音で確かめた。止めたら止まって見えたが、回転数の上では pwm=0 でも約 680 RPM で回る。上の表）。pwm1・pwm4 は止めても目に見えて止まったファンはなかった。値は [machines.md の「ファン（2026-11-15）」](machines.md#ファン2026-11-15)
 3. `hosts/ubuntu/chibihamuntu.env` を `CASE_FAN_CHANNELS=5`・`CASE_FAN_CONTROL=1` にした
 4. 入れた（19:09 JST = 10:09 UTC。実機の写し `~/nix-config-issue6`、commit 551a83a と同じ中身で `scripts/install-case-fan-control-ubuntu.sh`）。GPU の曲線は dekahamuntu と同じ `45:30 60:45 70:65 78:85 83:100`。読むだけで確かめたこと:
    - `fan2go.service` は 19:09:26 JST に起動。active・enabled、再起動 0 回、メモリ約 13MB（19:13:54 JST）
    - `/etc/fan2go/fan2go.yaml` の sha256 は `--print-config` の出力と同じ。`/etc/modules-load.d/case-fan-control.conf` に nct6775。`/etc/fan2go/case-fan-restore.conf` は「nct6798 5 5」（入れる前の BIOS の pwm5_enable は 5）
    - 操っているのは pwm5 だけ（enable=1）。pwm1・2・4・6 は enable=5（BIOS の自動）、pwm7 は enable=0 のまま
    - カーネルのログに NVIDIA の Xid はない（起動 16:37 JST から 19:13 JST まで）
-   - 入れたあとの値は上の表の「前の曲線のとき（実機）」
-5. GPU の曲線を `45:30 55:50 65:75 72:90 78:100` にした（env だけ。19:20 JST ごろ、本人が決めた。上の表の「曲線」）
+   - 入れたあとの値は上の表の「最初の曲線のとき（実機）」
+5. GPU の曲線を `45:30 55:50 65:75 72:90 78:100` にした（env。19:20 JST ごろ、本人が決めた）
 6. ラジエーターのファン（pwm2）も操ることにした（env とスクリプト。19:25 JST ごろ、本人が決めた。上の「ラジエーターのファン（pwm2）も操る」）
+7. 入れ直した（22:59 JST = 13:59 UTC。学習中。GPU 100%・約 338W・65℃。写し `~/nix-config-issue6`、commit b15ddf3 と同じ中身で `scripts/install-case-fan-control-ubuntu.sh`）。結果は下の「入れ直しの結果」
 
-これから流すもの（GPU の曲線とラジエーターの組を合わせた入れ直し。1 回で済む。本人が流す。sudo）:
+入れ方の手順（次に入れ直すとき。本人が流す。sudo）:
 
 ```bash
 cd ~/.config/nix-config
 
-# 1. 書く予定の fan2go.yaml を見る（sudo 不要。ファンは変えない）。fans が case_pwm5 と rad_pwm2 の 2 つで、GPU の曲線が新しい値か、
+# 1. 書く予定の fan2go.yaml を見る（sudo 不要。ファンは変えない）。fans が case_pwm5 と rad_pwm2 の 2 つか、
 #    標準エラーに「ラジエーターの pwm2: CASE_FAN_RAD_CPU_CURVE は、BIOS の曲線（temp9。5 点）より弱い所がない」が出るかを見る
 scripts/install-case-fan-control-ubuntu.sh --print-config
 
-# 2. 入れ直す（sudo）。コマンドは初めに入れたときと同じ
+# 2. 入れ直す（sudo）
 #    （configure-ubuntu-hardware.sh を流しても、env が 1 なのでこれが流れる）
 scripts/install-case-fan-control-ubuntu.sh
 ```
 
-入れ直しでスクリプトがすること（`do_install` を読んだ）: 設定を確かめる（BIOS の曲線との比べを含む。弱ければ何も変えずに止まる）→ ラジエーターの組があれば、初回の解析でファンが止まる時間がある旨の注意を出す（止めはしない）→ fan2go が動いていれば止める（unit の `ExecStopPost` が BIOS の制御へ戻す）→ fan2go の実行ファイル（SHA256 が合えばそのまま）・センサーと戻しのスクリプトを置き直す → BIOS の `pwm5_enable`・`pwm2_enable` を `case-fan-restore.conf` に書き直す（止めたあとも enable=1 のままなら前の記録を使う。pwm2 は前の記録がないので、enable=1 のまま残っていれば止まる。ふつうは BIOS の 5 が読める）→ 設定を `fan2go config validate` で確かめてから置き換える → unit を置き直して起動し直す（`systemctl restart`）。止めてから起動するまでの短いあいだは BIOS の制御。
+入れ直しでスクリプトがすること（`do_install` を読んだ）: 設定を確かめる（BIOS の曲線との比べを含む。弱ければ何も変えずに止まる）→ ラジエーターの組があれば、初回の解析でファンが止まる時間がある旨の注意を出す（止めはしない）→ fan2go が動いていれば止める（unit の `ExecStopPost` が BIOS の制御へ戻す）→ fan2go の実行ファイル（SHA256 が合えばそのまま）・センサーと戻しのスクリプトを置き直す → BIOS の `pwm5_enable`・`pwm2_enable` を `case-fan-restore.conf` に書き直す（止めたあとも enable=1 のままなら前の記録を使う）→ 設定を `fan2go config validate` で確かめてから置き換える → unit を置き直して起動し直す（`systemctl restart`）。止めてから起動するまでの短いあいだは BIOS の制御。
 
-解析の結果は `/var/lib/fan2go/fan2go.db` に残る（入れ直しでは消さない）ので、入れ直しでは case_pwm5 の初回の解析は走らない見込み（fan2go 0.15.0 のソースの読み: 保存した結果があれば解析を飛ばす。DB の鍵はファンの `id` だけで、`case_pwm5` の id は変えていないので、ファンを足して入れ直しても解析し直さない。dekahamuntu-setup.md にも「2 回目からは測らない」とある。chibihamuntu では入れ直しのときに `journalctl -u fan2go` で確かめる）。`--uninstall` は `/var/lib/fan2go` を消すので、外してから入れると解析はやり直しになる。
+スクリプトが出す「初回の解析でラジエーターのファンが止まる時間がある」の注意は、pwm=0 で止まるファンのためのもの。chibihamuntu の fan2 は pwm=0 でも止まらなかった（下）。
 
-ラジエーターのファン（`rad_pwm2`）は新しいファンなので、入れ直しのときに初回の解析が走る（見込み）。fan2 は pwm=0 で止まるので、止まる所の探索（127 → 63 → 31 → … の二分探索、1 点あたり約 5〜30 秒）のあいだ、ラジエーターのファンが止まる時間が、合わせておそらく 30 秒〜1 分、最悪 3 分前後ある（推測）。そのあとの最大の探索は 255 から。ポンプ（pwm6）は BIOS の制御のまま回り続ける。なので、**学習の合間（CPU と GPU の負荷が低いとき）に流すのがよい**。入れるスクリプトも、入れる前にそう注意を出す（止めはしない）。解析の結果より、設定の `minPwm: 51`・`startPwm: 51`・`maxPwm: 255` が勝つ。
+解析の結果は `/var/lib/fan2go/fan2go.db` に残る（入れ直しでは消さない）。DB の鍵はファンの `id` だけなので、id を変えなければ入れ直しでは解析し直さない（22:59 の入れ直しで case_pwm5 について確かめた）。`--uninstall` は `/var/lib/fan2go` を消すので、外してから入れると解析はやり直しになる。
 
-初回の解析（見込みは別の作業者が fan2go 0.15.0 のソースを読んだもの。実機で確かめたのは 2026-11-15 19:09 JST に入れたとき。ログは `journalctl -u fan2go`、時刻は JST）:
+#### 初回の解析
 
-- 見込み: 失敗せずに通る。fan5 は止まる点がないので start の境界は PWM 0 になるが、使われるのは設定の `minPwm: 77`・`startPwm: 77`・`maxPwm: 255`（設定に書いた値は解析の結果で上書きされない。`internal/fans/hwmon.go` の `SetStartPwm` など）。ログには「Analysis boundaries detected (before config overrides)」と出る
-  - 実機で確かめた: 見込みどおり。19:09:29「Fan 'case_pwm5' has not yet been analyzed, starting initialization sequence...」→ 19:10:06「start/min boundary detected at PWM 0」→ 19:10:39「max boundary confirmed at PWM 255 (threshold 1022.2 RPM)」→ 19:11:12「RPM curve analysis finished in 1m43.695s」「Analysis boundaries detected (before config overrides): Start 1, Max 255」「PWM settings of fan 'case_pwm5': Min 77, Start 77, Max 255」「Starting controller loop」
+見込みは別の作業者が fan2go 0.15.0 のソースを読んだもの。ログは `journalctl -u fan2go`、時刻は JST。
+
+- 見込み: 失敗せずに通る。止まる点がなければ start の境界は PWM 0 になるが、使われるのは設定の `minPwm`・`startPwm`・`maxPwm`（設定に書いた値は解析の結果で上書きされない。`internal/fans/hwmon.go` の `SetStartPwm` など）。ログには「Analysis boundaries detected (before config overrides)」と出る
+  - 実機で確かめた（case_pwm5、19:09 に入れたとき）: 見込みどおり。19:09:29「Fan 'case_pwm5' has not yet been analyzed, starting initialization sequence...」→ 19:10:06「start/min boundary detected at PWM 0」→ 19:10:39「max boundary confirmed at PWM 255 (threshold 1022.2 RPM)」→ 19:11:12「RPM curve analysis finished in 1m43.695s」「Analysis boundaries detected (before config overrides): Start 1, Max 255」「PWM settings of fan 'case_pwm5': Min 77, Start 77, Max 255」「Starting controller loop」
+  - 実機で確かめた（rad_pwm2、22:59 に入れ直したとき）: 見込みどおり。22:59:55「Fan 'rad_pwm2' has not yet been analyzed, starting initialization sequence...」→ 23:00:32「start/min boundary detected at PWM 0」（36.835 秒）→ 23:01:05「max boundary confirmed at PWM 255 (threshold 1627.3 RPM)」（32.408 秒）→ 23:01:38「Interior coarse sampling captured 7 points」（33.643 秒）「RPM curve analysis finished in 1m42.887s」「Analysis boundaries detected (before config overrides): Start 1, Max 255」「PWM settings of fan 'rad_pwm2': Min 51, Start 51, Max 255」「Starting controller loop」
+- 見込み: 入れ直しでは、id の変わらない case_pwm5 は解析し直さない
+  - 実機で確かめた: 見込みどおり。22:59:55 に解析なしで「PWM settings of fan 'case_pwm5': Min 77, Start 77, Max 255」「Starting controller loop」
 - 見込み: 解析のあいだ、pwm は曲線と関係なく動く: 127 → 63 → 31 → 15 → 7 → 3 → 1 → 0（止まる所の探索）、255〜191（最大の探索と確認）、32〜224（間の点）。1 点あたり約 5〜30 秒（`analysis.settleTimeout` の既定 30 秒）。合計はおそらく 1.5〜3 分、上限は約 11 分。GPU 自身のファンは別に動く
-  - 実機で確かめた: 合計 1 分 43.7 秒（見込みの幅の中）。止まる所の探索は 37.582 秒、最大の探索は 33.046 秒（ログの値）。pwm が一点ずつどう動いたか、fan5 が最低付近にあった時間は記録していない
+  - 実機で確かめた（case_pwm5）: 合計 1 分 43.7 秒（見込みの幅の中）。止まる所の探索は 37.582 秒、最大の探索は 33.046 秒（ログの値）
+  - 実機で確かめた（rad_pwm2。5 秒ごとの記録）: 合計 1 分 42.9 秒。pwm2 は 63 → 15 → 7 → 3 → 1 → 0 と置かれ（約 25 秒、23:00:05〜23:00:32）、そのあと 223〜255、間の点 32・64・96・160・192・224
+- 見込み（外れた）: fan2 は pwm=0 で止まるので、止まる所の探索のあいだ、ラジエーターのファンが止まる時間が合わせて 30 秒〜1 分、最悪 3 分前後ある
+  - 実機で確かめた: **ラジエーターのファンは止まらなかった。** pwm2 が 63 → 0 と置かれた約 25 秒のあいだ、fan2 は 767 → 681〜684 RPM で回り続けた。最大の探索の 223〜255 では 1,541〜1,711 RPM、間の点は 32 で 767 RPM、64 で 773、96 で 978、160 で 1,146、192 で 1,424、224 で 1,577。fan2 は pwm=0 でも約 680 RPM（仕様の最低 650 RPM 付近）で回り続けるファンで、pwm 0〜64 では回転数がほぼ変わらない（681〜773 RPM）。解析のあいだの CPU Package は 65〜72℃、temp9 は 55〜57℃ で、直前（67〜70℃・55〜56℃）と変わらなかった
 - 見込み（実機では確かめていない）: 解析の途中で fan2go を止めると、解析が終わるまで終わらず（systemd の既定の 90 秒で SIGKILL）、そのときは unit の `ExecStopPost`（case-fan-restore-bios）が BIOS の制御へ戻す。測った結果は最後にまとめて保存するので、途中で止めると次の起動で解析は最初からやり直し
-- 見込み: 動いている間の RPM の検査（平均が 0 なら minPwm を上げる・全開でも 0 なら止まる）には、fan5 はいつも約 475 RPM 以上なので当たらない。入れたあと（19:13〜19:15 JST）は fan5 767〜776 RPM で、fan2go の再起動は 0 回
+- 見込み: 動いている間の RPM の検査（平均が 0 なら minPwm を上げる・全開でも 0 なら止まる）には、fan5（いつも約 475 RPM 以上）も fan2（いつも約 680 RPM 以上）も当たらない。入れ直しのあと 23:33 JST まで fan2go の再起動は 0 回
+
+#### 入れ直しの結果（2026-11-15 22:59 JST。読むだけで確かめた）
+
+- `fan2go.service` は 22:59:52 JST に起動し直した。active・enabled、再起動 0 回、メモリ約 14MB（23:33 JST）。入れ直しのとき、前の fan2go は SIGTERM で止まり、「case-fan-restore-bios: nct6798 pwm5 を pwm5_enable=5（BIOS の制御）へ戻しました」が出てから新しい設定で起動した
+- `/etc/fan2go/fan2go.yaml` の sha256 は `--print-config`（b15ddf3）の出力と同じ。入れるスクリプトの中の root での `fan2go config validate` を通った
+- `/etc/fan2go/case-fan-restore.conf` は「nct6798 5 5」「nct6798 2 5」の 2 行
+- 操っているのは pwm5 と pwm2（enable=1）。pwm1・pwm4・pwm6 は enable=5（BIOS）、pwm7 は enable=0 のまま。pwm6（ポンプと見られる）は 255・約 2,580〜2,610 RPM で変わらず
+- 入れ直しから 23:33 JST まで、fan2go のログに警告・エラーは 0 行。`case-fan-gpu-temp.status` は「ok 65 gpus=1」。カーネルのログに NVIDIA の Xid は 0 行（起動 16:37 JST から）
+
+学習中（GPU 100%・約 339W）の前後:
+
+| | 回数 | GPU | CPU Package | temp9 | pwm5 | fan5 | pwm2 | fan2 |
+|---|---|---|---|---|---|---|---|---|
+| 最初の曲線・前半（19:44〜21:39 JST、10 秒ごと） | 555 | 平均 66.3℃（最大 68） | 平均 71.1℃（最大 79） | 平均 58.9℃ | 平均 147 | 平均 763 RPM | 平均 153（BIOS） | 平均 1,271 RPM |
+| 最初の曲線・入れ直しの直前（21:40〜22:59 JST、20 秒ごと） | 196 | 平均 64.4℃ | 平均 67.8℃ | 平均 55.5℃ | 平均 137 | 平均 726 RPM | 平均 140（BIOS） | 平均 1,209 RPM |
+| 新しい設定（23:01〜23:32 JST、5〜8 秒ごと） | 235 | 平均 64.2℃（最大 65） | 平均 65.1℃（最大 71） | 平均 52.8℃ | 平均 185 | 平均 863 RPM | 平均 185 | 平均 1,423 RPM |
+
+読み方:
+
+- ファンは計算どおり上がった（65℃ で PWM 191。直前と比べて fan5 は約 +140 RPM、fan2 は約 +210 RPM）
+- **GPU の温度は、直前と比べてほとんど変わっていない**（64.4℃ → 64.2℃。nvidia-smi の 1℃ 刻みの中）。夜になって、最初の曲線のままでも 66.3 → 64.4℃ に下がっていた（部屋の温度の変化と見られる。未確認）ので、前半の 66.3℃ と比べて「2℃ 下がった」とは言えない
+- CPU は下がった（Package 67.8 → 65.1℃、temp9 55.5 → 52.8℃）
+- GPU 自身のファンは、最初の曲線のとき（19:13 JST、GPU 67℃）77%、新しい設定（23:33 JST、GPU 65℃）73%（どちらも 1 回の読み）。GPU のファンが自分で温度を保つので、ケースの風が増えたぶんは GPU の温度でなく GPU のファンの回転に出る見込み（確かめるには GPU のファンの回転も記録する必要がある。していない）
+- 音と効き目を見て、曲線を戻す・変えるのは本人が決める
+
+学習の合間（新しい設定。23:19:54〜23:28 JST、GPU 0%）:
+
+- GPU 53 → 39〜42℃。pwm5 163 → 77（約 50 秒で）・fan5 833 → 520〜531 RPM、pwm2 163 → 89〜103・fan2 1,366 → 904〜1,017 RPM。合間の平均は GPU 41.6℃、Package 40.4℃、temp9 38.0℃、pwm5 82、fan5 543 RPM、pwm2 98、fan2 973 RPM
+- 学習に戻ると（23:28:14 JST〜）、pwm5・pwm2 は 91・108 → 122 → 約 4 分後に 191 へ上がり、fan5 878 RPM・fan2 1,459 RPM（23:32:34 JST）
+- 最初の曲線での合間（20:43〜20:55 JST）は pwm5 平均 79・fan5 548 RPM、pwm2（BIOS）平均 94・fan2 967 RPM。新しい設定の合間の pwm2（平均 98）は、BIOS のとき（平均 94）とほぼ同じ
+- 「GPU に負荷がかかるとケースファン（とラジエーターのファン）の pwm と回転数が上がり、負荷を止めると下がる」（issue 6 の完了条件）を、最初の曲線（19:19〜19:29 JST の合間）と新しい設定（23:19〜23:28 JST の合間）の両方で確かめた
+
+pwm2 と BIOS の曲線（記録から）:
+
+- 入れ直しのあとの 344 回の記録（23:01:45〜23:32 JST）で、temp9 の値を BIOS の曲線（20:51 45:102 65:178 70:255）に入れた値と pwm2 を比べた。**341 回は BIOS の値以上。3 回だけ下回った**: 23:27:51（temp9 39.5℃、BIOS 90.8、pwm2 89）、23:27:56（43.0℃、97.9、96）、23:28:02（44.5℃、101.0、100）。差は最大 1.9（PWM 0..255。約 0.7%）
+- 3 回とも、学習が合間から戻って temp9 が 10 秒ほどで 35 → 44.5℃ に上がったとき。fan2go の温度の平均（約 10 秒）の遅れによる。入れる前に見込んでいた遅れで、3℃ の寄せではこれより急な上がりは埋まらない
+- 学習中は GPU の曲線が決めるので、pwm2 は BIOS の値（temp9 52.8℃ で約 132）より大きく上（平均 185）
+- 直す案（していない。本人が決める）: 主の CPU の曲線の寄せを 3℃ から 5〜6℃ に広げると、この大きさの上がりは埋まる（合間の pwm2 が 10 前後上がる。入れ直しが要る）。それでも、もっと急な上がりでは 10 秒ほどの遅れは残る（窓はセンサーごとに変えられない）
 
 入れたあとの確かめ方:
 
@@ -298,14 +342,12 @@ systemctl status fan2go                           # active (running)
 cat /run/fan2go/case-fan-gpu-temp.status          # 「<時刻> ok <GPU の℃> gpus=1」
 scripts/install-case-fan-control-ubuntu.sh --probe   # pwm5 と pwm2 の enable=1（fan2go が操っている）、pwm6 などは BIOS のまま。RPM。見立てに BIOS の曲線との比べ
 cat /etc/fan2go/case-fan-restore.conf             # 「nct6798 5 5」と「nct6798 2 5」の 2 行
-journalctl -u fan2go -b --no-pager | grep -E "analyzed|boundar|PWM settings"   # rad_pwm2 の初回の解析。case_pwm5 は解析し直していないこと
+journalctl -u fan2go -b --no-pager | grep -E "analyzed|boundar|PWM settings"   # 解析の有無と PWM settings
 ```
 
-`case-fan-gpu-temp.status` の行は、chibihamuntu では `NVIDIA_EXPECTED_GPUS=0` なので枚数で failsafe にはならず、見えた枚数がそのまま `gpus=1` と出る（dekahamuntu は 2 枚を期待して `gpus=2`）。`nvidia-smi` が失敗する・1.2 秒で返らない・GPU が 1 枚も見えない・数でない値のときは「failsafe 100 <理由>」で、ケースファンは全開になる。
+`case-fan-gpu-temp.status` の行は、chibihamuntu では `NVIDIA_EXPECTED_GPUS=0` なので枚数で failsafe にはならず、見えた枚数がそのまま `gpus=1` と出る（dekahamuntu は 2 枚を期待して `gpus=2`）。`nvidia-smi` が失敗する・1.2 秒で返らない・GPU が 1 枚も見えない・数でない値のときは「failsafe 100 <理由>」で、ケースファンとラジエーターのファンは全開になる。
 
-GPU に負荷をかけて pwm と回転数が上がり、負荷を止めると下がるのを見る（issue 6 の完了条件。前の曲線で学習中の値は読んだが、負荷を止めたとき・戻ったときはまだ確かめていない）。
-
-#### 外し方（ラジエーターの組があっても同じ。止めると pwm2 も BIOS の制御へ戻る）
+#### 外し方（ラジエーターの組があっても同じ。止めると pwm2 も BIOS の制御へ戻る見込み）
 
 ```bash
 sudo systemctl stop fan2go            # 一時的に BIOS の制御へ（起動すればまた操る）
@@ -315,15 +357,15 @@ scripts/install-case-fan-control-ubuntu.sh --uninstall   # 全部外す（unit�
 
 `--uninstall` のあとは env の `CASE_FAN_CONTROL` を 0 に戻す（1 のままだと、次に `configure-ubuntu-hardware.sh` を流したときに入れ直される）。
 
-#### 入れたあとに埋めるところ
+#### 残っていること
 
-- 新しい GPU の曲線とラジエーターの組で入れ直した日時（この節の冒頭と、表の「操るチャネル」「曲線」「ラジエーターの組の曲線」の「まだ入れていない」を直す）
-- case_pwm5 の初回の解析が走らなかったか（`journalctl -u fan2go` に case_pwm5 の「has not yet been analyzed」が出ないか）
-- rad_pwm2 の初回の解析の結果（かかった時間、start/min・max の境界、「PWM settings of fan 'rad_pwm2'」。fan2 が止まっていた時間が分かれば）
-- 学習中と合間の pwm5・fan5・pwm2・fan2 と、GPU の温度・CPU の温度（Package と temp9）。計算では学習中（GPU 66〜67℃）に pwm5・pwm2 とも PWM 197〜202
-- CPU に負荷がかかったとき（GPU が冷えているとき）に、pwm2 が BIOS の曲線の値（temp9 で 20:51 45:102 65:178 70:255）を下回らないこと
-- ラジエーターのファンの音（GPU の曲線を変えるかは本人が決める）
-- 負荷を止めたとき・戻ったときの pwm5・fan5・pwm2・fan2（issue 6 の完了条件）
+- 実機のチェックアウト（`~/.config/nix-config`）は origin/develop のまま（env は `CASE_FAN_CONTROL=0` の古い版）。この変更が develop に入ったら、実機で `git pull` する。それまで実機のチェックアウトで入れるスクリプトを流すと「切ってあります。何も変えていません」で終わる（外しはしない）。pull のあと、写し `~/nix-config-issue6` は消してよい
+- 再起動のあとに nct6775 が自動で読み込まれ、fan2go が自分で立ち上がること（未確認）
+- `systemctl stop fan2go` で pwm2・pwm5 が BIOS の制御（enable=5）へ戻ること。入れ直しのときに pwm5 が戻ったのはログで見た。pwm2 はまだ
+- CPU だけに強い負荷がかかったとき（GPU が冷えているとき）の pwm2。記録は学習と合間だけ。BIOS の曲線をわずかに下回った 3 回（上の「pwm2 と BIOS の曲線」）を受けて、主の CPU の曲線の寄せを広げるかは本人が決める
+- ケースの付属ファン 6 つが全部 pwm5 につながっているか
+- GPU のファンの回転の前後の比べ（ケースの風が増えたぶんが GPU のファンの回転に出ているか）
+- ラジエーターのファンとケースファンの音。曲線を戻す・変えるかは本人が決める
 
 ## ComfyUI
 
