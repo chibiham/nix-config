@@ -1,0 +1,95 @@
+# install-case-fan-control-ubuntu.sh が /etc/systemd/system/fan2go.service として置く。
+# fan2go の公式の unit（0.16.0 の fan2go.service）をもとに、実行ファイルの場所と、止まったときに
+# BIOS の制御へ戻す ExecStopPost を足した。設定は /etc/fan2go/fan2go.yaml（同じスクリプトが書く）。
+[Unit]
+Description=fan2go: case fans follow the GPU temperature
+Documentation=https://github.com/markusressel/fan2go
+After=systemd-modules-load.service nvidia-persistenced.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/fan2go -c /etc/fan2go/fan2go.yaml --no-style
+# 止まるたび（落ちたときも）に、記録した BIOS の制御へ戻す。+ は下の制限の外で動かす
+ExecStopPost=+/usr/local/sbin/case-fan-restore-bios
+Restart=always
+RestartSec=10
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+
+RuntimeDirectory=fan2go
+RuntimeDirectoryMode=0755
+StateDirectory=fan2go
+StateDirectoryMode=0755
+LogsDirectory=fan2go
+LogsDirectoryMode=0755
+ConfigurationDirectory=fan2go
+ConfigurationDirectoryMode=0755
+
+# cmd センサー（case-fan-gpu-temp → nvidia-smi）が GPU を読むため、NVIDIA のデバイスを許す
+PrivateDevices=false
+DeviceAllow=/dev/null rw
+DeviceAllow=/dev/zero rw
+DeviceAllow=/dev/nvidiactl rw
+DeviceAllow=/dev/nvidia0 rw
+DeviceAllow=/dev/nvidia1 rw
+DeviceAllow=/dev/nvidia2 rw
+DeviceAllow=/dev/nvidia3 rw
+DeviceAllow=/dev/nvidia-uvm rw
+DeviceAllow=/dev/nvidia-uvm-tools rw
+DeviceAllow=/dev/nvidia-caps/* r
+DeviceAllow=/dev/urandom r
+DeviceAllow=char-hwmon rw
+DeviceAllow=char-thermal rw
+DeviceAllow=char-i2c rw
+DeviceAllow=char-misc rw
+
+ReadWritePaths=/sys/class/hwmon
+ReadWritePaths=/sys/class/thermal
+ReadWritePaths=/sys/devices
+
+ReadOnlyPaths=/sys/bus
+ReadOnlyPaths=/proc/cpuinfo
+ReadOnlyPaths=/proc/meminfo
+ReadOnlyPaths=-/etc/sensors3.conf
+ReadOnlyPaths=-/etc/sensors.conf
+ReadOnlyPaths=/proc/modules
+ReadOnlyPaths=/sys/module
+
+# API・統計は使わない（設定で切ってある）。ネットワークは localhost だけ
+PrivateNetwork=false
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+PrivateUsers=false
+ProtectHostname=true
+ProtectClock=true
+
+CapabilityBoundingSet=CAP_DAC_OVERRIDE CAP_FOWNER CAP_SYS_RAWIO CAP_CHOWN
+AmbientCapabilities=CAP_SYS_RAWIO
+
+SystemCallFilter=@system-service
+SystemCallFilter=~@debug @mount @cpu-emulation @obsolete @privileged @reboot @swap @resources @raw-io
+SystemCallErrorNumber=EPERM
+
+MemoryMax=256M
+TasksMax=50
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target

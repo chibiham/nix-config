@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # RAPLの消費電力カウンタ（/sys/class/powercap/*/energy_uj）をpowerグループに読ませる。
+# Intelも AMD（Zen、intel_rapl_msr）も同じ powercap の intel-rapl:* に出る。出ないCPU・カーネルでは何も変えない。
 # グループ追加の反映は次回ログインから。OSは再起動しない。
 set -euo pipefail
 
@@ -11,6 +12,16 @@ if [[ "$(uname -s)" != Linux ]]; then
 fi
 if [[ $EUID -ne 0 ]]; then
   exec sudo /bin/bash "$(realpath "$0")" "$@"
+fi
+
+shopt -s nullglob
+zones=(/sys/class/powercap/*/energy_uj)
+shopt -u nullglob
+if [[ ${#zones[@]} -eq 0 ]]; then
+  echo "powercapの energy_uj が見つかりません（CPU: $(awk -F': ' '/^model name/ { print $2; exit }' /proc/cpuinfo)、カーネル: $(uname -r)）" >&2
+  echo "intel_rapl_msr が読み込まれているか確かめてください: lsmod | grep rapl ; sudo modprobe intel_rapl_msr" >&2
+  echo "読めないままなら hosts/ubuntu/<ホスト名>.env で CPU_POWER_READ=0 にします。何も変更していません。" >&2
+  exit 0
 fi
 
 target_user="${1:-${SUDO_USER:-}}"
@@ -30,5 +41,5 @@ udevadm control --reload
 udevadm trigger --subsystem-match=powercap --action=add
 udevadm settle
 
-ls -l /sys/class/powercap/*/energy_uj
+ls -l "${zones[@]}"
 echo "RAPLを${target_user}（powerグループ）から読めるようにしました。新しいログインから有効です。"

@@ -1,5 +1,7 @@
 # Nix Configuration
 
+method: subako@1eff551
+
 Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 複数のMacとUbuntu Serverで同じ開発環境を再現可能にする。
 
@@ -23,19 +25,27 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
 │   ├── common.nix     # 共通設定
 │   ├── darwin.nix     # macOS共通設定
 │   ├── linux.nix      # Linux固有設定
-│   └── hosts/         # Macごとの固有設定（macbook.nix / mac-mini.nix）
+│   └── hosts/         # ホストごとの固有設定（macbook.nix / mac-mini.nix / dekahamuntu.nix）
+├── hosts/ubuntu/      # Ubuntu機ごとのスクリプトの設定（<ホスト名>.env。ADR 0002）
+├── Brewfile           # Homebrew一覧（両Mac共通・同じ内容）
 ├── udev/             # Ubuntuへ配るudevルール（RAPL読み取り権限）
+├── systemd/          # Ubuntuへ配るsystem unit（GPU LED消灯、fan2go）
 ├── claude/skills/     # Nixで ~/.claude/skills に配るClaude Code skill（civitai-download）
 └── scripts/
     ├── bootstrap.sh       # 新しいMacの初期セットアップ
-    ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ
+    ├── lib/ubuntu-host.sh # Ubuntu機ごとの設定を読む（各*-ubuntu.shがsource）
+    ├── bootstrap-ubuntu.sh # Ubuntu Serverの初期セットアップ（第1段）
     ├── install-tailscale-ubuntu.sh # Tailscale導入・認証
     ├── install-nvidia-driver-ubuntu.sh # Ubuntu推奨NVIDIAドライバ
     ├── configure-ubuntu-hardware.sh # HWE・GPU起動時消灯・RAPL権限を反映（再起動なし）
     ├── install-hwe-kernel-ubuntu.sh # HWE・対応NVIDIAモジュール
+    ├── check-nvidia-kernel-modules-ubuntu.sh # カーネル更新・再起動の前にNVIDIAモジュールの版を確かめる（読むだけ）
     ├── install-gpu-led-off-ubuntu.sh # OpenRGBと消灯サービスの導入
-    ├── turn-off-gpu-led.sh # Gigabyte RTX 3090だけを消灯
+    ├── turn-off-gpu-led.sh # ホストの設定で決めたGPUだけを消灯（既定はGigabyte RTX 3090）
     ├── install-rapl-power-access-ubuntu.sh # RAPL energy_ujをpowerグループへ（udev）
+    ├── install-case-fan-control-ubuntu.sh # ケースファンをGPUの温度で回す（fan2go。--probe は読むだけ。systemd/fan2go.service）
+    ├── case-fan-gpu-temp.sh # fan2goのセンサー: GPUの温度の最大（読めなければ全開側）
+    ├── case-fan-restore-bios.sh # fan2goが止まったときにBIOSの制御へ戻す
     ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動
     ├── install-diffusion-pipe-ubuntu.sh # Anima LoRA学習環境
     ├── install-applio-ubuntu.sh # Applio（RVC学習・リアルタイム音声変換）
@@ -79,7 +89,11 @@ bootstrap.shがやること（すべて冪等、途中失敗しても再実行�
 nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#$USER@mac-mini
 ```
 
-Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@ubuntu-server` にする。
+Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@ubuntu-server`（chibihamuntu）または `$USER@dekahamuntu` にする。
+dekahamuntu の初期構築は `docs/dekahamuntu-setup.md`、モデルの置き場所の叩き台は `docs/ai-server-placement.md`。
+4 台の機械の部品・仕様の正は `docs/machines.md`。
+
+定期的な更新（flake update → ビルド → vulnix → switch → mise → Homebrew）は `docs/maintenance.md` の手順で行う。
 
 **注意**: `$USER` のflake.nix該当エントリが必要（`mkDarwinHome` で追加）。
 
@@ -90,7 +104,10 @@ Ubuntu Serverは `docs/ubuntu-server.md` に従い、ターゲットを `$USER@u
 nix eval --raw '.#homeConfigurations."chibiham@mac-mini".activationPackage.drvPath'
 nix eval --raw '.#homeConfigurations."chibiham@macbook".activationPackage.drvPath'
 nix eval --raw '.#homeConfigurations."chibiham@ubuntu-server".activationPackage.drvPath'
+nix eval --raw '.#homeConfigurations."chibiham@dekahamuntu".activationPackage.drvPath'
 ```
+
+Ubuntu機のスクリプトを変えたら、chibihamuntu の挙動（`hosts/ubuntu/chibihamuntu.env` の既定）が変わっていないかを確かめる。
 
 push/PR時はGitHub Actions CI（`.github/workflows/ci.yml`）が全ユーザー分の評価を実行。
 `flake.lock` は毎週月曜に自動更新PRが作られる（`update-flake-lock.yml`）。
@@ -142,18 +159,27 @@ macOSのセキュリティ制約により自動化できないもの:
 - pnpm グローバルパッケージ: clawdbot（bootstrap.shで導入）
 - コーディングエージェント: Qwen Code, Pi（pi.dev）をmise管理のNode.jsへnpmで導入（bootstrap）。
   Piは `~/.pi/agent/models.json`（Nix管理）でchibihamuntuのQwen3.8（tailnet経由）を既定モデルにする
+- Oh My Pi（omp）: flake input `omp`（fork `chibiham/oh-my-pi` の honest-oauth をコミット固定）のHome Managerモジュールで導入。
+  Anthropic OAuthはClaude Codeを装わない（偽装は `PI_ANTHROPIC_OAUTH_CLAUDE_CODE_FINGERPRINT=1` のときだけ）。
+  `~/.omp/agent/models.yml`（Nix管理）でchibihamuntu（`qwen-ubuntu`）とdekahamuntu（`qwen-dekahamuntu`。Flash-Nextの2つ）を宣言（Macのローカルllama.cppはメモリ不足になるので無効）。Claude/ChatGPTは `/login` で各自認証
+- Aikido Safe Chain: 公式リリースのバイナリをNixでハッシュ固定導入（common.nix）。
+  npm/npx/pnpm/pnpx/yarn/bun/bunx/rush/rushx/pip/pip3/uv/uvx/poetry/pipx/pdm を
+  PATH先頭のラッパー（非対話シェルや `npm run` の子プロセスにも効く）と対話zshの関数で包み、マルウェアと公開72時間未満の版を拒否
+  （`SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS=72`）。`python -m pip` と絶対パス呼び出しは対象外。
+  証明書等は `~/.safe-chain/` に初回実行時に作られる。確認は `npm safe-chain-verify`
 - シークレット管理: 1password-cli + update-secretsコマンド
 - その他: htop, tree, curl, wget, awscli, terraform, flyctl, cloudflared
 - Linux AI推論: CUDA対応llama.cpp + ai-mode（モデル取得は明示スクリプト）
 - ai-modeの排他対象: qwen38 / comfyui / applio。3090の24GBを取り合うため、applioはunitの `Conflicts=` で同時起動を禁止している。
-  qwen38（Router）はモデル未ロードならVRAMを使わないのでComfyUIと同時に動かし、VRAMの受け渡しはComfyUIノードと `ai-mode` が行う
+  qwen38（Router）はモデル未ロードならVRAMを使わないのでComfyUIと同時に動かし、VRAMの受け渡しはComfyUIノードと `ai-mode` が行う。
+  以上はchibihamuntu（3090 1枚）の話。dekahamuntu（5060 Ti 16GB ×2）は既定が `ai-mode split`（GPU 0 = ComfyUI、GPU 1 = qwen38 を常駐）で、2枚を束ねるときだけ `ai-mode llm-dual`（qwen38-dual。ComfyUI・qwen38と排他）に切り替える
 
 ### macOS統合
 
 - **Spotlight統合**: mac-app-util（トランポリンアプリ作成、switch時に自動実行）
 - **Karabiner-Elements**: karabiner.jsonをNix管理（GUI変更はswitchで上書きされる）
 - **Ghostty**: 設定（`~/.config/ghostty/config`）をNix管理。アプリ本体はHomebrew cask
-- **GUIアプリ**: Brewfile（bootstrap.shで `brew bundle` 実行）
+- **Homebrew**: `Brewfile` が両Mac共通の一覧（マシン別の分割はしない）。`HOMEBREW_BUNDLE_FILE`（darwin.nix）で引数なしの `brew bundle` がこれを使う（bootstrap.shも同じ）。macbookでの更新手順は `docs/maintenance.md`。Nix提供ツールはbrewで入れない
 - **Nix GC**: 週次で30日超の世代を自動削除（`nix.gc`、launchd）
 
 ### シェル設定
