@@ -144,6 +144,8 @@ update-secrets
   検証用に `~/.config/git/allowed_signers` もNixが配置
 - **その他ホスト**: 1Password SSH Agent（darwin.nixの `Host *`）
 - github.com は `StrictHostKeyChecking accept-new` で初回接続も非対話で通る
+- Ubuntu機では `https://github.com/chibiham/` のURLを `git@github.com:chibiham/` に読み替える（`url.insteadOf`、`home/linux.nix`）。
+  httpsでcloneした自分のリポジトリも同じ鍵でpull・pushできる
 
 ## 手動設定（Nix管理外）
 
