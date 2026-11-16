@@ -39,6 +39,96 @@ curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix 
 ~/.config/nix-config/scripts/install-tailscale-ubuntu.sh
 ```
 
+前提として、共通のマシン鍵`~/.ssh/id_ed25519`を本人がMacから写しておく（次の章）。bootstrapは鍵がなくても通るが、鍵がないとそのあとの署名つきのcommitと、自分のリポジトリのpull・pushが通らない。
+
+## GitHubの鍵（共通のマシン鍵）
+
+Ubuntu機の前提。どのUbuntu機でもここが正で、[dekahamuntu-setup.md](dekahamuntu-setup.md)からも参照する。
+
+### 何が要るか
+
+共通のマシン鍵`~/.ssh/id_ed25519`（と`~/.ssh/id_ed25519.pub`）。gitの設定は全機共通（`home/common.nix`）で、この1本を次の3つに使う:
+
+| 用途 | 設定 | 鍵がないと |
+|---|---|---|
+| GitHubの認証 | `~/.ssh/config`の`Host github.com`が`IdentityFile ~/.ssh/id_ed25519`（`IdentitiesOnly yes`、`IdentityAgent none`） | `git@github.com:`へのclone・pull・pushが通らない |
+| 自分のリポジトリのpull・push | `home/linux.nix`の`url."git@github.com:chibiham/".insteadOf = "https://github.com/chibiham/"`。httpsでcloneした`chibiham/*`も、gitの通信はSSH（この鍵）になる | `~/.config/nix-config`・`~/ai`などの`git pull`・`git push`・`git fetch`が通らない（`gh auth login`のhttpsの認証では代わりにならない） |
+| commit・tagの署名 | `commit.gpgsign = true`・`tag.gpgsign = true`、`gpg.format = ssh`、`user.signingkey = ~/.ssh/id_ed25519` | 署名できず、commitが止まる |
+
+`id_ed25519.pub`はNixが置かない（Macは`bootstrap.sh`が秘密鍵から作る）。`authorized_keys`への公開鍵の追記と、`id_ed25519`があるときの`chmod 600`は`home-manager switch`がする（`home/common.nix`の`setupAuthorizedKeys`）。
+
+### どう置くか（本人が行う）
+
+鍵の正本は1Passwordの`op://MyMachine/chibiham_machine_key`。Ubuntu機のService Accountはその機械専用のVault（`chibihamuntu`・`dekahamuntu`）しか読めないので、Ubuntu機の上で`op read`しても取れない。**鍵を持っている機械（Mac）から写す。** 秘密鍵を動かす操作なので本人が行う（エージェントはしない）。
+
+```bash
+# Macで（<ホスト> は dekahamuntu など。Tailscaleの前ならLANのIP）
+ssh <ホスト> 'mkdir -p ~/.ssh && chmod 700 ~/.ssh'
+scp ~/.ssh/id_ed25519 <ホスト>:.ssh/id_ed25519
+
+# Ubuntu機で
+chmod 600 ~/.ssh/id_ed25519
+ssh-keygen -y -f ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.pub
+```
+
+秘密鍵の中身は表示しない・ほかの場所へ写さない。
+
+### いつやるか
+
+`bootstrap-ubuntu.sh`はGitHubにつながない（最初のcloneは公開リポジトリをhttpsで取るので、鍵は要らない。bootstrapの中の`home-manager switch`・`update-secrets`・mise・各CLIの導入も鍵を使わない）。鍵がなくても、bootstrapとswitchは通る。
+
+ただし、switchのあとは`url.insteadOf`が効くので、`~/.config/nix-config`の`git pull`もSSHになる。鍵がないと、ここで止まる。なので:
+
+- 置くのはbootstrapの前でもあとでもよい。**遅くとも、switchのあとの最初の`git pull`・`~/ai`のclone・commitの前**に置く
+- 迷ったら、OSを入れてMacから入れるようになったら（cloneの前後）すぐ置く。そのあとのswitchが`chmod 600`をかけ直す
+- 下の「置いたあとの確かめ」は、switchのあと（`~/.ssh/config`と`allowed_signers`が入ってから）に流す
+
+`gh auth login`（https）は、ghのコマンド（issue・PR・API、`gh repo clone`の名前の解決）に使う。自分のリポジトリのgitの通信（clone・pull・push）は`url.insteadOf`でSSHになり、ghのhttpsの認証は使われない（`gh repo clone chibiham/...`も、中で走るgitはSSHになる）。
+
+### GitHubへの登録
+
+この鍵の公開鍵が、GitHubの本人のアカウントに**認証用（Authentication key）と署名用（Signing key）の両方**で登録されていること。共通の鍵なので登録済みのはず（認証用は、Macからの`ssh -T git@github.com`が通るので登録されている。2026-11-16。署名用はGitHubの側では確かめていない）。鍵を作り直したときや、通らないときに確かめる:
+
+```bash
+ssh -T git@github.com    # 「Hi chibiham! You've successfully authenticated ...」（終了コードは1でよい）。認証用の登録の確かめ
+gh ssh-key list          # 一覧のKEYが home/common.nix の machinePubKey と同じ行があること
+```
+
+- `gh ssh-key list`はgh 2.93.0で、認証用と署名用の両方を取りに行く（helpには列の説明がない。バイナリの中に`user/keys`と`user/ssh_signing_keys`の両方がある）。種類の列で、同じ鍵が`authentication`と`signing`の2行あるかを見る見込み（実際の出力では確かめていない）。権限が足りないと言われたら、ghが出す指示どおりに`gh auth refresh`でスコープを足す
+- 確かめられないときは、GitHubの設定画面（Settings > SSH and GPG keys。「Authentication keys」と「Signing keys」の2つの欄）で見る
+- 署名用の登録がないと、commitの署名はできてもGitHubの画面で「Verified」にならない。足すなら本人が`gh ssh-key add ~/.ssh/id_ed25519.pub --type signing`（認証用は`--type authentication`、既定）か設定画面で
+
+公開鍵と指紋（`home/common.nix`の`machinePubKey`と同じもの）:
+
+```
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB0sBTSjm9KmyYVGjT5FPImrH3izZtM/FegoEPE+bxw/
+SHA256:RD+wnU93j6cCT4AEoO5BH0/WGzioZuElWeeVmhcAnXU
+```
+
+### 置いたあとの確かめ
+
+switchのあと（読むだけ）:
+
+```bash
+ssh-keygen -lf ~/.ssh/id_ed25519.pub      # SHA256:RD+wnU93j6cCT4AEoO5BH0/WGzioZuElWeeVmhcAnXU（Macと同じ）
+ssh -T git@github.com                     # Hi chibiham! ...
+git -C ~/.config/nix-config fetch         # 通ること（url.insteadOf でSSHになっている）
+git config --get-regexp '^url\.'          # url.git@github.com:chibiham/.insteadof https://github.com/chibiham/
+```
+
+commitしたあと（署名）:
+
+```bash
+git log --format='%G? %GK' -1             # 「G SHA256:RD+wnU…」（G = 正しい署名で、allowed_signers に載った鍵）
+git log --show-signature -1               # Good "git" signature for ryuto.chiba@chibiham.com ...
+```
+
+2026-11-16の実機: chibihamuntuは前から同じ鍵（Macと指紋が同じ）。dekahamuntuは鍵がなく、`~/ai`でcommitしようとして署名できなかったので、本人がMacから写した（2026-11-16。いまは署名つきのcommitができている）。
+
+### 共通の鍵の注意
+
+1本の鍵を全機に置くので、どれか1台から漏れると全機・GitHubの認証と署名の全部に効く（漏れたら、GitHubの登録を外して鍵を作り直し、全機に置き直す）。機械ごとの鍵に分ける道もあるが、いまの方針は1本（`CLAUDE.md`の設計方針）。
+
 ## シークレット（1Password）
 
 Mac用の`MyMachine` Vaultは使わず、このマシン専用の`chibihamuntu` Vaultを参照する。
