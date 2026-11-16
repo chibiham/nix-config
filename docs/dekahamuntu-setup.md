@@ -26,9 +26,10 @@ dekahamuntu は chibihamuntu と同じく AI サーバーとして使う 2 台�
 1. Ubuntu Server 24.04.5 を、インストーラの起動メニューで **HWE カーネル** を選んで入れる（下の 1.。GA カーネルでは有線も Wi-Fi も見えない）。OpenSSH server を入れ、GitHub の公開鍵を取り込む
 2. 1Password に Vault `dekahamuntu` とアイテム（`CIVITAI_TOKEN`・`R2_CHIBIHAM_AI`）、その Vault だけを読める Service Account を作る（下の 0.）
 3. Nix を入れ、このリポジトリを clone して `bootstrap-ubuntu.sh` を流す。Service Account のトークンを聞かれたら貼る（下の 2.〜4.）
+   - 前提: 共通のマシン鍵 `~/.ssh/id_ed25519` を Mac から写す（下の 3. の「鍵を置く」。正は [ubuntu-server.md の「GitHubの鍵（共通のマシン鍵）」](ubuntu-server.md#githubの鍵共通のマシン鍵)）。鍵がないと、署名つきの commit と、自分のリポジトリの pull・push が通らない
 4. `install-tailscale-ubuntu.sh` で Tailscale に入れ、ブラウザで認証する（下の 5.）
 5. `claude` と `codex login` にログインする（下の 6.）
-6. GitHub に `gh auth login` で入る（https。`~/ai` の clone に使う。下の 6.）。ssh の鍵で push したいなら、鍵を作って GitHub に登録する（任意。2026-11 時点では作っていない）
+6. GitHub に `gh auth login` で入る（https。gh のコマンドに使う。下の 6.）。自分のリポジトリ（`~/ai` を含む）の clone・pull・push は `url.insteadOf` で SSH になり、3. で置いた共通の鍵で通る
 7. 第2段の sudo（ドライバ、`build-essential` など、linger、Tailscale serve、ディスクの拡張）は、エージェントが出したコマンドを本人が流す（エージェントは sudo のパスワードを持たない）。Tailscale serve の Qwen の 8443（`sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080`）は本人が sudo で流した（2026-11-14。tailnet から答えが返るのを確かめた。下の 2-5）
 
 ---
@@ -87,6 +88,16 @@ git -C ~/.config/nix-config switch feat/dekahamuntu
 hostname -s   # dekahamuntu と出ること（hosts/ubuntu/dekahamuntu.env を読むため）
 ```
 
+鍵を置く（本人。秘密鍵を動かすので、エージェントはしない）: 共通のマシン鍵 `~/.ssh/id_ed25519` を Mac から写す。手順・確かめ方・GitHub への登録は [ubuntu-server.md の「GitHubの鍵（共通のマシン鍵）」](ubuntu-server.md#githubの鍵共通のマシン鍵)。bootstrap は鍵がなくても通るが、bootstrap の switch のあとは `~/.config/nix-config` の `git pull` も SSH になるので、遅くともそれまでに置く。
+
+```bash
+# Mac で
+scp ~/.ssh/id_ed25519 chibiham@<LANのIP>:.ssh/id_ed25519
+# dekahamuntu で
+chmod 600 ~/.ssh/id_ed25519 && ssh-keygen -y -f ~/.ssh/id_ed25519 > ~/.ssh/id_ed25519.pub
+ssh-keygen -lf ~/.ssh/id_ed25519.pub   # SHA256:RD+wnU93j6cCT4AEoO5BH0/WGzioZuElWeeVmhcAnXU（Mac と同じ）
+```
+
 ### 4. bootstrap
 
 ```bash
@@ -135,9 +146,12 @@ claude --version && codex --version && node --version
 echo "$CIVITAI_TOKEN" | head -c 4; echo   # シークレットが読めていれば先頭だけ出る
 claude          # 表示された URL を Mac で開いてログイン
 codex login     # 使うなら
-gh auth login   # GitHub.com、HTTPS、ブラウザで認証。~/ai（private repo）の clone に使う
+gh auth login   # GitHub.com、HTTPS、ブラウザで認証。gh のコマンド（issue・PR・gh repo clone）に使う
 gh auth status
+ssh -T git@github.com   # 「Hi chibiham! …」。自分のリポジトリの git の通信はこの鍵（3.）で通る
 ```
+
+`url.insteadOf`（`home/linux.nix`）が入ってから、`https://github.com/chibiham/` の clone・pull・push は SSH（共通の鍵）で通り、gh の https の認証は使われない。署名つきの commit も同じ鍵。確かめ方は [ubuntu-server.md の「置いたあとの確かめ」](ubuntu-server.md#置いたあとの確かめ)。
 
 ここまでで第1段は終わり。
 
@@ -180,7 +194,7 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 
 > docs/ubuntu-server.md の「ComfyUI」の章に従って `scripts/install-comfyui-ubuntu.sh` を流して（apt と linger に sudo が要るので、その部分は私が流すコマンドを出して）。dekahamuntu.env の `COMFY_CUDA_DEVICES=0,1` で 2 枚とも見せる（既定のデバイスは GPU 0 で、今までのワークフローは GPU 0 だけを使う。GPU 1 は MiniMax H3 Image のテキストエンコーダーの計算を回すためだけ。2-9）。版は `COMFY_REF`（v0.45.2）。終わったら `scripts/configure-tailscale-serve-ubuntu.sh` で tailnet に公開して（`TAILSCALE_SERVE`）。モデルは自動で取らない。どのモデルを置くかは docs/ai-server-placement.md の案を私と決めてから。
 
-`~/ai`（private repo）は `gh repo clone chibiham/chibiham-ai ~/ai -- -b develop`（https。`gh auth login` 済みであること）。
+`~/ai`（private repo）は `gh repo clone chibiham/chibiham-ai ~/ai -- -b develop`（`gh auth login` 済みであること。中で走る git の通信は `url.insteadOf` で SSH になるので、共通の鍵 `~/.ssh/id_ed25519` も要る。第1段の 3.）。
 
 2026-11-12 の実績（chibihamuntu からの引っ越し。手順の全体は subako 側の手順書にある）:
 
@@ -759,9 +773,9 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | 項目 | 実機の状態 | やること |
 |---|---|---|
 | インストーラでの HWE の選択・ディスクの LVM | HWE 7.0、`/` を 1.9TB に広げた | 第1段の 1.、[ディスク](#ディスク) |
-| ssh の鍵 | `~/.ssh/authorized_keys` に 1 本（Mac・chibihamuntu と同じ本人の鍵）。dekahamuntu には GitHub 用の秘密鍵（`~/.ssh/id_ed25519`）は無い（`~/.ssh/config` は参照している） | インストーラの「Import SSH key」。GitHub の鍵を作るかは本人が決める |
+| ssh の鍵 | `~/.ssh/authorized_keys` に 1 本（Mac・chibihamuntu と同じ本人の鍵）。GitHub の認証と署名に使う共通のマシン鍵 `~/.ssh/id_ed25519`・`id_ed25519.pub`（指紋は Mac・chibihamuntu と同じ）は、2026-11-16 に本人が Mac から写した（それまでは無く、`~/ai` で commit しようとして署名できなかった）。いまは署名つきの commit ができている | `authorized_keys` はインストーラの「Import SSH key」（と home-manager switch の追記）。`id_ed25519` は本人が Mac から写す（[ubuntu-server.md の「GitHubの鍵（共通のマシン鍵）」](ubuntu-server.md#githubの鍵共通のマシン鍵)。Ubuntu 機の Service Account では `MyMachine` の鍵を読めない） |
 | 1Password | Vault `dekahamuntu`、Service Account | 第1段の 0.、4. |
-| GitHub | `gh auth login` 済み（`~/.config/gh/hosts.yml`、https） | 第1段の 6. |
+| GitHub | `gh auth login` 済み（`~/.config/gh/hosts.yml`、https。gh のコマンド用）。自分のリポジトリの git の通信は `url.insteadOf` で SSH（共通の鍵） | 第1段の 6.（鍵は 3.） |
 | Claude Code・Codex のログイン | — | 第1段の 6. |
 | sudo の操作 | ドライバ、apt、linger、Tailscale の認証と serve、lvextend | エージェントがコマンドを出し、本人が流す |
 | Tailscale Serve の 8443（Qwen） | 本人が流した（2026-11-14。tailnet から答えが返るのを確かめた）。2026-11-13 に `install-qwen38-ubuntu.sh` の最後の段が operator なしで断られたため、手で流した | 入れ直すときも、本人が `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8080` を流す（`configure-tailscale-serve-ubuntu.sh` でもよい） |

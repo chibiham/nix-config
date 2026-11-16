@@ -182,6 +182,7 @@ zsh起動時に `.env` → `.env.secrets` の順で自動sourceされる。
 - **その他のホスト**: 1Password SSH Agent（`Host *`）。使う鍵は1Password GUI側の
   `~/.config/1Password/ssh/agent.toml` で登録する（Agent有効化だけでは鍵は提供されない）
 - 他マシンからのSSHログイン用に、同じ鍵の公開鍵が `authorized_keys` に自動追記される（既存行は消さない）
+- **Ubuntu機**: 鍵は1Passwordから取れない（Service Accountがその機械のVaultしか読めない）ので、本人がMacから写す。手順は [docs/ubuntu-server.md の「GitHubの鍵（共通のマシン鍵）」](docs/ubuntu-server.md#githubの鍵共通のマシン鍵)
 
 ---
 

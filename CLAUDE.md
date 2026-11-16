@@ -145,13 +145,18 @@ update-secrets
 - **その他ホスト**: 1Password SSH Agent（darwin.nixの `Host *`）
 - github.com は `StrictHostKeyChecking accept-new` で初回接続も非対話で通る
 - Ubuntu機では `https://github.com/chibiham/` のURLを `git@github.com:chibiham/` に読み替える（`url.insteadOf`、`home/linux.nix`）。
-  httpsでcloneした自分のリポジトリも同じ鍵でpull・pushできる
+  httpsでcloneした自分のリポジトリも同じ鍵でpull・pushできる（鍵がない機械では、自分のリポジトリのpull・pushも署名も通らない）
+- 1本の鍵を全機に置くので、どれか1台から漏れると全機に効く（機械ごとの鍵に分ける道もあるが、いまの方針は1本）
 
 ## 手動設定（Nix管理外）
 
 macOSのセキュリティ制約により自動化できないもの:
 
 - **Ghosttyにフルディスクアクセスを付与**: システム設定 > プライバシーとセキュリティ > フルディスクアクセス > Ghosttyを追加して有効化
+
+Ubuntu機で手で行うもの:
+
+- **共通のマシン鍵 `~/.ssh/id_ed25519` をMacから写す**: Ubuntu機のService Accountは `MyMachine` Vaultを読めないので、bootstrapでは取れない。本人が `scp` で写し、`.pub` を `ssh-keygen -y` で作る。手順・GitHubへの登録（認証用・署名用）・確かめは `docs/ubuntu-server.md` の「GitHubの鍵（共通のマシン鍵）」
 
 ## 管理対象
 
