@@ -155,5 +155,10 @@ in
     programs.ssh.matchBlocks."*" = {
       forwardAgent = false;
     };
+
+    # 自分のリポジトリは https の URL で clone してあっても SSH（~/.ssh/id_ed25519）で通す。
+    # Ubuntu機は手順どおり https で clone するので、そのままだと private repo の pull・push が
+    # 認証情報を聞けずに失敗する。上流（他人）のリポジトリは https のまま
+    programs.git.settings.url."git@github.com:chibiham/".insteadOf = "https://github.com/chibiham/";
   };
 }
