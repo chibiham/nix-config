@@ -11,6 +11,10 @@ case "${1:-}" in
 esac
 [[ $# -le 1 ]] || exit 2
 
+# ホストごとの設定（NVIDIA_REQUIRE_OPEN）
+# shellcheck source=lib/ubuntu-host.sh
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/lib/ubuntu-host.sh"
+
 # shellcheck source=/dev/null
 source /etc/os-release
 if [[ "$ID" != ubuntu || "$VERSION_ID" != 24.04 ]]; then
@@ -35,6 +39,11 @@ elif [[ ${#nvidia_drivers[@]} -eq 1 ]]; then
   driver_suffix="${nvidia_drivers[0]#nvidia-driver-}"
   if [[ ! "$driver_suffix" =~ ^[0-9]+(-server)?(-open)?$ ]]; then
     echo "未対応のNVIDIAパッケージ名: ${nvidia_drivers[0]}" >&2
+    exit 1
+  fi
+  # Blackwell以降はオープンカーネルモジュールでしか動かない。
+  if [[ "$NVIDIA_REQUIRE_OPEN" == 1 && "$driver_suffix" != *-open ]]; then
+    echo "このホストは *-open のドライバが必須ですが、${nvidia_drivers[0]} が入っています" >&2
     exit 1
   fi
   # ドライバの世代は固定せず、現在導入済みのものに合わせる。

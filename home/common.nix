@@ -4,7 +4,12 @@
 # - このファイル（と OS別モジュール）の適用 = `home-manager switch` は
 #   ネットワーク・1Password認証・sudo に依存せず、常に冪等であること
 # - 命令的な初期構築は scripts/ のOS別bootstrapに分離
-{ pkgs, lib, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
 
 let
   # 1Password管理の共通マシン鍵（公開鍵）
@@ -27,6 +32,145 @@ let
     chmod 600 "$HOME/.secrets/.env.secrets"
     echo "✓ ~/.secrets/.env.secrets を更新しました（新しいシェルで反映）"
   '';
+
+  # Aikido Safe Chain（パッケージ取得をマルウェア判定・公開から72時間未満の版を除外）
+  # nixpkgs未収録のため公式リリースのビルド済みバイナリをハッシュ固定で取得する。
+  # sha256は公式 install-safe-chain.sh に埋め込まれた値と同じ。
+  safeChainVersion = "1.5.25";
+  safeChainAssets = {
+    aarch64-darwin = {
+      name = "macos-arm64";
+      sha256 = "5bd4896868e214f6bdeaa600dc8df9721501176686888513eb46d3ad51d22d86";
+    };
+    x86_64-darwin = {
+      name = "macos-x64";
+      sha256 = "9ec0af06f6bbbe0d416dd8c03727930edabe39720361cda1b398c32ad769c378";
+    };
+    # Linuxは動的リンカに依存しない静的版
+    x86_64-linux = {
+      name = "linuxstatic-x64";
+      sha256 = "3462a8395f822b392b7c0808c70116ef90e17a5a1479e604cfc41d57bfbd827c";
+    };
+    aarch64-linux = {
+      name = "linuxstatic-arm64";
+      sha256 = "c180f262f935f2167a63798ab195709f2f92f1c5818fd1192c07c22c1169d9df";
+    };
+  };
+  safeChainAsset = safeChainAssets.${pkgs.stdenv.hostPlatform.system};
+  safe-chain = pkgs.stdenvNoCC.mkDerivation {
+    pname = "safe-chain";
+    version = safeChainVersion;
+    src = pkgs.fetchurl {
+      url = "https://github.com/AikidoSec/safe-chain/releases/download/${safeChainVersion}/safe-chain-${safeChainAsset.name}";
+      inherit (safeChainAsset) sha256;
+    };
+    dontUnpack = true;
+    # 単一実行ファイルに埋め込まれたペイロードを壊さないよう、strip等は行わない
+    dontFixup = true;
+    # 実体を bin/ 以外に置く。親ディレクトリ名が bin だとその1つ上（読み取り専用の
+    # store）をデータ置き場とみなすため。こうすると証明書等は ~/.safe-chain に作られる。
+    installPhase = ''
+      install -Dm755 $src $out/libexec/safe-chain/safe-chain
+      mkdir -p $out/bin
+      ln -s $out/libexec/safe-chain/safe-chain $out/bin/safe-chain
+    '';
+  };
+
+  # Safe Chainで包むパッケージマネージャー
+  safeChainCommands = [
+    "npm"
+    "npx"
+    "pnpm"
+    "pnpx"
+    "yarn"
+    "bun"
+    "bunx"
+    "rush"
+    "rushx"
+    "pip"
+    "pip3"
+    "uv"
+    "uvx"
+    "poetry"
+    "pipx"
+    "pdm"
+  ];
+  # 公開から72時間経っていない版は入れない（Safe Chainの既定は48時間）
+  safeChainMinAgeHours = "72";
+  # PATH先頭に置く同名ラッパー。非対話シェル（エージェント・スクリプト）でも効く。
+  # PATHは変えずに `safe-chain <cmd>` を呼ぶ（npm run の子のnpm等も再捕捉する）。
+  # safe-chainが直接起動した呼び出しだけ、全世代のshimを除いて実体をexecする。
+  safeChainPathFirst = ''
+    path=(${safe-chain-shims}/bin ''${path:#${safe-chain-shims}/bin})
+  '';
+  # 上と同じ並べ直しのbash版（Ubuntuのログインシェル用。docs/adr/0003）
+  safeChainPathFirstBash = ''
+    _safe_chain_path_first() {
+      local shims=${safe-chain-shims}/bin rest=":$PATH:"
+      while [[ $rest == *":$shims:"* ]]; do rest=''${rest//":$shims:"/:}; done
+      rest=''${rest#:}
+      rest=''${rest%:}
+      PATH="$shims''${rest:+:$rest}"
+    }
+  '';
+
+  safe-chain-shims = pkgs.runCommandLocal "safe-chain-shims" { } (
+    ''
+      mkdir -p $out/bin
+    ''
+    + lib.concatMapStrings (cmd: ''
+      cat > $out/bin/${cmd} <<'EOF'
+      #!/bin/sh
+      # safe-chain-shim-marker
+      # safe-chainが本物の${cmd}を起動したときだけ、shimを除いたPATHで実体を探してexecする。
+      # 判定: 自分が設定した_SAFE_CHAIN_SHIM_PIDが親PIDと一致する、または親プロセスが
+      # safe-chain本体（旧世代shim経由で起動された場合はPID変数が消えているため）。
+      # PATHは変えないので、npm run等の子プロセス（親はsh）は再びshimを通る。
+      from_safe_chain=
+      if [ "''${_SAFE_CHAIN_SHIM_PID:-}" = "$PPID" ]; then
+        from_safe_chain=1
+      else
+        case "$(ps -o comm= -p "$PPID" 2>/dev/null)" in
+          safe-chain | */safe-chain) from_safe_chain=1 ;;
+        esac
+      fi
+      if [ -n "$from_safe_chain" ]; then
+        unset _SAFE_CHAIN_SHIM_PID
+        set -f
+        IFS=:
+        for p in $PATH; do
+          [ -n "$p" ] || continue
+          [ -x "$p/${cmd}" ] && [ ! -d "$p/${cmd}" ] || continue
+          # 全世代のshimを除外（ディレクトリ名・シンボリックリンク先・中身で判定。
+          # 旧世代はマーカーを持たないので名前とsafe-chain本体の参照で見分ける）
+          case "$p" in */safe-chain-shims | */*-safe-chain-shims/bin) continue ;; esac
+          case "$(cd -P -- "$p" 2>/dev/null && pwd)" in */*-safe-chain-shims/bin) continue ;; esac
+          grep -q -e 'safe-chain-shim-marker' -e '/libexec/safe-chain/safe-chain ' "$p/${cmd}" 2>/dev/null && continue
+          unset IFS
+          set +f
+          exec "$p/${cmd}" "$@"
+        done
+        unset IFS
+        set +f
+        echo "${cmd}: command not found (safe-chain shim)" >&2
+        exit 127
+      fi
+      # 想定外の再帰でハングしないよう、入れ子の深さに上限を設ける
+      _SAFE_CHAIN_SHIM_DEPTH=$((''${_SAFE_CHAIN_SHIM_DEPTH:-0} + 1))
+      if [ "$_SAFE_CHAIN_SHIM_DEPTH" -gt 32 ]; then
+        echo "${cmd}: safe-chain shim recursion detected" >&2
+        exit 126
+      fi
+      export _SAFE_CHAIN_SHIM_DEPTH
+      export _SAFE_CHAIN_SHIM_PID=$$
+      export SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS="''${SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS:-${safeChainMinAgeHours}}"
+      # yao-pkg製バイナリが引数をスクリプトパスと誤認しないように
+      unset PKG_EXECPATH
+      exec ${safe-chain}/libexec/safe-chain/safe-chain ${cmd} "$@"
+      EOF
+      chmod +x $out/bin/${cmd}
+    '') safeChainCommands
+  );
 in
 {
   # Home Managerのバージョン（変更しないで）
@@ -68,6 +212,7 @@ in
     # シークレット管理
     _1password-cli # op コマンド
     update-secrets # ~/.secrets/.env.secrets を1Passwordから再生成
+    safe-chain # Aikido Safe Chain（npm/pip等のマルウェア・新着版ブロック）
 
     # インフラ・クラウドツール
     awscli # AWS CLI
@@ -163,6 +308,9 @@ in
   };
 
   # SSH署名の検証用 allowed_signers
+  # bootstrap（bash）がsafe-chainのshimを参照する固定パス
+  home.file.".local/share/safe-chain-shims".source = "${safe-chain-shims}/bin";
+
   home.file.".config/git/allowed_signers".text = ''
     ${gitEmail} ${machinePubKey}
   '';
@@ -181,6 +329,18 @@ in
     # デフォルト値は matchBlocks."*"（darwin.nix）で明示管理
     enableDefaultConfig = false;
     matchBlocks = {
+      "deka" = {
+        hostname = "dekahamuntu";
+        user = "chibiham";
+      };
+      "chibi" = {
+        hostname = "chibihamuntu";
+        user = "chibiham";
+      };
+      "mini" = {
+        hostname = "chibihammac-mini";
+        user = "chibiham";
+      };
       "github.com" = {
         hostname = "github.com";
         user = "git";
@@ -240,6 +400,13 @@ in
       gl = "git pull";
     };
 
+    # Safe Chainのラッパーを常にPATH先頭へ置く。hm-session-vars.shは
+    # __HM_SESS_VARS_SOURCED で子シェルでは再実行されず、ログインシェルでは
+    # /etc/zprofile（path_helper）と ~/.zprofile（brew shellenv）が前へ割り込むため、
+    # .zshenv（zsh -c 用）と .zlogin（zprofileより後、zsh -lc 用）で毎回並べ直す。
+    envExtra = safeChainPathFirst;
+    loginExtra = safeChainPathFirst;
+
     # 追加の初期化スクリプト（.zshrc の末尾に追加される）
     initContent = ''
       # シークレット環境変数の読み込み（update-secretsで生成）
@@ -261,7 +428,86 @@ in
       if command -v mise &> /dev/null; then
         eval "$(mise activate zsh)"
       fi
+
+      # Aikido Safe Chain: mise activateがPATH先頭へnode等を足すため、
+      # 対話シェルでは関数でもラッパーへ向ける（公式の手動セットアップと同じ方式）
+      ${lib.concatMapStrings (cmd: ''
+        ${cmd}() { ${safe-chain-shims}/bin/${cmd} "$@"; }
+      '') safeChainCommands}
+      ${safeChainPathFirst}
+      # miseのprecmd/chpwdフックが毎回node等をPATH先頭へ戻すため、その後で並べ直す。
+      # これがないと npm run の子（npm/npx/pnpm等）が実体を直接起動してSafe Chainを迂回する。
+      # miseは自分のフックを配列の先頭へ入れるので、こちらは末尾に置けば必ず後に走る。
+      _safe_chain_path_first() { ${lib.trim safeChainPathFirst}; }
+      typeset -ag precmd_functions chpwd_functions
+      precmd_functions=(''${precmd_functions:#_safe_chain_path_first} _safe_chain_path_first)
+      chpwd_functions=(''${chpwd_functions:#_safe_chain_path_first} _safe_chain_path_first)'';
+  };
+
+  # ===================
+  # Bash設定（Linuxだけ。docs/adr/0003）
+  # Ubuntu機のログインシェルは /bin/bash で、エージェント（Claude Code・Codex）もbashで
+  # コマンドを動かす。zshと同じPATH（sessionPath、mise、Safe Chainのshimが先頭）を通す。
+  # macOSのログインシェルはzshなので触らない。
+  #
+  # 読まれる経路:
+  #   bash -l（ssh、bash -lc）: ~/.bash_profile → ~/.profile（hm-session-vars）→ ~/.bashrc
+  #   ssh host 'cmd'          : /etc/bash.bashrc → ~/.bashrc（対話の判定より前の bashrcExtra だけ）
+  #   bash -i                 : ~/.bashrc
+  #   bash -c                 : 何も読まない（親の環境を受け継ぐ。BASH_ENVは使わない）
+  # ===================
+  programs.bash = lib.mkIf pkgs.stdenv.isLinux {
+    enable = true;
+    # ログインシェルはUbuntuの /bin/bash のまま。PATHの bash を差し替えない
+    package = null;
+    # 補完・履歴・shoptはUbuntu標準の /etc/skel/.bashrc に任せる（下のinitExtra）
+    enableCompletion = false;
+    shellOptions = [ ];
+    historySize = null;
+    historyFileSize = null;
+    historyControl = [ ];
+
+    # 非対話（ssh host 'cmd'、bash -lc）でも読まれる部分。
+    # ssh の非対話コマンドは ~/.profile を読まないので、ここでも hm-session-vars を読む
+    # （二度目以降は __HM_SESS_VARS_SOURCED で何もしない）。
+    bashrcExtra = ''
+      . "${config.home.sessionVariablesPackage}/etc/profile.d/hm-session-vars.sh"
+      ${safeChainPathFirstBash}
+      _safe_chain_path_first
     '';
+
+    initExtra = lib.mkMerge [
+      # Ubuntu標準の対話設定（プロンプト・色・補完・履歴）。HMが ~/.bashrc を持つ前と同じにする。
+      # starship等の統合より先に読む
+      (lib.mkOrder 50 ''
+        [ -f /etc/skel/.bashrc ] && . /etc/skel/.bashrc
+      '')
+      # mise と Safe Chain。zshの initContent と同じ。direnv等の統合（mkAfter）より後に置く
+      (lib.mkOrder 2000 ''
+        # mise（runtime version manager）
+        if command -v mise &> /dev/null; then
+          eval "$(mise activate bash)"
+        fi
+
+        # Aikido Safe Chain: mise activateがPATH先頭へnode等を足すため、
+        # 対話シェルでは関数でもラッパーへ向ける
+        ${lib.concatMapStrings (cmd: ''
+          ${cmd}() { ${safe-chain-shims}/bin/${cmd} "$@"; }
+        '') safeChainCommands}
+        _safe_chain_path_first
+        # miseはプロンプトごと（PROMPT_COMMANDの先頭）とcdのたび（chpwd_functions）に
+        # node等をPATH先頭へ戻すので、そのあとで並べ直す。
+        if [[ ";''${PROMPT_COMMAND:-};" != *";_safe_chain_path_first;"* ]]; then
+          PROMPT_COMMAND="''${PROMPT_COMMAND:+$PROMPT_COMMAND;}_safe_chain_path_first"
+        fi
+        _scf_hooks=()
+        for _scf_hook in "''${chpwd_functions[@]}"; do
+          [[ $_scf_hook == _safe_chain_path_first ]] || _scf_hooks+=("$_scf_hook")
+        done
+        chpwd_functions=("''${_scf_hooks[@]}" _safe_chain_path_first)
+        unset _scf_hooks _scf_hook
+      '')
+    ];
   };
 
   # ===================
@@ -561,6 +807,9 @@ in
     MISE_CACHE_DIR = "$HOME/.cache/mise";
     MISE_AUTO_INSTALL = "1"; # バージョンファイル検出時に自動インストール
     MISE_TRUSTED_CONFIG_PATHS = "$HOME"; # ホームディレクトリ配下を信頼
+
+    # Aikido Safe Chain: 公開から72時間未満の版を除外（ラッパーにも同じ既定値を埋め込み済み）
+    SAFE_CHAIN_MINIMUM_PACKAGE_AGE_HOURS = safeChainMinAgeHours;
   };
 
   # ===================
@@ -576,8 +825,12 @@ in
       IN=$(echo "$input" | jq -r '.context_window.total_input_tokens // 0')
       OUT=$(echo "$input" | jq -r '.context_window.total_output_tokens // 0')
       COST=$(echo "$input" | jq -r '.cost.total_cost_usd // 0')
-      # 使用制限(Claude.ai の購読のとき渡される)。subako が読めるようにファイルにも書き出す
-      echo "$input" | jq -c '{at: now, rate_limits: (.rate_limits // null)}' > "$HOME/.claude/statusline-last.json" 2>/dev/null
+      # 使用制限(Claude.ai の購読のとき渡される)。subako が読めるようにファイルにも書き出す(rate_limits があるときだけ。無いときは前の値を残す)
+      if echo "$input" | jq -e '.rate_limits != null' >/dev/null 2>&1; then
+        _tmp=$(mktemp "$HOME/.claude/.statusline-last.XXXXXX" 2>/dev/null) &&
+          echo "$input" | jq -c '{at: now, rate_limits: .rate_limits}' > "$_tmp" 2>/dev/null &&
+          mv "$_tmp" "$HOME/.claude/statusline-last.json" || rm -f "$_tmp"
+      fi
       H5=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage // empty' | cut -d. -f1)
       D7=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty' | cut -d. -f1)
       LIMITS=""
@@ -618,13 +871,17 @@ in
   # ===================
   # 追加のPATH
   # ===================
-  home.sessionPath = [
-    "$HOME/.local/bin" # claude-code等
-    "$HOME/bin"
-    "$HOME/bin/gamadv-xtd3" # Google Workspace管理ツール
-    "$HOME/go/bin"
-    "$HOME/.local/share/pnpm" # pnpm グローバルbin
-    "$HOME/.local/share/mise/shims" # mise shims
+  # Safe Chainのラッパーはmiseやpnpmのbinより前に置く
+  home.sessionPath = lib.mkMerge [
+    (lib.mkBefore [ "${safe-chain-shims}/bin" ])
+    [
+      "$HOME/.local/bin" # claude-code等
+      "$HOME/bin"
+      "$HOME/bin/gamadv-xtd3" # Google Workspace管理ツール
+      "$HOME/go/bin"
+      "$HOME/.local/share/pnpm" # pnpm グローバルbin
+      "$HOME/.local/share/mise/shims" # mise shims
+    ]
   ];
 
   # ===================
@@ -724,6 +981,48 @@ in
           (qwenModel "Qwen3.8-Flash-Next-Uncensored-i1-IQ3_M" "Qwen3.8 Flash Next Uncensored (Ubuntu)")
         ];
       };
+  };
+
+  # Oh My Pi（omp）。本体と~/.omp/agent/config.ymlはforkのHome Managerモジュールが配る。
+  # ClaudeとChatGPTは組み込みプロバイダー（`/login anthropic` / `/login openai-codex`）。
+  # forkのAnthropic OAuthはClaude Codeを装わず、拒否されたらAPIキーを案内して止まる。
+  programs.omp = {
+    enable = true;
+    settings = {
+      startup.quiet = true;
+      disabledProviders = [ "llama.cpp" ];
+      # 既定はChatGPTサブスクのGPT-6.1 Sol。ompの曖昧一致は最新版を選ぶ保証がないのでIDで固定する。
+      # （偽装しないAnthropic OAuthはHaiku 4.5以外が429になるため、Claudeは既定にしない）
+      # smolは軽い下請け（scout等）、slowは重い作業（reviewer等）と --smol / --slow で使う。
+      modelRoles = {
+        default = "openai-codex/gpt-6.1-sol";
+        smol = "openai-codex/gpt-6-luna";
+        slow = "openai-codex/gpt-6.1-sol:xhigh";
+      };
+    };
+  };
+
+  # ローカルのllama.cpp。モデルはサーバーから自動で列挙する（Qwen系はopenai-completions）。
+  # - qwen-ubuntu: tailnet内のchibihamuntuのRouter（3090）
+  # - qwen-dekahamuntu: tailnet内のdekahamuntuのRouter（GPU 1に常駐。Flash-NextのUD-Q3_K_XLとUncensored。
+  #   --models-max 1 なので、選んだモデルに載せ替わる）
+  # 既存のqwen-ubuntuと同じく4台すべてに入れる（1つのattrsetから作るのでOSでは分けない）。
+  # Macでモデルを動かすとメモリが足りなくなるので、このマシンのllama-serverは使わない
+  # （ompが既定で足す127.0.0.1:8080のllama.cppはsettingsのdisabledProvidersで止める）。
+  # ompはmodels.ymlを書き換えないのでNix Storeへのリンクでよい。
+  home.file.".omp/agent/models.yml".source = (pkgs.formats.yaml { }).generate "omp-models.yml" {
+    providers.qwen-ubuntu = {
+      baseUrl = "https://chibihamuntu.tailded45d.ts.net:8443";
+      api = "openai-completions";
+      auth = "none";
+      discovery.type = "llama.cpp";
+    };
+    providers.qwen-dekahamuntu = {
+      baseUrl = "https://dekahamuntu.tailded45d.ts.net:8443";
+      api = "openai-completions";
+      auth = "none";
+      discovery.type = "llama.cpp";
+    };
   };
 
   # settings.jsonはPi自身も更新する（/modelのCtrl+S等）ため、既定モデルが
