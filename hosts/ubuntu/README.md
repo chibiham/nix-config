@@ -51,9 +51,10 @@ Nix（Home Manager）の側のホストの違いは `flake.nix` と `home/hosts/
 | `COMFY_CUDA_DEVICES` | 空 | install-comfyui | comfyui.serviceの `CUDA_VISIBLE_DEVICES`。複数を書くと最初のGPUが既定のデバイス（`cuda:0`）になり、ほかのGPUはノード（`Select CLIP Device` など）で指定したときだけ使われる（dekahamuntu は `0,1`。GPU 1 は H3 Image のテキストエンコーダーの計算だけに使い、重みは RAM に置かれる） |
 | `COMFY_REF` | 空 | update-comfyui, install-comfyui | ComfyUIの版（タグかcommit）。update-comfyui が `git checkout --detach` する（`--ref` が優先）。空なら `git pull --ff-only`（master）。install-comfyui は新しく clone するときだけ使う |
 | `H3_IMAGE_MODELS` | 空 | install-minimax-h3-image | 置く MiniMax H3 Image の DiT の版（空白区切り: `int8` `w4a8` `gguf-q5` `gguf-q4`）。空で引数もなければ何もしない。dekahamuntu は `int8 w4a8`（GGUF は約 3 倍遅く、第三者の重みと拡張なので入れない） |
-| `ART_STUDIO_COMFYUI_URL` | 空 | configure-art-studio | art-studio の unit の drop-in に書く `COMFYUI_URL`（空なら書かない） |
+| `ART_STUDIO_COMFYUI_URL` | 空 | configure-art-studio | art-studio の unit の drop-in に書く `COMFYUI_URL`（空なら書かない）。ComfyUI が 2 つ以上あるホストでは `,` で並べ、1 つ目が主（dekahamuntu は `http://127.0.0.1:8188,http://127.0.0.1:8189`。並べた値を読むのは chibiham-ai の issue 96 の art-studio から） |
 | `ART_STUDIO_CUDA_DEVICES` | 空 | configure-art-studio | art-studio（モザイクの YOLO）の `CUDA_VISIBLE_DEVICES`（空なら書かない） |
-| `COMFY_EXTRA_ARGS` | 空 | install-comfyui | comfyui.serviceの main.py に足す起動オプション（例: `--fast fp16_accumulation`。どちらのホストも付けない） |
+| `COMFY_EXTRA_ARGS` | 空 | install-comfyui | comfyui.serviceの main.py に足す起動オプション（例: `--fast fp16_accumulation`。どちらのホストも付けない）。2 つ目以降の常駐にも同じものを足す |
+| `COMFY_EXTRA_INSTANCES` | 空 | install-comfyui, update-comfyui, install-qwen38 | 2 つ目以降の ComfyUI の常駐。「名前:ポート:見せるGPU」を空白区切り（dekahamuntu は `gpu1:8189:1`）。install-comfyui が `comfyui-<名前>.service` を書いて enable する（`127.0.0.1:<ポート>`、`CUDA_VISIBLE_DEVICES=<GPU>`、`--temp-directory <ComfyUI>/temp-<名前>`、ComfyUI-Manager なし。置き場は comfyui.service と同じ）。update-comfyui は全部の常駐のキューを確かめて全部を起こし直す。install-qwen38 は GPU が重なる常駐を qwen38-dual.service の `Conflicts=` に入れる。空なら作らない（unit も出力も今までと同じ）。外すときは設定から消して `install-comfyui-ubuntu.sh --remove <名前>` |
 | `LLM_CUDA_DEVICES` | 空 | install-qwen38 | qwen38.serviceの `CUDA_VISIBLE_DEVICES` |
 | `LLM_DUAL_CUDA_DEVICES` | 空 | install-qwen38 | 空でなければ、束ねて使う qwen38-dual.service を作る |
 | `LLM_DUAL_SPLIT_MODE` | `layer` | install-qwen38 | llama.cppの `--split-mode` |
