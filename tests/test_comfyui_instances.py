@@ -319,10 +319,6 @@ class InstallUnitOnlyDekahamuntuTests(unittest.TestCase):
         r = self.sb.run("install-comfyui-ubuntu.sh", "--unit-only", env={"COMFY_EXTRA_INSTANCES": " "})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("--remove gpu1", r.stdout)
-        # 設定に残っているうちは消さない
-        r = self.sb.run("install-comfyui-ubuntu.sh", "--remove", "gpu1")
-        self.assertEqual(r.returncode, 1)
-        self.assertTrue((self.sb.units / "comfyui-gpu1.service").exists())
         # 列が空でなければ止まる
         self.sb.set_queue(8189, pending=2)
         r = self.sb.run("install-comfyui-ubuntu.sh", "--remove", "gpu1", env={"COMFY_EXTRA_INSTANCES": " "})
@@ -336,6 +332,14 @@ class InstallUnitOnlyDekahamuntuTests(unittest.TestCase):
         self.assertIn(["systemctl", "--user", "disable", "--now", "comfyui-gpu1.service"], self.sb.calls("systemctl"))
         self.assertIn(["systemctl", "--user", "daemon-reload"], self.sb.calls("systemctl"))
         self.assertTrue((self.sb.units / "comfyui.service").exists())
+
+    def test_remove_while_still_configured_warns(self):
+        # 戻し: 設定に残したままでも消せる（次の --unit-only でまた足されると警告する）
+        self.sb.run("install-comfyui-ubuntu.sh", "--unit-only")
+        r = self.sb.run("install-comfyui-ubuntu.sh", "--remove", "gpu1")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("次の --unit-only でまた足されます", r.stdout)
+        self.assertFalse((self.sb.units / "comfyui-gpu1.service").exists())
 
     def test_remove_refuses_unit_without_mark(self):
         self.sb.units.mkdir(parents=True)
@@ -470,6 +474,9 @@ class AiModeDekahamuntuTests(unittest.TestCase):
         self.script = Path(self.tmp.name) / "ai-mode"
         self.script.write_text(text)
         (self.sb.bin / "nvidia-smi").write_text(FAKE_LOG)
+        # 2 つ目の unit があるとき（install-comfyui-ubuntu.sh --unit-only のあと）
+        self.sb.units.mkdir(parents=True)
+        (self.sb.units / "comfyui-gpu1.service").write_text("[Unit]\n")
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -512,6 +519,15 @@ class AiModeDekahamuntuTests(unittest.TestCase):
         self.assertEqual(self.ai_mode("status").returncode, 0)
         status = [c for c in self.sb.calls("systemctl") if "status" in c]
         self.assertIn("comfyui-gpu1.service", status[0])
+
+    def test_without_gpu1_unit_starts_only_main(self):
+        (self.sb.units / "comfyui-gpu1.service").unlink()
+        r = self.ai_mode("split")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(["systemctl", "--user", "start", "comfyui.service", "qwen38.service"], self.sb.calls("systemctl"))
+        self.assertEqual(self.ai_mode("stop").returncode, 0)
+        self.assertIn(["systemctl", "--user", "stop", "qwen38-dual.service", "qwen38.service", "comfyui.service",
+                       "applio.service"], self.sb.calls("systemctl"))
 
     def test_applio_leaves_gpu1(self):
         self.assertEqual(self.ai_mode("applio").returncode, 0)

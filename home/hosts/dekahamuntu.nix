@@ -122,6 +122,16 @@ let
       done
     }
 
+    # ComfyUI の unit。2 つ目（${comfyGpu1}）は unit があるときだけ入れる
+    # （install-comfyui-ubuntu.sh --unit-only で足す前・--remove で消したあとも、ほかの切り替えが止まらないように）
+    comfy_units() {
+      if [[ -f "$HOME/.config/systemd/user/${comfyGpu1}" ]]; then
+        echo "comfyui.service ${comfyGpu1}"
+      else
+        echo "comfyui.service"
+      fi
+    }
+
     # LoRA学習（~/ai/scripts/lora-train）はGPUを使うunitとConflicts=で排他にしている。
     # ここで起動すると学習が止まるので、学習中は明示的に止めるまで切り替えさせない。
     guard_training() {
@@ -139,7 +149,8 @@ let
           unload_models
           systemctl --user stop qwen38-dual.service
         fi
-        systemctl --user start comfyui.service ${comfyGpu1} qwen38.service
+        # shellcheck disable=SC2046
+        systemctl --user start $(comfy_units) qwen38.service
         # 2 つの ComfyUI が RAM に持っている重み（H3 Image のテキストエンコーダーなど）を降ろし、Qwen の RAM を空ける
         free_comfy
         ;;
@@ -149,7 +160,8 @@ let
           unload_models
           systemctl --user stop qwen38-dual.service
         fi
-        systemctl --user start comfyui.service ${comfyGpu1} qwen38.service
+        # shellcheck disable=SC2046
+        systemctl --user start $(comfy_units) qwen38.service
         # 2 つ目の ComfyUI が GPU 1 に載せているモデルも降ろさせる（H3 Image のテキストエンコーダーの計算とぶつからないように）
         free_comfy ${comfyGpu1Port}
         unload_models_wait || exit 1
@@ -159,7 +171,7 @@ let
         unload_models
         # qwen38-dual.service は Conflicts= で comfyui・${comfyGpu1}・qwen38 を止める。
         # ${comfyGpu1} は、Conflicts= を書き直す前の qwen38-dual.service（install-qwen38-ubuntu.sh の流し直しの前）でも止まるように、先に止める
-        systemctl --user stop ${comfyGpu1} || true
+        systemctl --user stop ${comfyGpu1} 2>/dev/null || true
         systemctl --user start qwen38-dual.service
         ;;
       applio)
@@ -167,10 +179,12 @@ let
         systemctl --user start applio.service
         ;;
       stop)
-        systemctl --user stop qwen38-dual.service qwen38.service comfyui.service ${comfyGpu1} applio.service
+        # shellcheck disable=SC2046
+        systemctl --user stop qwen38-dual.service qwen38.service $(comfy_units) applio.service
         ;;
       status)
-        systemctl --user --no-pager --full status comfyui.service ${comfyGpu1} qwen38.service qwen38-dual.service applio.service 'lora-train-*.service' || true
+        # shellcheck disable=SC2046
+        systemctl --user --no-pager --full status $(comfy_units) qwen38.service qwen38-dual.service applio.service 'lora-train-*.service' || true
         nvidia-smi --query-gpu=index,name,memory.used,memory.total,temperature.gpu,power.draw --format=csv || true
         ;;
       *) usage ;;

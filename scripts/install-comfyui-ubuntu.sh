@@ -9,7 +9,8 @@
 #       daemon-reload・restart・起動の待ちをする。途中で失敗したら終了コード 1 で、流し直せば続きから適用する。
 #       restart の前に ComfyUI のキューが空かを確かめる（--force で飛ばす）。
 #   install-comfyui-ubuntu.sh --remove <名前> [--force]
-#       設定（COMFY_EXTRA_INSTANCES）から外した 2 つ目以降の常駐（comfyui-<名前>.service）を止め、disable して unit を消す（sudo なし）。
+#       2 つ目以降の常駐（comfyui-<名前>.service）を止め、disable して unit を消す（sudo なし。設定から外す前の戻しにも使える。
+#       設定に残っていれば警告を出す。次の --unit-only でまた足される）。
 #       止める前にその常駐のキューが空かを確かめる（--force で飛ばす）。このスクリプトが書いた unit だけを消す。
 #
 # 2 つ目以降の常駐（COMFY_EXTRA_INSTANCES。例: "gpu1:8189:1"）は、comfyui.service と同じ置き場（コード・venv・models・custom_nodes・
@@ -120,8 +121,7 @@ if [[ -n "$remove_name" ]]; then
   remove_file="$SERVICE_DIR/$remove_unit"
   for ((i = 1; i < unit_count; i++)); do
     if [[ "${unit_names[$i]}" == "$remove_unit" ]]; then
-      echo "$remove_name はまだ COMFY_EXTRA_INSTANCES（hosts/ubuntu/$UBUNTU_HOST.env）にあります。先に設定から外してください" >&2
-      exit 1
+      warn "$remove_name はまだ COMFY_EXTRA_INSTANCES（hosts/ubuntu/$UBUNTU_HOST.env）にあります。消しても、次の --unit-only でまた足されます"
     fi
   done
   if [[ ! -f "$remove_file" ]]; then
