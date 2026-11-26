@@ -876,6 +876,7 @@ in
     (lib.mkBefore [ "${safe-chain-shims}/bin" ])
     [
       "$HOME/.local/bin" # claude-code等
+      "$HOME/.opencode/bin" # opencode（公式インストーラの置き場所）
       "$HOME/bin"
       "$HOME/bin/gamadv-xtd3" # Google Workspace管理ツール
       "$HOME/go/bin"

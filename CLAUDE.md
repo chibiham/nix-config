@@ -168,6 +168,7 @@ Ubuntu機で手で行うもの:
 - pnpm グローバルパッケージ: clawdbot（bootstrap.shで導入）
 - コーディングエージェント: Qwen Code, Pi（pi.dev）をmise管理のNode.jsへnpmで導入（bootstrap）。
   Piは `~/.pi/agent/models.json`（Nix管理）でchibihamuntuのQwen3.8（tailnet経由）を既定モデルにする
+- opencode: 公式インストーラ（`--no-modify-path`）で `~/.opencode/bin` に導入（bootstrap）。PATHは `home.sessionPath`（common.nix）で通す
 - Oh My Pi（omp）: flake input `omp`（fork `chibiham/oh-my-pi` の honest-oauth をコミット固定）のHome Managerモジュールで導入。
   Anthropic OAuthはClaude Codeを装わない（偽装は `PI_ANTHROPIC_OAUTH_CLAUDE_CODE_FINGERPRINT=1` のときだけ）。
   `~/.omp/agent/models.yml`（Nix管理）でchibihamuntu（`qwen-ubuntu`）とdekahamuntu（`qwen-dekahamuntu`。Flash-Nextの2つ）を宣言（Macのローカルllama.cppはメモリ不足になるので無効）。Claude/ChatGPTは `/login` で各自認証

@@ -127,6 +127,12 @@ curl -fsSL https://chatgpt.com/codex/install.sh | sh
 step "Claude Code"
 curl -fsSL https://claude.ai/install.sh | bash
 
+# ~/.zshrc・~/.bashrc はNix管理なので --no-modify-path。PATHは home.sessionPath（common.nix）で通す。
+step "opencode"
+if [ ! -x "$HOME/.opencode/bin/opencode" ]; then
+  curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path
+fi
+
 ok "Ubuntuの基礎セットアップが完了しました"
 echo "次: $REPO_DIR/scripts/install-tailscale-ubuntu.sh"
 echo "GPUドライバ・カーネル・ComfyUIなどは第2段（docs/ubuntu-server.md）で別途セットアップします"

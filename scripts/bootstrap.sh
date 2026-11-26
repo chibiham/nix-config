@@ -179,6 +179,15 @@ else
   ok "Pi はインストール済み"
 fi
 
+# opencode。公式インストーラで ~/.opencode/bin に置く。
+# ~/.zshrc はNix管理で書けないので --no-modify-path。PATHは home.sessionPath（common.nix）で通す。
+if [ ! -x "$HOME/.opencode/bin/opencode" ]; then
+  curl -fsSL https://opencode.ai/v2/install | bash -s -- --no-modify-path \
+    && ok "opencode をインストールしました"
+else
+  ok "opencode はインストール済み"
+fi
+
 # -------------------------------------------------
 # 8. Homebrew + GUIアプリ（Brewfile）
 #    CLIツールはNix管理。casks/masのGUIアプリのみHomebrewで導入
