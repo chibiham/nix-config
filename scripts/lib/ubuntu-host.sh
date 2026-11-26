@@ -82,8 +82,13 @@ unset _ubuntu_host_repo
 # GPUの割り当て（CUDA_VISIBLE_DEVICES）。空ならunitに書かない（すべてのGPUが見える）。
 # 複数を書くと、最初のGPUがComfyUIの既定のデバイス（cuda:0）になる
 : "${COMFY_CUDA_DEVICES:=}"
-# comfyui.serviceの main.py に足す起動オプション（例: --fast fp16_accumulation）。空なら足さない
+# comfyui.serviceの main.py に足す起動オプション（例: --fast fp16_accumulation）。空なら足さない。
+# 2 つ目以降の常駐（COMFY_EXTRA_INSTANCES）にも同じものを足す（同じ絵にするため）
 : "${COMFY_EXTRA_ARGS:=}"
+# 2 つ目以降の ComfyUI の常駐（install-comfyui-ubuntu.sh が comfyui-<名前>.service を書く）。
+# 「名前:ポート:見せるGPU」を空白区切り（例: "gpu1:8189:1"）。置き場（コード・venv・models・custom_nodes・user・input・output）は
+# comfyui.service と同じで、temp だけ分ける。ComfyUI-Manager は付けない。127.0.0.1 だけで待ち受ける。空なら作らない（chibihamuntu）
+: "${COMFY_EXTRA_INSTANCES:=}"
 # ComfyUIの版（タグかcommit）。update-comfyui-ubuntu.sh はこれを checkout --detach する。
 # 空なら今までどおり git pull --ff-only（master に追従）。install-comfyui-ubuntu.sh は新しく clone するときだけ使う
 : "${COMFY_REF:=}"
@@ -121,4 +126,36 @@ cuda_device_count() {
   local devices="$1"
   [[ -n "$devices" ]] || { echo 0; return; }
   awk -F, '{ print NF }' <<<"$devices"
+}
+
+# comfy_extra_instances
+# COMFY_EXTRA_INSTANCES を読み、常駐ごとに「名前 ポート GPU」を 1 行ずつ出す（空なら何も出さない）。
+# 形が違う・名前やポートが重なる・8188（comfyui.service）を使うときは、理由を出して 1（何も出さない）。
+# 名前は unit の名前（comfyui-<名前>.service）と temp の置き場（<ComfyUI>/temp-<名前>）に使う
+comfy_extra_instances() {
+  local entries entry name port devices rest out="" seen_names=" " seen_ports=" 8188 "
+  read -r -a entries <<<"$COMFY_EXTRA_INSTANCES"
+  for entry in ${entries[@]+"${entries[@]}"}; do
+    IFS=: read -r name port devices rest <<<"$entry"
+    if [[ -n "$rest" || ! "$name" =~ ^[a-z0-9][a-z0-9-]*$ || ! "$port" =~ ^[1-9][0-9]*$ || ! "$devices" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
+      echo "COMFY_EXTRA_INSTANCES の「${entry}」は「名前:ポート:見せるGPU」（例: gpu1:8189:1。名前は英小文字・数字・-）の形ではありません" >&2
+      return 1
+    fi
+    if ((port < 1024 || port > 65535)); then
+      echo "COMFY_EXTRA_INSTANCES の「${entry}」のポートは 1024〜65535 にしてください" >&2
+      return 1
+    fi
+    if [[ "$seen_names" == *" $name "* ]]; then
+      echo "COMFY_EXTRA_INSTANCES に名前 $name が 2 度あります" >&2
+      return 1
+    fi
+    if [[ "$seen_ports" == *" $port "* ]]; then
+      echo "COMFY_EXTRA_INSTANCES の「${entry}」のポート $port は、ほかの ComfyUI の常駐（comfyui.service は 8188）と重なります" >&2
+      return 1
+    fi
+    seen_names+="$name "
+    seen_ports+="$port "
+    out+="$name $port $devices"$'\n'
+  done
+  printf '%s' "$out"
 }

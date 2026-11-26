@@ -18,6 +18,11 @@
 # 起動し直したあと /system_stats が返るまで待ち（既定 180 秒）、comfyui_version を表示する。
 # --no-restart は git と venv だけを変え、systemctl を呼ばない（キューも確かめない。サービスでない写しで試す用）。
 #
+# 2 つ目以降の常駐（hosts/ubuntu/<ホスト名>.env の COMFY_EXTRA_INSTANCES、comfyui-<名前>.service）はコードと venv を
+# comfyui.service と共有するので、全部の常駐のキューが空なのを確かめ、全部を起こし直し、全部の起動を待つ。
+# ただし対象が本番（COMFY_DIR が ~/ComfyUI、COMFY_PORT が 8188）のときだけ。写しで流すときは 2 つ目以降に触らない。
+# unit のない常駐（設定に足したが install-comfyui-ubuntu.sh --unit-only をまだ流していない）は飛ばす。
+#
 # chibihamuntu（COMFY_REF が空）での変化（issue 5）: git pull --ff-only → 依存 → restart は今までどおり。
 #   足したのは、控えを取ること・キューの確かめ・起動の待ち。
 #   また、未追跡のファイルでは止まらなくなった（追跡しているファイルの変更があれば今までどおり止まる）。
@@ -102,6 +107,27 @@ if [[ -n "$restore_dir" ]]; then
   fi
 fi
 
+# 起こし直す常駐（unit の名前とポート）。0 番は今までどおり comfyui.service と COMFY_PORT
+restart_units=(comfyui.service)
+restart_ports=("$COMFY_PORT")
+if [[ "$restart" == 1 ]]; then
+  extra_list="$(comfy_extra_instances)" || exit 1
+  if [[ -n "$extra_list" ]]; then
+    if [[ "$COMFY_DIR_REAL" == "$DEFAULT_COMFY_DIR_REAL" && "$COMFY_PORT" == 8188 ]]; then
+      while read -r name port _devices; do
+        if [[ -f "$HOME/.config/systemd/user/comfyui-$name.service" ]]; then
+          restart_units+=("comfyui-$name.service")
+          restart_ports+=("$port")
+        else
+          warn "comfyui-$name.service の unit がないので飛ばします（足すなら install-comfyui-ubuntu.sh --unit-only）"
+        fi
+      done <<<"$extra_list"
+    else
+      warn "COMFY_DIR・COMFY_PORT が本番（~/ComfyUI・8188）でないので、2 つ目以降の常駐（COMFY_EXTRA_INSTANCES）には触りません"
+    fi
+  fi
+fi
+
 # 未追跡のファイル（例: dekahamuntu の .chibihamuntu-freeze.txt）は checkout の邪魔にならないので見ない
 if [[ -n "$(git -C "$COMFY_DIR" status --porcelain --untracked-files=no)" ]]; then
   echo "$COMFY_DIR に未コミットの変更があります。更新を中止します" >&2
@@ -115,7 +141,12 @@ if [[ "$restart" == 1 ]]; then
     warn "ComfyUI のキューを確かめません（--force）"
   else
     step "ComfyUI のキュー"
-    comfy_queue_is_idle "$COMFY_PORT" || exit 1
+    for i in "${!restart_units[@]}"; do
+      if ((${#restart_units[@]} > 1)); then
+        echo "${restart_units[$i]}（127.0.0.1:${restart_ports[$i]}）:"
+      fi
+      comfy_queue_is_idle "${restart_ports[$i]}" || exit 1
+    done
   fi
 fi
 
@@ -209,12 +240,14 @@ fi
 
 if [[ "$restart" == 1 ]]; then
   step "ComfyUI を起動し直す"
-  systemctl --user restart comfyui.service
-  if ! comfy_wait_ready "$COMFY_PORT" "$COMFY_READY_TIMEOUT"; then
-    echo "戻すなら: $restore_cmd" >&2
-    exit 1
-  fi
-  systemctl --user status comfyui.service --no-pager || true
+  systemctl --user restart "${restart_units[@]}"
+  for i in "${!restart_units[@]}"; do
+    if ! comfy_wait_ready "${restart_ports[$i]}" "$COMFY_READY_TIMEOUT" "${restart_units[$i]%.service}"; then
+      echo "戻すなら: $restore_cmd" >&2
+      exit 1
+    fi
+  done
+  systemctl --user status "${restart_units[@]}" --no-pager || true
 else
   warn "ComfyUI は起動し直していません（--no-restart）"
 fi

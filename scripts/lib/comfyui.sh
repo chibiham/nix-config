@@ -53,11 +53,11 @@ print(len(d["queue_running"]), len(d["queue_pending"]))
   echo "ComfyUI のキューは空です"
 }
 
-# comfy_wait_ready <port> <秒>
+# comfy_wait_ready <port> <秒> [unit の名前（.service なし。既定 comfyui）]
 # /system_stats が返るまで待ち、comfyui_version を表示する。返らなければ 1。
 # 起動し直しのあと、拡張（custom_nodes）の読み込みに時間がかかる。
 comfy_wait_ready() {
-  local port="$1" timeout="$2" url body version start
+  local port="$1" timeout="$2" unit="${3:-comfyui}" url body version start
   url="http://127.0.0.1:$port/system_stats"
   start=$SECONDS
   while ((SECONDS - start < timeout)); do
@@ -75,6 +75,6 @@ print(json.load(sys.stdin).get("system", {}).get("comfyui_version", "不明"))
     fi
     sleep 3
   done
-  echo "ComfyUI が ${timeout} 秒たっても応答しません（$url）。journalctl --user -u comfyui -n 100 で確かめてください" >&2
+  echo "ComfyUI が ${timeout} 秒たっても応答しません（$url）。journalctl --user -u $unit -n 100 で確かめてください" >&2
   return 1
 }
