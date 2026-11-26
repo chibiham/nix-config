@@ -6,26 +6,31 @@
 { pkgs, ... }:
 
 let
-  # GPU 0 = ComfyUI、GPU 1 = Qwen（qwen38.service）を既定にし、
-  # 必要なときだけ2枚を束ねたQwen（qwen38-dual.service）に切り替える。
-  # ComfyUIには2枚とも見せていて、MiniMax H3 Image のテキストエンコーダーの計算は GPU 1 で回す（Select CLIP Device = gpu:1、issue 5）。
+  # GPU 0 = ComfyUI（comfyui.service、8188）、GPU 1 = 2 つ目の ComfyUI（comfyui-gpu1.service、8189）と Qwen（qwen38.service）を既定にし、
+  # 必要なときだけ2枚を束ねたQwen（qwen38-dual.service。2 つの ComfyUI とは排他）に切り替える。
+  # 2 つ目の ComfyUI は hosts/ubuntu/dekahamuntu.env の COMFY_EXTRA_INSTANCES（gpu1:8189:1）から install-comfyui-ubuntu.sh が書く。
+  # 名前・ポートを変えたら、下の comfyGpu1・comfyGpu1Port も揃える。
+  # 1 つ目の ComfyUI には2枚とも見せていて、MiniMax H3 Image のテキストエンコーダーの計算は GPU 1 で回す（Select CLIP Device = gpu:1、issue 5）。
   # 重みは RAM に置かれ、GPU 1 はエンコードのあいだだけ約 1.2〜1.5GB 使う（本番で確かめた、2026-11-14）。
   # Qwen のモデルが GPU 1 に載っているとその計算が OutOfMemoryError（device 1）になるので、image-dual で Qwen のモデルを降ろす。
   # split は ComfyUI のモデルを降ろし、主に ComfyUI が RAM に持っている重みを Qwen（Flash-Next は RAM に約 52GB）に空ける。
   # unitのGPUの割り当てと Conflicts= は scripts/install-*-ubuntu.sh が hosts/ubuntu/dekahamuntu.env から書く。
+  comfyGpu1 = "comfyui-gpu1.service";
+  comfyGpu1Port = "8189";
   ai-mode = pkgs.writeShellScriptBin "ai-mode" ''
     set -euo pipefail
 
     usage() {
       cat >&2 <<'EOF'
     usage: ai-mode {split|image-dual|llm-dual|applio|stop|status}
-      split       GPU 0 = ComfyUI、GPU 1 = Qwen（既定。再起動後もこの形）。
-                  ComfyUIが載せているモデルを降ろさせる（RAMの重みをQwenに空ける）
-      image-dual  splitの形にしたうえでQwenのモデルを降ろし、GPU 1 をH3 Imageのテキストエンコーダーの計算
-                  （Select CLIP Device = gpu:1）に空ける（Routerは止めない。次にQwenへ問うと読み込み直す）。
-                  降りたのを確かめてから戻る（確かめられなければ失敗で終わる）
-      llm-dual    ComfyUIとQwen（1枚）を止め、2枚を束ねたQwenを起動
-      applio      GPU 0 でApplioを起動（ComfyUIは止まる。GPU 1 のQwenはそのまま）
+      split       GPU 0 = ComfyUI（8188）、GPU 1 = 2 つ目の ComfyUI（8189）と Qwen（既定。再起動後もこの形）。
+                  2 つの ComfyUI が載せているモデルを降ろさせる（RAMの重みをQwenに空ける）
+      image-dual  splitの形にしたうえでQwenのモデルと 2 つ目の ComfyUI（8189）のモデルを降ろし、
+                  GPU 1 をH3 Imageのテキストエンコーダーの計算（Select CLIP Device = gpu:1）と 2 つ目の ComfyUI に空ける
+                  （Routerは止めない。次にQwenへ問うと読み込み直す）。
+                  Qwen のモデルが降りたのを確かめてから戻る（確かめられなければ失敗で終わる）
+      llm-dual    2 つの ComfyUI とQwen（1枚）を止め、2枚を束ねたQwenを起動
+      applio      GPU 0 でApplioを起動（ComfyUI（8188）は止まる。GPU 1 の 2 つ目の ComfyUI とQwenはそのまま）
       stop        すべて停止（LoRA学習は止めない）
       status      各サービスと学習の状態
     EOF
@@ -103,12 +108,18 @@ let
     }
 
     # ComfyUIが載せているモデルを降ろさせる。実行中のものが終わってから降ろす（キューは消えない）。
-    # 応答しなくても（止まっている・起動中）続ける
+    # 引数はポート（既定は 2 つとも: 8188 と ${comfyGpu1Port}）。応答しなくても（止まっている・起動中）続ける
     free_comfy() {
-      echo "ComfyUIのモデルを降ろします" >&2
-      ${pkgs.curl}/bin/curl -fsS --max-time 10 -X POST -H 'Content-Type: application/json' \
-        -d '{"unload_models":true,"free_memory":true}' http://127.0.0.1:8188/free >/dev/null \
-        || echo "ComfyUIが応答しませんでした（続けます）" >&2
+      local port ports=("$@")
+      if (($# == 0)); then
+        ports=(8188 ${comfyGpu1Port})
+      fi
+      for port in "''${ports[@]}"; do
+        echo "ComfyUI（''${port}）のモデルを降ろします" >&2
+        ${pkgs.curl}/bin/curl -fsS --max-time 10 -X POST -H 'Content-Type: application/json' \
+          -d '{"unload_models":true,"free_memory":true}' "http://127.0.0.1:$port/free" >/dev/null \
+          || echo "ComfyUI（''${port}）が応答しませんでした（続けます）" >&2
+      done
     }
 
     # LoRA学習（~/ai/scripts/lora-train）はGPUを使うunitとConflicts=で排他にしている。
@@ -128,8 +139,8 @@ let
           unload_models
           systemctl --user stop qwen38-dual.service
         fi
-        systemctl --user start comfyui.service qwen38.service
-        # ComfyUI が RAM に持っている重み（H3 Image のテキストエンコーダーなど）を降ろし、Qwen の RAM を空ける
+        systemctl --user start comfyui.service ${comfyGpu1} qwen38.service
+        # 2 つの ComfyUI が RAM に持っている重み（H3 Image のテキストエンコーダーなど）を降ろし、Qwen の RAM を空ける
         free_comfy
         ;;
       image-dual)
@@ -138,13 +149,17 @@ let
           unload_models
           systemctl --user stop qwen38-dual.service
         fi
-        systemctl --user start comfyui.service qwen38.service
+        systemctl --user start comfyui.service ${comfyGpu1} qwen38.service
+        # 2 つ目の ComfyUI が GPU 1 に載せているモデルも降ろさせる（H3 Image のテキストエンコーダーの計算とぶつからないように）
+        free_comfy ${comfyGpu1Port}
         unload_models_wait || exit 1
         ;;
       llm-dual)
         guard_training
         unload_models
-        # qwen38-dual.service は Conflicts= で comfyui・qwen38 を止める
+        # qwen38-dual.service は Conflicts= で comfyui・${comfyGpu1}・qwen38 を止める。
+        # ${comfyGpu1} は、Conflicts= を書き直す前の qwen38-dual.service（install-qwen38-ubuntu.sh の流し直しの前）でも止まるように、先に止める
+        systemctl --user stop ${comfyGpu1} || true
         systemctl --user start qwen38-dual.service
         ;;
       applio)
@@ -152,10 +167,10 @@ let
         systemctl --user start applio.service
         ;;
       stop)
-        systemctl --user stop qwen38-dual.service qwen38.service comfyui.service applio.service
+        systemctl --user stop qwen38-dual.service qwen38.service comfyui.service ${comfyGpu1} applio.service
         ;;
       status)
-        systemctl --user --no-pager --full status comfyui.service qwen38.service qwen38-dual.service applio.service 'lora-train-*.service' || true
+        systemctl --user --no-pager --full status comfyui.service ${comfyGpu1} qwen38.service qwen38-dual.service applio.service 'lora-train-*.service' || true
         nvidia-smi --query-gpu=index,name,memory.used,memory.total,temperature.gpu,power.draw --format=csv || true
         ;;
       *) usage ;;
