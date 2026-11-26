@@ -183,7 +183,7 @@ Ubuntu機で手で行うもの:
 - Linux AI推論: CUDA対応llama.cpp + ai-mode（モデル取得は明示スクリプト）
 - ai-modeの排他対象: qwen38 / comfyui / applio。3090の24GBを取り合うため、applioはunitの `Conflicts=` で同時起動を禁止している。
   qwen38（Router）はモデル未ロードならVRAMを使わないのでComfyUIと同時に動かし、VRAMの受け渡しはComfyUIノードと `ai-mode` が行う。
-  以上はchibihamuntu（3090 1枚）の話。dekahamuntu（5060 Ti 16GB ×2）は既定が `ai-mode split`（GPU 0 = ComfyUI、GPU 1 = qwen38 を常駐）で、2枚を束ねるときだけ `ai-mode llm-dual`（qwen38-dual。ComfyUI・qwen38と排他）に切り替える。GPU 1 には 2 つ目の ComfyUI（comfyui-gpu1、8189。art-studio が 2 つへ振り分ける。chibiham-ai の issue 96、2026-11-27 時点で実機には未適用）も置き、split・image-dual が起こし、llm-dual・stop が止める。MiniMax H3 Image のテキストエンコーダーは `Select CLIP Device`（gpu:1）で GPU 1 で計算するが VRAM には常駐しない（重みはRAM）。Qwen のモデルが GPU 1 に載っているとその計算が OutOfMemoryError になるので、`ai-mode image-dual` で Qwen のモデルを降ろす（Router の unload は頼むだけなので、status が `unloaded` になるまで待ってから戻り、確かめられなければ失敗で終わる。600秒の放置でも降りる）。`ai-mode split` は ComfyUI のモデルを降ろして RAM を Qwen に空ける
+  以上はchibihamuntu（3090 1枚）の話。dekahamuntu（5060 Ti 16GB ×2）は既定が `ai-mode split`（GPU 0 = ComfyUI、GPU 1 = qwen38 を常駐）で、2枚を束ねるときだけ `ai-mode llm-dual`（qwen38-dual。ComfyUI・qwen38と排他）に切り替える。GPU 1 には 2 つ目の ComfyUI（comfyui-gpu1、8189。art-studio が 2 つへ振り分ける。chibiham-ai の issue 96、2026-11-27（日本時間）に実機へ入れた）も置き、split・image-dual が起こし、llm-dual・stop が止める。MiniMax H3 Image のテキストエンコーダーは `Select CLIP Device`（gpu:1）で GPU 1 で計算するが VRAM には常駐しない（重みはRAM）。Qwen のモデルが GPU 1 に載っているとその計算が OutOfMemoryError になるので、`ai-mode image-dual` で Qwen のモデルを降ろす（Router の unload は頼むだけなので、status が `unloaded` になるまで待ってから戻り、確かめられなければ失敗で終わる。600秒の放置でも降りる）。`ai-mode split` は ComfyUI のモデルを降ろして RAM を Qwen に空ける
 
 ### macOS統合
 

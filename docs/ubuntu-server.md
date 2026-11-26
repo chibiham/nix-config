@@ -630,7 +630,7 @@ ComfyUI は 1 つの常駐で 1 度に 1 つの job しか回さない。GPU が
   設定に残したまま消すと警告を出す（次の `--unit-only` でまた足される）。temp の置き場（`~/ComfyUI/temp-<名前>`）は残すので、要らなければ手で消す
 - 2 つ目以降の画面は tailnet に出さない（art-studio が同じ機械の中から呼ぶ）。開きたくなったら `TAILSCALE_SERVE` に `8444=8189` のように足して `configure-tailscale-serve-ubuntu.sh` を流す（operator がなければ sudo に落ちる）
 - `install-qwen38-ubuntu.sh` は、`LLM_DUAL_CUDA_DEVICES` と GPU が重なる常駐を `qwen38-dual.service` の `Conflicts=` に入れる（束ねる Qwen を起こすと止まる）
-- 状態とログ: `systemctl --user status comfyui-gpu1 --no-pager`、`journalctl --user -u comfyui-gpu1 -f`（ComfyUI の側のログは `~/ComfyUI/user/comfyui_8189.log`）
+- 状態とログ: `systemctl --user status comfyui-gpu1 --no-pager`、`journalctl --user -u comfyui-gpu1 -f`（2 つ目のログは journald だけ。`~/ComfyUI/user/comfyui_<ポート>.log` は ComfyUI-Manager が書くもので、Manager を付けない 2 つ目にはできない。dekahamuntu で確かめた、2026-11-27）
 - 試験: `tests/test_comfyui_instances.py`（にせの systemctl・curl などで流す。`BASE_REPO=<変更の前のリポジトリ>` で chibihamuntu・設定のないホストの unit・出力が前と同じかも見る。書き方はファイルの頭）
 
 ### ComfyUIの更新と戻し

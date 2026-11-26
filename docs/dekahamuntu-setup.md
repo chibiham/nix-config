@@ -204,7 +204,7 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 4. art-studio: `~/ai/scripts/install-art-studio`（unit 本体）と `scripts/configure-art-studio-ubuntu.sh`（このホストの drop-in。`ART_STUDIO_COMFYUI_URL`・`ART_STUDIO_CUDA_DEVICES`）。モザイクの `.venv` は `~/ai/apps/art-studio` の README の手順。作品と DB は chibihamuntu から写した
 5. Tailscale Serve は本人が sudo で `443 → 8188`、`4520 → 4520` を設定した（いまは `configure-tailscale-serve-ubuntu.sh` で同じ形になる）
 
-このときの unit は GPU 0 だけ（`CUDA_VISIBLE_DEVICES=0`）、本体は `e3bee7ff`。v0.45.2 への更新と、GPU 1 も見せる変更（2026-11-14）は「[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)」。GPU 1 に 2 つ目の ComfyUI（`comfyui-gpu1.service`）を置く変更は「[2-10](#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)」（2026-11-27 時点で実機には未適用）。
+このときの unit は GPU 0 だけ（`CUDA_VISIBLE_DEVICES=0`）、本体は `e3bee7ff`。v0.45.2 への更新と、GPU 1 も見せる変更（2026-11-14）は「[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)」。GPU 1 に 2 つ目の ComfyUI（`comfyui-gpu1.service`）を置く変更は「[2-10](#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)」（2026-11-27 日本時間に入れた）。
 
 ### 2-5. Qwen（GPU 1。束ねるときは 2 枚）
 
@@ -454,7 +454,7 @@ H3 Image（本番、B）: テキストエンコーダーを GPU 1 で回し、�
 
 ### 2-10. GPU ごとの ComfyUI（2 つ目、comfyui-gpu1.service）
 
-chibiham-ai の issue 96（ADR 0016 「ComfyUI を GPU ごとに 1 つずつ立て、art-studio は空いているほうへ投げる」）。ComfyUI は 1 つの常駐で 1 度に 1 つの job しか回さないので、GPU 1 に 2 つ目の常駐を置き、art-studio が 2 つへ振り分ける。**2026-11-27 時点で実機には未適用**（下の手順はまだ流していない。流したら、日付と結果をこの節に書き足す）。
+chibiham-ai の issue 96（ADR 0016 「ComfyUI を GPU ごとに 1 つずつ立て、art-studio は空いているほうへ投げる」）。ComfyUI は 1 つの常駐で 1 度に 1 つの job しか回さないので、GPU 1 に 2 つ目の常駐を置き、art-studio が 2 つへ振り分ける。2026-11-27（日本時間）に実機へ入れた（下の「[2026-11-27 の実績](#2026-11-27-の実績)」）。art-studio と保存ノード（chibiham-save-meta）は、chibiham-ai の issue 96 が develop に入るまで一時の形で動かしている（下の「[仮の形と戻し方](#仮の形と戻し方2026-11-27-から)」）。
 
 | | 1 つ目（`comfyui.service`） | 2 つ目（`comfyui-gpu1.service`） |
 |---|---|---|
@@ -470,7 +470,7 @@ chibiham-ai の issue 96（ADR 0016 「ComfyUI を GPU ごとに 1 つずつ立�
 
 - Qwen のモデルが GPU 1 に載っているあいだは、2 つ目の job が OutOfMemoryError になりうる（art-studio は 2 つ目を休ませて 1 つ目だけで回す）。すぐ 2 つとも使うなら `ai-mode image-dual`（Qwen のモデルと 2 つ目の ComfyUI のモデルを降ろす）。Qwen は 600 秒の放置でも降りる
 - H3 Image の 2GPU の形（`Select CLIP Device` = `gpu:1`）は 1 つ目で回す。ComfyUI の画面から手で投げるときは、2 つ目が回していないのを見てから投げる（art-studio を通らないので止められない）
-- RAM は 2 つの常駐で取り合う（それぞれがモデルを RAM に持つ）。実機の RAM・VRAM・秒数は [ai-server-placement.md の「dekahamuntu: GPU ごとの ComfyUI」](ai-server-placement.md#dekahamuntu-gpu-ごとの-comfyuiissue-96) に、入れたあとで書く
+- RAM は 2 つの常駐で取り合う（それぞれがモデルを RAM に持つ）。実機の RAM・VRAM・秒数は [ai-server-placement.md の「dekahamuntu: GPU ごとの ComfyUI」](ai-server-placement.md#dekahamuntu-gpu-ごとの-comfyuiissue-96)（2026-11-27 に計った。Anima・SDXL を 2 つ同時に回しても RAM は足りた。Qwen のモデルを載せたままの同時は計っていない）
 
 #### ai-mode
 
@@ -485,7 +485,7 @@ chibiham-ai の issue 96（ADR 0016 「ComfyUI を GPU ごとに 1 つずつ立�
 
 ai-mode は `~/.config/systemd/user/comfyui-gpu1.service` があるときだけ 2 つ目を扱う（unit を足す前・消したあとも、ほかの切り替えは今までどおり動く）。
 
-#### 本番へ入れる手順（まだ流していない）
+#### 本番へ入れる手順
 
 前提: art-studio が `COMFYUI_URL` に 2 つ並べた値を読める版（chibiham-ai の issue 96）になっていること。前の art-studio に 2 つ並べた値を渡すと、URL の形が違うとして起動しない見込み（ADR-0011 の 3）なので、(d) はその版を入れてから流す。
 
@@ -526,6 +526,43 @@ systemctl --user show art-studio.service -p Environment              # COMFYUI_U
 ai-mode status
 ```
 
+#### 2026-11-27 の実績
+
+日本時間 2026-11-27（UTC では 11-26 18:30〜20:05）。本人の確かめ（原文「dekahamに入れていいよ」）のあとに流した。sudo は使っていない。上の手順とは順が違う: (b)・(c) は実機の `~/.config/nix-config` ではなく枝の写し（`~/issue96-stage/nix-config`）から流し、(a) の pull と (e) はそのあと、(d) は ComfyUI の起こし直しと合わせて最後にした。
+
+1. 18:30 UTC: (b) `install-comfyui-ubuntu.sh --unit-only`（写しから）。`comfyui-gpu1.service` を書いて enable・起動し、6 秒で応答した（`comfyui_version` 0.45.2）。`comfyui.service` は「変わらない」で、unit は前と `cmp` で同じ。起こし直されなかった（ActiveEnterTimestamp は 2026-11-17 03:31:13 UTC のまま）
+   - 2 つ目の `/system_stats` の devices は `cuda:0 NVIDIA GeForce RTX 5060 Ti` の 1 つだけ（GPU 1）
+   - `/object_info` のノードは 2 つとも 1,858 個、custom_nodes の import の失敗は 0
+   - レシピのノードの `clip_device` の選択肢は、1 つ目が `default / cpu / gpu:0 / gpu:1`、2 つ目が `default / cpu`
+   - 2 つ目のログは journald だけ（ComfyUI-Manager を付けていないので `user/comfyui_8189.log` はできない）。temp は `~/ComfyUI/temp-gpu1/temp`
+2. (c) `install-qwen38-ubuntu.sh`（写しから）。`qwen38-dual.service` の差は `Conflicts=` の 1 行だけ（`qwen38.service comfyui.service` → `qwen38.service comfyui.service comfyui-gpu1.service`）。`qwen38.service` は同じ中身。Router は起こし直された。最後の Tailscale Serve の段は前と同じく「Access denied: serve config denied」で終了コード 1（operator が未設定）。公開は元のまま 443・4520・8443 の 3 つ
+3. (a)・(e): この枝を origin の develop に push し（345401c..a1bc73d）、実機の `~/.config/nix-config` で `git pull --ff-only`（9a65a61 → a1bc73d）、`home-manager switch`（終了コード 0。止まったものはない）。実機の `ai-mode` はそれまで `image-dual` もない古い版だった（issue 5 のあと switch していなかった）。switch のあと `ai-mode image-dual`（「ComfyUI（8189）のモデルを降ろします」「Qwenのモデルは載っていません」、終了コード 0）と `ai-mode status`（comfyui・comfyui-gpu1・qwen38 が active、qwen38-dual は inactive）を流した。`ai-mode split`・`llm-dual`・`stop`・`applio` は実機では流していない
+4. 20:02〜20:05 UTC: キューが空のときに 2 つの ComfyUI を 1 度ずつ起こし直した（chibiham-ai 側の新しい保存ノードを読ませるため）。(d) `configure-art-studio-ubuntu.sh` で drop-in（`art-studio.service.d/dekahamuntu.conf`）を `COMFYUI_URL=http://127.0.0.1:8188,http://127.0.0.1:8189` にし、art-studio を起こし直した（active。画面の札は ComfyUI 1・ComfyUI 2 とも起動中）。前提の art-studio の版は、下の仮の形で満たした
+
+計測（2 つ同時の秒数・VRAM・RAM、途中で 2 つ目を止めたとき、H3 Image との同居）は [ai-server-placement.md の「dekahamuntu: GPU ごとの ComfyUI」](ai-server-placement.md#dekahamuntu-gpu-ごとの-comfyuiissue-96)。
+
+#### 仮の形と戻し方（2026-11-27 から）
+
+chibiham-ai の issue 96 が develop に入るまでの一時の形（本人の依頼「とりあえず2つ目有効にしておいてほしい」）。どちらもこのリポジトリのスクリプトは書かない（上の「状態」の表にも載せない）。
+
+- 本番の art-studio は、drop-in `art-studio.service.d/zz-issue96-stage.conf`（`WorkingDirectory=~/issue96-stage/ai/apps/art-studio`、`ART_STUDIO_PYTHON=~/ai/apps/art-studio/.venv/bin/python`）で、chibiham-ai の agent/96 の写しのビルドで動いている
+- `~/ComfyUI/custom_nodes/chibiham-save-meta` の symlink は写し（`~/issue96-stage/ai/comfyui/custom_nodes/chibiham-save-meta`）を向いている（元は `~/ai/comfyui/custom_nodes/chibiham-save-meta`）
+
+develop に入ったあとに戻す（本人か執事が流す。sudo なし）:
+
+```bash
+# dekahamuntu で。一括・ループが回っていないときに
+cd ~/ai && git pull --ff-only
+rm ~/.config/systemd/user/art-studio.service.d/zz-issue96-stage.conf
+systemctl --user daemon-reload
+~/ai/scripts/install-art-studio                      # ~/ai からビルドし直して起こし直す
+ln -sfn ~/ai/comfyui/custom_nodes/chibiham-save-meta ~/ComfyUI/custom_nodes/chibiham-save-meta
+systemctl --user restart comfyui-gpu1.service comfyui.service   # 列が空のとき
+rm -rf ~/issue96-stage ~/ComfyUI/output/issue96-inbox
+```
+
+`dekahamuntu.conf`（`COMFYUI_URL` を 2 つ並べた drop-in）は残す。
+
 #### 戻し方
 
 ```bash
@@ -562,7 +599,7 @@ GPU の割り当て（`hosts/ubuntu/dekahamuntu.env`）:
 
 | unit | GPU | 備考 |
 |---|---|---|
-| comfyui-gpu1.service | 1 | 既定で起動（2026-11-27 時点で実機には未適用。[2-10](#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)）。2 つ目の ComfyUI（8189）。置き場は comfyui.service と同じで、temp だけ別。art-studio が 2 つへ振り分ける。qwen38-dual と排他。Qwen のモデルが載っているあいだは OutOfMemoryError になりうる |
+| comfyui-gpu1.service | 1 | 既定で起動（2026-11-27 日本時間に入れた。[2-10](#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)）。2 つ目の ComfyUI（8189）。置き場は comfyui.service と同じで、temp だけ別。art-studio が 2 つへ振り分ける。qwen38-dual と排他。Qwen のモデルが載っているあいだは OutOfMemoryError になりうる |
 | comfyui.service | 0,1 | 既定で起動。既定のデバイス（`cuda:0`）は GPU 0 で、今までのワークフローは GPU 0 だけを使う。GPU 1 はノードで指定したもの（MiniMax H3 Image のテキストエンコーダーの計算、`Select CLIP Device`。重みは RAM に置かれ、GPU 1 はエンコードのあいだだけ使う）だけ（[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)）。2026-11-14 に `0` から `0,1` にした |
 | qwen38.service | 1 | 既定で起動（ComfyUI とは独立）。600 秒問いのなかったモデルを降ろす（`QWEN_SLEEP_IDLE_SECONDS`）。モデルが載っているあいだは、H3 Image（B）のエンコードが GPU 1 で OutOfMemoryError になる（`ai-mode image-dual` で降ろす） |
 | qwen38-dual.service | 0,1 | `ai-mode llm-dual`（既定にしない。`ai-mode split` で戻す）。comfyui・comfyui-gpu1・qwen38 と排他。`--split-mode layer --tensor-split 39,10`（UD-Q3_K_XL の n-cpu-moe 33 と組。1,1 は後ろの GPU に寄って落ちる） |
@@ -831,7 +868,7 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | OS・ユーザー | Ubuntu 24.04.5、ホスト名 `dekahamuntu`、ユーザー `chibiham`（`sudo`・`power` グループ） | インストーラ（第1段の 1.）。`hosts/ubuntu/dekahamuntu.env` の `UBUNTU_USER`、`power` は RAPL のスクリプト |
 | apt の基礎 | `ca-certificates`・`curl`・`git`・`openssh-server`・`sqlite3`・`xz-utils` | `bootstrap-ubuntu.sh` |
 | sshd | `ssh` が有効。設定はインストーラの `sshd_config.d/50-cloud-init.conf` のまま | インストーラと `bootstrap-ubuntu.sh` |
-| Nix・Home Manager | `chibiham@dekahamuntu`（`~/.ssh/config`、`~/.secrets/env.tpl`、`ai-mode`、nix-gc.timer など） | `bootstrap-ubuntu.sh`（`home-manager switch`）。実機の世代は 2026-11-11 のもの（この枝の後の commit はまだ switch していない。`ai-mode image-dual` も入っていない） |
+| Nix・Home Manager | `chibiham@dekahamuntu`（`~/.ssh/config`、`~/.secrets/env.tpl`、`ai-mode`、nix-gc.timer など） | `bootstrap-ubuntu.sh`（`home-manager switch`）。実機の世代は 2026-11-27（日本時間）に `~/.config/nix-config` を a1bc73d に pull して switch したもの（それまでは 2026-11-11 の世代で、`ai-mode image-dual` も入っていなかった。[2-10](#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)） |
 | mise | Node.js 24、Python 3.12 | `bootstrap-ubuntu.sh` |
 | シークレット | `~/.secrets/.env`（Service Account のトークン）、`~/.secrets/.env.secrets`（`update-secrets` の出力） | `bootstrap-ubuntu.sh`（トークンは本人が貼る） |
 | Tailscale | `tailscale`（apt）、名前 `dekahamuntu`、operator は未設定 | `install-tailscale-ubuntu.sh`（いまの版は `--operator=$USER` も設定する） |
@@ -843,9 +880,9 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | linger | `Linger=yes` | `install-comfyui-ubuntu.sh`（`loginctl enable-linger`） |
 | comfyui.service | GPU 0,1（`CUDA_DEVICE_ORDER=PCI_BUS_ID`・`CUDA_VISIBLE_DEVICES=0,1`。2026-11-14 に `0` から変えた）、`CC=/usr/bin/cc`、`--fast` なし。enabled | `install-comfyui-ubuntu.sh`（`COMFY_CUDA_DEVICES=0,1`、`COMFY_EXTRA_ARGS` は空）。導入済みなら `--unit-only`。`0` のときの unit は、まねのコマンドで流し、実機の unit と同じになることを確かめた（2026-11-12）。`0,1` との差は `CUDA_VISIBLE_DEVICES` の 1 行 |
 | art-studio.service | unit 本体（PORT=4520、`ART_STUDIO_INBOX`、mise の node 24）。enabled | `~/ai/scripts/install-art-studio`。まねのコマンドで流し、実機の unit と同じになることを確かめた |
-| comfyui-gpu1.service | まだない（2026-11-27 時点で未適用） | `install-comfyui-ubuntu.sh --unit-only`（`COMFY_EXTRA_INSTANCES=gpu1:8189:1`。[2-10](#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)） |
-| art-studio の drop-in | `art-studio.service.d/dekahamuntu.conf`（`COMFYUI_URL=http://127.0.0.1:8188`、GPU 0） | `configure-art-studio-ubuntu.sh`（`ART_STUDIO_COMFYUI_URL`・`ART_STUDIO_CUDA_DEVICES`）。実機と同じ中身になることを確かめた（`COMFYUI_URL` が 1 つのとき）。いまの env は 2 つ並べた値（`…8188,http://127.0.0.1:8189`）で、実機には未適用（2-10） |
-| Qwen の unit（2026-11-13 に入れ、2026-11-14 に流し直した） | `qwen38.service`（GPU 1、Router、ポート 8080。enabled、`WantedBy=default.target`）、`qwen38-dual.service`（GPU 0,1、`--split-mode layer --tensor-split 39,10`、`Conflicts=qwen38.service comfyui.service`。enable しない）。どちらも `--sleep-idle-seconds 600`（2026-11-14 に足した） | `install-qwen38-ubuntu.sh`（`LLM_CUDA_DEVICES`・`LLM_DUAL_*`・`QWEN_WANTED_BY`・`QWEN_SLEEP_IDLE_SECONDS`）。いまのスクリプトは `qwen38-dual.service` の `Conflicts=` に `comfyui-gpu1.service` も書く（`COMFY_EXTRA_INSTANCES`。実機には未適用、2-10） |
+| comfyui-gpu1.service（2026-11-27 日本時間に入れた） | GPU 1 だけ（`CUDA_DEVICE_ORDER=PCI_BUS_ID`・`CUDA_VISIBLE_DEVICES=1`）、127.0.0.1:8189、temp は `~/ComfyUI/temp-gpu1/temp`、ComfyUI-Manager なし。enabled（`WantedBy=default.target`） | `install-comfyui-ubuntu.sh --unit-only`（`COMFY_EXTRA_INSTANCES=gpu1:8189:1`。[2-10](#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)）。実機でこのスクリプトが書いた |
+| art-studio の drop-in | `art-studio.service.d/dekahamuntu.conf`（`COMFYUI_URL=http://127.0.0.1:8188,http://127.0.0.1:8189`、GPU 0。2026-11-27 日本時間に 2 つ並べた値にした）。ほかに一時の drop-in `zz-issue96-stage.conf` がある（[2-10 の「仮の形と戻し方」](#仮の形と戻し方2026-11-27-から)。このリポジトリは管理しない） | `configure-art-studio-ubuntu.sh`（`ART_STUDIO_COMFYUI_URL`・`ART_STUDIO_CUDA_DEVICES`）。`COMFYUI_URL` が 1 つのときも 2 つのときも、実機でこのスクリプトが書いた |
+| Qwen の unit（2026-11-13 に入れ、2026-11-14・2026-11-27 に流し直した） | `qwen38.service`（GPU 1、Router、ポート 8080。enabled、`WantedBy=default.target`）、`qwen38-dual.service`（GPU 0,1、`--split-mode layer --tensor-split 39,10`、`Conflicts=qwen38.service comfyui.service comfyui-gpu1.service`。enable しない）。どちらも `--sleep-idle-seconds 600`（2026-11-14 に足した）。2026-11-27（日本時間）に流し直し、差は `Conflicts=` の 1 行だけ（`comfyui-gpu1.service` が加わった） | `install-qwen38-ubuntu.sh`（`LLM_CUDA_DEVICES`・`LLM_DUAL_*`・`QWEN_WANTED_BY`・`QWEN_SLEEP_IDLE_SECONDS`。`Conflicts=` の 2 つ目以降の ComfyUI は `COMFY_EXTRA_INSTANCES`） |
 | MiniMax H3 Image の重み（2026-11-14 に置いた） | `~/ComfyUI/models/` の `vae/` に 1 つ、`diffusion_models/` に 4 つ（公式 int8・w4a8、GGUF Q5_K_M・Q4_K_M。GGUF の 2 つは使わず、消してよい候補）。テキストエンコーダー（NVFP4）とプロンプト拡張は前からあった。ComfyUI-GGUF は入れていない | `install-minimax-h3-image-ubuntu.sh`（`H3_IMAGE_MODELS=int8 w4a8`。revision・sha256 を固定。GGUF は置かない）。台帳への記入は chibiham-ai#74 |
 | Qwen のプリセット（2026-11-13 に入れた） | `~/.config/llama.cpp/qwen38-models.ini`（n-cpu-moe 45 / 42）、`qwen38-dual-models.ini`（33 / 31）、`qwen38-flash-chat-template.jinja` | `install-qwen38-ubuntu.sh`（`QWEN_*_N_CPU_MOE`） |
 | Qwen のモデル（2026-11-13 に取った） | `~/models/qwen3.8-flash-next`（UD-Q3_K_XL・Uncensored 版 i1-IQ3_M と各 mmproj）。27B はない | `install-qwen38-ubuntu.sh`（`QWEN_INSTALL_27B=0`） |
