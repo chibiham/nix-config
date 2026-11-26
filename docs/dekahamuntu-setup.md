@@ -118,7 +118,7 @@ ssh-keygen -lf ~/.ssh/id_ed25519.pub   # SHA256:RD+wnU93j6cCT4AEoO5BH0/WGzioZuEl
 
 表示された URL を Mac のブラウザで開いて認証する（認証キーは使わない）。`--hostname=dekahamuntu` で登録される。続けて `tailscale set --operator=$USER` を流すので、以後の `tailscale serve` は sudo なしで設定できる（chibihamuntu と同じ）。tailnet の管理画面で、鍵の期限（Key expiry）を切るかは本人が決める。
 
-tailnet 内への公開（Tailscale Serve）は、サービスを入れたあとに `scripts/configure-tailscale-serve-ubuntu.sh` で、`hosts/ubuntu/dekahamuntu.env` の `TAILSCALE_SERVE`（`443=8188 4520=4520 8443=8080`）のとおりにする（第2段の 2-4・2-5）。
+tailnet 内への公開（Tailscale Serve）は、サービスを入れたあとに `scripts/configure-tailscale-serve-ubuntu.sh` で、`hosts/ubuntu/dekahamuntu.env` の `TAILSCALE_SERVE`（`443=8188 4520=4520 8443=8080`）のとおりにする（第2段の 2-4・2-5）。2 つ目の ComfyUI（8189、2-10）は出さない。画面を tailnet から開きたくなったら `TAILSCALE_SERVE` に `8444=8189` を足して同じスクリプトを流す（operator がなければ sudo が要るので本人が流す）。
 
 Mac から tailnet 経由で入れることを確かめる。
 
@@ -204,7 +204,7 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 4. art-studio: `~/ai/scripts/install-art-studio`（unit 本体）と `scripts/configure-art-studio-ubuntu.sh`（このホストの drop-in。`ART_STUDIO_COMFYUI_URL`・`ART_STUDIO_CUDA_DEVICES`）。モザイクの `.venv` は `~/ai/apps/art-studio` の README の手順。作品と DB は chibihamuntu から写した
 5. Tailscale Serve は本人が sudo で `443 → 8188`、`4520 → 4520` を設定した（いまは `configure-tailscale-serve-ubuntu.sh` で同じ形になる）
 
-このときの unit は GPU 0 だけ（`CUDA_VISIBLE_DEVICES=0`）、本体は `e3bee7ff`。v0.45.2 への更新と、GPU 1 も見せる変更（2026-11-14）は「[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)」。
+このときの unit は GPU 0 だけ（`CUDA_VISIBLE_DEVICES=0`）、本体は `e3bee7ff`。v0.45.2 への更新と、GPU 1 も見せる変更（2026-11-14）は「[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)」。GPU 1 に 2 つ目の ComfyUI（`comfyui-gpu1.service`）を置く変更は「[2-10](#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)」（2026-11-27 時点で実機には未適用）。
 
 ### 2-5. Qwen（GPU 1。束ねるときは 2 枚）
 
@@ -231,6 +231,8 @@ HWE カーネルはインストーラで入っている（第1段の 1.）ので
 ### 2-6. 学習・Applio（必要になったら）
 
 > 学習を dekahamuntu でもするなら、`scripts/install-diffusion-pipe-ubuntu.sh` を流して（GPU 0）。`~/ai/scripts/lora-train` の `Conflicts=` は chibihamuntu の 1 枚を前提に comfyui・qwen38・applio を止めるので、dekahamuntu で使う前に ~/ai 側の変更が要るかを確かめて私に聞いて。
+
+2 つ目の ComfyUI（`comfyui-gpu1.service`、GPU 1 だけ）は `lora-train` の `Conflicts=` に入っていない。学習が GPU 0 だけ（`TRAIN_CUDA_DEVICES=0`）なら GPU は取り合わないが、RAM は取り合う。`TRAIN_CUDA_DEVICES=0,1` で 2 枚を使うなら、`lora-train` の `GPU_SERVICES` に `comfyui-gpu1.service` を足す変更が `~/ai` 側に要る（このリポジトリの外）。
 
 ### 2-7. 見張り（subako）
 
@@ -450,6 +452,95 @@ H3 Image（本番、B）: テキストエンコーダーを GPU 1 で回し、�
 - 控え `~/.local/state/comfyui-update/20261114T222702Z-e3bee7ffc`（戻すのに要るので残す）
 - 計測の絵と表は spec（`docs/specs/5/h3-image/index.html`。git に入らない使い捨て）にある
 
+### 2-10. GPU ごとの ComfyUI（2 つ目、comfyui-gpu1.service）
+
+chibiham-ai の issue 96（ADR 0016 「ComfyUI を GPU ごとに 1 つずつ立て、art-studio は空いているほうへ投げる」）。ComfyUI は 1 つの常駐で 1 度に 1 つの job しか回さないので、GPU 1 に 2 つ目の常駐を置き、art-studio が 2 つへ振り分ける。**2026-11-27 時点で実機には未適用**（下の手順はまだ流していない。流したら、日付と結果をこの節に書き足す）。
+
+| | 1 つ目（`comfyui.service`） | 2 つ目（`comfyui-gpu1.service`） |
+|---|---|---|
+| 見せる GPU | 0,1（今のまま。unit は変わらない） | 1 だけ（`CUDA_DEVICE_ORDER=PCI_BUS_ID`・`CUDA_VISIBLE_DEVICES=1`） |
+| ポート | 8188 | 8189（127.0.0.1 だけ。tailnet に出さない） |
+| 置き場 | `~/ComfyUI` | 同じ（コード・venv・models・custom_nodes・user・input・output） |
+| temp | `~/ComfyUI/temp` | `~/ComfyUI/temp-gpu1/temp`（`--temp-directory ~/ComfyUI/temp-gpu1`。ComfyUI は起動のたびに temp を消すので分ける） |
+| ComfyUI-Manager | `--enable-manager` | 付けない |
+| 起動 | `Restart=on-failure`・`RestartSec=5`・`WantedBy=default.target`、enabled | 同じ |
+| 排他 | `qwen38-dual.service`・`applio.service` | `qwen38-dual.service`（`Conflicts=`）。Applio とは取り合わない（GPU 0） |
+
+設定は `hosts/ubuntu/dekahamuntu.env` の `COMFY_EXTRA_INSTANCES=gpu1:8189:1` と `ART_STUDIO_COMFYUI_URL=http://127.0.0.1:8188,http://127.0.0.1:8189`。スクリプトの決まりは [ubuntu-server.md の「2 つ目以降の常駐」](ubuntu-server.md#2-つ目以降の常駐comfy_extra_instances)。
+
+- Qwen のモデルが GPU 1 に載っているあいだは、2 つ目の job が OutOfMemoryError になりうる（art-studio は 2 つ目を休ませて 1 つ目だけで回す）。すぐ 2 つとも使うなら `ai-mode image-dual`（Qwen のモデルと 2 つ目の ComfyUI のモデルを降ろす）。Qwen は 600 秒の放置でも降りる
+- H3 Image の 2GPU の形（`Select CLIP Device` = `gpu:1`）は 1 つ目で回す。ComfyUI の画面から手で投げるときは、2 つ目が回していないのを見てから投げる（art-studio を通らないので止められない）
+- RAM は 2 つの常駐で取り合う（それぞれがモデルを RAM に持つ）。実機の RAM・VRAM・秒数は [ai-server-placement.md の「dekahamuntu: GPU ごとの ComfyUI」](ai-server-placement.md#dekahamuntu-gpu-ごとの-comfyuiissue-96) に、入れたあとで書く
+
+#### ai-mode
+
+| モード | 2 つ目（`comfyui-gpu1.service`） |
+|---|---|
+| `split` | 起こす。`/free` を 2 つ（8188・8189）に頼む |
+| `image-dual` | 起こす。2 つ目に `/free` を頼み、Qwen のモデルを降ろして待つ |
+| `llm-dual` | 止める（`qwen38-dual.service` を起こす前に止め、`Conflicts=` でも止まる） |
+| `applio` | 触らない |
+| `stop` | 止める |
+| `status` | 出す |
+
+ai-mode は `~/.config/systemd/user/comfyui-gpu1.service` があるときだけ 2 つ目を扱う（unit を足す前・消したあとも、ほかの切り替えは今までどおり動く）。
+
+#### 本番へ入れる手順（まだ流していない）
+
+前提: art-studio が `COMFYUI_URL` に 2 つ並べた値を読める版（chibiham-ai の issue 96）になっていること。前の art-studio に 2 つ並べた値を渡すと、URL の形が違うとして起動しない見込み（ADR-0011 の 3）なので、(d) はその版を入れてから流す。
+
+ComfyUI を起こし直す前と同じく、1 つ目のキューと art-studio のループが空なのを確かめてから始める（[2-9 の手順](#手順本番で流したもの)の 1.）。
+
+```bash
+cd ~/.config/nix-config
+# (a) 取り込む（sudo なし。何も止まらない。数秒）
+git pull --ff-only
+# (b) 2 つ目の unit を足して起こす（sudo なし）。1 つ目は「変わらず…何もしません」になるはず（止まらない）。
+#     2 つ目は CUDA の確かめ（GPU 1）→ unit を書く → enable → 起動 → /system_stats を待つ（拡張の読み込みで数十秒の見込み。上限 180 秒）
+scripts/install-comfyui-ubuntu.sh --unit-only
+# (c) qwen38-dual.service の Conflicts= に comfyui-gpu1.service を足す（sudo なし。下の注意）
+scripts/install-qwen38-ubuntu.sh
+# (d) art-studio の drop-in を 2 つ並べた URL に書き直し、動いていれば起こし直す（sudo なし。art-studio が数秒止まる）
+scripts/configure-art-studio-ubuntu.sh --dry-run   # 中身を見る
+scripts/configure-art-studio-ubuntu.sh
+# (e) ai-mode を新しくする（sudo なし。サービスは止まらない。ほかのまだ switch していない変更も一緒に入る）
+nix run ~/.config/nix-config#home-manager -- switch --flake ~/.config/nix-config#chibiham@dekahamuntu
+```
+
+- (b) が途中で失敗したら、原因を直して同じコマンドを流し直せば続きから適用する（印 `~/.local/state/comfyui-update/unit-apply-pending`）。1 つ目の unit は変わらないので、1 つ目は起こし直されない（印が残ったときの流し直しだけは、1 つ目も起こし直す）
+- (c) は `qwen38.service` と（動いていれば）`qwen38-dual.service` を止め、プリセット・unit を書き直して `qwen38.service` を起こす。載っていたモデルは降り、次の問いで読み込み直す。束ねていた（`llm-dual`）なら `split` の形に戻る。モデルは取得済みなので取り直さない。ComfyUI は止めない（`QWEN_STOP_COMFY_ON_INSTALL=0`）。最後の Tailscale Serve の段は、operator が未設定なら「Access denied」で終了コード 1 になる（公開は前から同じ形で入っているので、ほかの段が済んでいればよい）。(c) を流さなくても `ai-mode llm-dual` は 2 つ目を先に止めるが、束ねているあいだに 2 つ目が起こされた（`update-comfyui-ubuntu.sh` など）ときに束ねる Qwen が止まるのは、(c) のあとだけ
+- (d) の前に art-studio に実行中のループがないことを確かめる（起こし直しで止まる）
+- (e) は (b) のあとならいつでもよい（前に流しても、unit がないあいだ ai-mode は 2 つ目を扱わない）
+
+確かめ方（どれも sudo なし）:
+
+```bash
+systemctl --user is-active comfyui.service comfyui-gpu1.service      # active が 2 行
+systemctl --user is-enabled comfyui-gpu1.service                     # enabled
+curl -fsS http://127.0.0.1:8189/system_stats | jq '.system.comfyui_version, .devices[].name'   # GPU が 1 枚だけ見える
+curl -fsS http://127.0.0.1:8188/system_stats | jq '.devices[].name'  # 1 つ目は今までどおり
+nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv   # 2 つ目の python は GPU 1 にだけ出る
+nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv
+grep '^Conflicts=' ~/.config/systemd/user/qwen38-dual.service        # … comfyui-gpu1.service
+systemctl --user show art-studio.service -p Environment              # COMFYUI_URL=http://127.0.0.1:8188,http://127.0.0.1:8189
+ai-mode status
+```
+
+#### 戻し方
+
+```bash
+cd ~/.config/nix-config
+# art-studio を 1 つ目だけに戻す（art-studio が数秒止まる）
+ART_STUDIO_COMFYUI_URL=http://127.0.0.1:8188 scripts/configure-art-studio-ubuntu.sh
+# 2 つ目を止めて disable し、unit を消す（キューを確かめる。設定に残っているという警告が出る）
+scripts/install-comfyui-ubuntu.sh --remove gpu1
+```
+
+- どちらも sudo なし。止まるのは 2 つ目と、起こし直しのあいだの art-studio だけ。1 つ目・Qwen は止まらない
+- 戻したままにするなら、`hosts/ubuntu/dekahamuntu.env` の `COMFY_EXTRA_INSTANCES` を空（`: "${COMFY_EXTRA_INSTANCES:=}"`）、`ART_STUDIO_COMFYUI_URL` を `http://127.0.0.1:8188` に直す（直さないと、次の `--unit-only`・`configure-art-studio-ubuntu.sh` でまた足される。env は `:=` なので、環境変数で空を渡しても戻らない）。そのあと `install-qwen38-ubuntu.sh` を流せば `Conflicts=` からも外れる（残っていても、ない unit との排他なので害はない）
+- temp の置き場 `~/ComfyUI/temp-gpu1/` は残るので、要らなければ消す
+- ai-mode は unit がなければ 2 つ目を扱わないので、Home Manager は戻さなくても動く
+
 ---
 
 ## ハードウェアごとの注意
@@ -471,10 +562,11 @@ GPU の割り当て（`hosts/ubuntu/dekahamuntu.env`）:
 
 | unit | GPU | 備考 |
 |---|---|---|
+| comfyui-gpu1.service | 1 | 既定で起動（2026-11-27 時点で実機には未適用。[2-10](#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)）。2 つ目の ComfyUI（8189）。置き場は comfyui.service と同じで、temp だけ別。art-studio が 2 つへ振り分ける。qwen38-dual と排他。Qwen のモデルが載っているあいだは OutOfMemoryError になりうる |
 | comfyui.service | 0,1 | 既定で起動。既定のデバイス（`cuda:0`）は GPU 0 で、今までのワークフローは GPU 0 だけを使う。GPU 1 はノードで指定したもの（MiniMax H3 Image のテキストエンコーダーの計算、`Select CLIP Device`。重みは RAM に置かれ、GPU 1 はエンコードのあいだだけ使う）だけ（[2-9](#2-9-comfyui-の更新v0452と-minimax-h3-image)）。2026-11-14 に `0` から `0,1` にした |
 | qwen38.service | 1 | 既定で起動（ComfyUI とは独立）。600 秒問いのなかったモデルを降ろす（`QWEN_SLEEP_IDLE_SECONDS`）。モデルが載っているあいだは、H3 Image（B）のエンコードが GPU 1 で OutOfMemoryError になる（`ai-mode image-dual` で降ろす） |
-| qwen38-dual.service | 0,1 | `ai-mode llm-dual`（既定にしない。`ai-mode split` で戻す）。comfyui・qwen38 と排他。`--split-mode layer --tensor-split 39,10`（UD-Q3_K_XL の n-cpu-moe 33 と組。1,1 は後ろの GPU に寄って落ちる） |
-| applio.service | 0 | comfyui・qwen38-dual と排他 |
+| qwen38-dual.service | 0,1 | `ai-mode llm-dual`（既定にしない。`ai-mode split` で戻す）。comfyui・comfyui-gpu1・qwen38 と排他。`--split-mode layer --tensor-split 39,10`（UD-Q3_K_XL の n-cpu-moe 33 と組。1,1 は後ろの GPU に寄って落ちる） |
+| applio.service | 0 | comfyui・qwen38-dual と排他（comfyui-gpu1 とは取り合わないので止めない） |
 | diffusion-pipe の学習 | 0 | `TRAIN_CUDA_DEVICES=0,1` にすると 2 枚のデータ並列（`--num_gpus=2`） |
 
 番号は `CUDA_DEVICE_ORDER=PCI_BUS_ID` で `nvidia-smi` と揃える。
@@ -751,8 +843,9 @@ M.2 が 3 本（PCIe 5.0 x4 ×2、PCIe 4.0 x4 ×1）と SATA ×4 のうち、い
 | linger | `Linger=yes` | `install-comfyui-ubuntu.sh`（`loginctl enable-linger`） |
 | comfyui.service | GPU 0,1（`CUDA_DEVICE_ORDER=PCI_BUS_ID`・`CUDA_VISIBLE_DEVICES=0,1`。2026-11-14 に `0` から変えた）、`CC=/usr/bin/cc`、`--fast` なし。enabled | `install-comfyui-ubuntu.sh`（`COMFY_CUDA_DEVICES=0,1`、`COMFY_EXTRA_ARGS` は空）。導入済みなら `--unit-only`。`0` のときの unit は、まねのコマンドで流し、実機の unit と同じになることを確かめた（2026-11-12）。`0,1` との差は `CUDA_VISIBLE_DEVICES` の 1 行 |
 | art-studio.service | unit 本体（PORT=4520、`ART_STUDIO_INBOX`、mise の node 24）。enabled | `~/ai/scripts/install-art-studio`。まねのコマンドで流し、実機の unit と同じになることを確かめた |
-| art-studio の drop-in | `art-studio.service.d/dekahamuntu.conf`（`COMFYUI_URL=http://127.0.0.1:8188`、GPU 0） | `configure-art-studio-ubuntu.sh`（`ART_STUDIO_COMFYUI_URL`・`ART_STUDIO_CUDA_DEVICES`）。実機と同じ中身になることを確かめた |
-| Qwen の unit（2026-11-13 に入れ、2026-11-14 に流し直した） | `qwen38.service`（GPU 1、Router、ポート 8080。enabled、`WantedBy=default.target`）、`qwen38-dual.service`（GPU 0,1、`--split-mode layer --tensor-split 39,10`、`Conflicts=qwen38.service comfyui.service`。enable しない）。どちらも `--sleep-idle-seconds 600`（2026-11-14 に足した） | `install-qwen38-ubuntu.sh`（`LLM_CUDA_DEVICES`・`LLM_DUAL_*`・`QWEN_WANTED_BY`・`QWEN_SLEEP_IDLE_SECONDS`） |
+| comfyui-gpu1.service | まだない（2026-11-27 時点で未適用） | `install-comfyui-ubuntu.sh --unit-only`（`COMFY_EXTRA_INSTANCES=gpu1:8189:1`。[2-10](#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)） |
+| art-studio の drop-in | `art-studio.service.d/dekahamuntu.conf`（`COMFYUI_URL=http://127.0.0.1:8188`、GPU 0） | `configure-art-studio-ubuntu.sh`（`ART_STUDIO_COMFYUI_URL`・`ART_STUDIO_CUDA_DEVICES`）。実機と同じ中身になることを確かめた（`COMFYUI_URL` が 1 つのとき）。いまの env は 2 つ並べた値（`…8188,http://127.0.0.1:8189`）で、実機には未適用（2-10） |
+| Qwen の unit（2026-11-13 に入れ、2026-11-14 に流し直した） | `qwen38.service`（GPU 1、Router、ポート 8080。enabled、`WantedBy=default.target`）、`qwen38-dual.service`（GPU 0,1、`--split-mode layer --tensor-split 39,10`、`Conflicts=qwen38.service comfyui.service`。enable しない）。どちらも `--sleep-idle-seconds 600`（2026-11-14 に足した） | `install-qwen38-ubuntu.sh`（`LLM_CUDA_DEVICES`・`LLM_DUAL_*`・`QWEN_WANTED_BY`・`QWEN_SLEEP_IDLE_SECONDS`）。いまのスクリプトは `qwen38-dual.service` の `Conflicts=` に `comfyui-gpu1.service` も書く（`COMFY_EXTRA_INSTANCES`。実機には未適用、2-10） |
 | MiniMax H3 Image の重み（2026-11-14 に置いた） | `~/ComfyUI/models/` の `vae/` に 1 つ、`diffusion_models/` に 4 つ（公式 int8・w4a8、GGUF Q5_K_M・Q4_K_M。GGUF の 2 つは使わず、消してよい候補）。テキストエンコーダー（NVFP4）とプロンプト拡張は前からあった。ComfyUI-GGUF は入れていない | `install-minimax-h3-image-ubuntu.sh`（`H3_IMAGE_MODELS=int8 w4a8`。revision・sha256 を固定。GGUF は置かない）。台帳への記入は chibiham-ai#74 |
 | Qwen のプリセット（2026-11-13 に入れた） | `~/.config/llama.cpp/qwen38-models.ini`（n-cpu-moe 45 / 42）、`qwen38-dual-models.ini`（33 / 31）、`qwen38-flash-chat-template.jinja` | `install-qwen38-ubuntu.sh`（`QWEN_*_N_CPU_MOE`） |
 | Qwen のモデル（2026-11-13 に取った） | `~/models/qwen3.8-flash-next`（UD-Q3_K_XL・Uncensored 版 i1-IQ3_M と各 mmproj）。27B はない | `install-qwen38-ubuntu.sh`（`QWEN_INSTALL_27B=0`） |

@@ -72,9 +72,9 @@ Flash-Next（UD-Q3_K_XL）は RAM 64GB に収まる（2026-11-13 の実測）。
 | マシン | 動かすもの | 理由 |
 |---|---|---|
 | chibihamuntu | Qwen3.8-27B（dense、4 種）、LoRA 学習（anima・sdxl の自動の学習、`lora-train`）、Applio、MiniMax H3（動画） | dense は帯域の広い 1 枚 24GB が速い。学習は VRAM に余裕がいる。MiniMax H3 は 16GB には全く載らない |
-| dekahamuntu GPU 0 | ComfyUI（SDXL・Anima・Qwen-Image・MOSS・Krea2・ACE-Step、MiniMax H3 Image の本体）、art-studio | 画像生成を学習と分けられる（chibihamuntu の学習中も絵を作れる）。FP8・NVFP4 をハードウェアで扱える |
-| dekahamuntu GPU 1 | Qwen3.8-Flash-Next（MoE、Router）。MiniMax H3 Image のテキストエンコーダーの計算（ComfyUI。重みは RAM。Qwen のモデルが載っているあいだはエンコードが OutOfMemoryError になる） | ComfyUI と独立に常駐できる。H3 Image は 2 枚に分けると本体の入れ替えが起きない（下の「[実測（2026-11-14）: MiniMax H3 Image](#実測2026-11-14-minimax-h3-imagedekahamuntu)」） |
-| dekahamuntu GPU 0+1 | Flash-Next を束ねて（`ai-mode llm-dual`） | 長い作業で速さが要るとき。ComfyUI は止まる |
+| dekahamuntu GPU 0 | ComfyUI（`comfyui.service`、8188。SDXL・Anima・Qwen-Image・MOSS・Krea2・ACE-Step、MiniMax H3 Image の本体）、art-studio | 画像生成を学習と分けられる（chibihamuntu の学習中も絵を作れる）。FP8・NVFP4 をハードウェアで扱える |
+| dekahamuntu GPU 1 | Qwen3.8-Flash-Next（MoE、Router）。MiniMax H3 Image のテキストエンコーダーの計算（1 つ目の ComfyUI。重みは RAM。Qwen のモデルが載っているあいだはエンコードが OutOfMemoryError になる）。2 つ目の ComfyUI（`comfyui-gpu1.service`、8189。art-studio が空いているほうへ投げる。下の「[dekahamuntu: GPU ごとの ComfyUI](#dekahamuntu-gpu-ごとの-comfyuiissue-96)」。2026-11-27 時点で実機には未適用） | ComfyUI と独立に常駐できる。H3 Image は 2 枚に分けると本体の入れ替えが起きない（下の「[実測（2026-11-14）: MiniMax H3 Image](#実測2026-11-14-minimax-h3-imagedekahamuntu)」）。ComfyUI は 1 つの常駐で 1 度に 1 つの job しか回さないので、2 つ目を立てると GPU 1 の空いている時間に画像を作れる |
+| dekahamuntu GPU 0+1 | Flash-Next を束ねて（`ai-mode llm-dual`） | 長い作業で速さが要るとき。2 つの ComfyUI は止まる |
 
 効くこと:
 
@@ -99,7 +99,7 @@ Flash-Next が dekahamuntu で遅かったときの案。学習を dekahamuntu �
 - dekahamuntu: ComfyUI を 2 つ（GPU ごとに 1 つ。ポートを分ける）で並列に生成
 - chibihamuntu: LLM と学習（いまの形から ComfyUI を外す）
 
-大量に画像を作る使い方（データセットづくりなど）向け。ComfyUI を 2 つ動かす形はスクリプトにまだない（作るなら `install-comfyui-ubuntu.sh` にインスタンスの変数を足す）。
+大量に画像を作る使い方（データセットづくりなど）向け。ComfyUI を 2 つ動かす形は、issue 96（chibiham-ai）で `install-comfyui-ubuntu.sh` に足した（`COMFY_EXTRA_INSTANCES`）。ただし LLM は chibihamuntu に移さず、GPU 1 に Qwen と 2 つ目の ComfyUI を同居させる形にした（下の「[dekahamuntu: GPU ごとの ComfyUI](#dekahamuntu-gpu-ごとの-comfyuiissue-96)」）。
 
 ## 実測（2026-11-13）: Qwen3.8-Flash-Next
 
@@ -474,6 +474,20 @@ GGUF の大きい絵の VRAM・RAM（写し 2 枚、向きは逆。MiB）:
 - **GGUF（Q5_K_M・Q4_K_M）は使わない**。2048² で同じ絵に 32〜43 秒（公式の版の約 3 倍）、大きい絵でも約 3 倍遅く（2880² 62〜70 秒、Q4_K_M の 4096² 144〜147 秒）、Q5_K_M は 4096² が載らない（OutOfMemoryError）。第三者の重みで、読むのに第三者の拡張（ComfyUI-GGUF）が要る。本番には拡張を入れていない。ファイル 2 つ（約 25.7GB）は `~/ComfyUI/models/diffusion_models/` に残してあり、消してよい候補（本人が決める）
 - `H3_IMAGE_MODELS` は `int8 w4a8` にした（`hosts/ubuntu/dekahamuntu.env`）。引数なしの `install-minimax-h3-image-ubuntu.sh` は GGUF も ComfyUI-GGUF も置かない
 
+### dekahamuntu: GPU ごとの ComfyUI（issue 96）
+
+本人の決め（2026-11-27、chibiham-ai の issue 96 の完了条件。設計は chibiham-ai の ADR 0016）: 今の常駐を GPU 0（8188）、2 つ目を GPU 1（別のポート）にし、モデル・custom_nodes・ワークフローは共有、出力は同じ置き場。art-studio が空いているほうへ投げる。
+
+形（**2026-11-27 時点で実機には未適用**。入れ方は [dekahamuntu-setup.md の 2-10](dekahamuntu-setup.md#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)）:
+
+- 1 つ目 `comfyui.service`: 今のまま（GPU 0,1 を見せ、既定のデバイスは GPU 0。8188。ComfyUI-Manager あり）。H3 Image の 2GPU の形はこちらで回す
+- 2 つ目 `comfyui-gpu1.service`: GPU 1 だけ、8189（tailnet に出さない）、置き場は同じで temp だけ別（`~/ComfyUI/temp-gpu1/temp`）、ComfyUI-Manager なし。`hosts/ubuntu/dekahamuntu.env` の `COMFY_EXTRA_INSTANCES=gpu1:8189:1`
+- art-studio は `COMFYUI_URL=http://127.0.0.1:8188,http://127.0.0.1:8189`（1 つ目が主。`ART_STUDIO_COMFYUI_URL`）
+- Qwen（`qwen38.service`、GPU 1）は止めない。Qwen のモデルが GPU 1 に載っているあいだは 2 つ目の job が OutOfMemoryError になりうるので、art-studio は 2 つ目を休ませて 1 つ目だけで回す。すぐ 2 つとも使うなら `ai-mode image-dual`。束ねる Qwen（`qwen38-dual.service`）とは排他（`Conflicts=`）
+- RAM は 2 つの常駐で取り合う（それぞれがモデルを RAM に持つ。同じモデルでも GPU ごとに 1 度ずつ読む）。Qwen（Flash-Next は RAM に約 52GB）とも取り合う（下の「同居の心配」）
+
+実機での計測（RAM・VRAM・秒数）は、入れたあとにここへ書く（まだ計っていない）。
+
 ### 同居の心配（RAM。設定は変えていない）
 
 - 本人の理由は「画像生成のモデル類はほとんど 16GB で収まる」で、VRAM の話。GPU は分かれているので VRAM は取り合わない
@@ -485,6 +499,7 @@ GGUF の大きい絵の VRAM・RAM（写し 2 枚、向きは逆。MiB）:
   - RAM の増設（ボードの最大は 256GB、空きスロット 2）
   - LLM を重く使うときは `ai-mode llm-dual` に切り替える（RSS が約 13GB 少ない）
   - Uncensored 版を使う（RSS が約 4.5GB 少ない）
+- 2 つ目の ComfyUI（issue 96）を入れると、ComfyUI の RAM は常駐ごとに持つので、上の残りがさらに減る見込み（計っていない。上の「[dekahamuntu: GPU ごとの ComfyUI](#dekahamuntu-gpu-ごとの-comfyuiissue-96)」に書く）
 
 ## 次にやること
 
@@ -498,3 +513,4 @@ GGUF の大きい絵の VRAM・RAM（写し 2 枚、向きは逆。MiB）:
    - 本人: dekahamuntu の home-manager switch（`ai-mode image-dual` と `split` の `/free`）、取り込みのあとで実機の `~/.config/nix-config` を pull、spec の絵を見て既定の版を変えるか、GGUF の 2 ファイル・写し（`~/issue5-stage/`）・`/tmp/issue5/` を消すか
    - chibiham-ai#74: 台帳（`models.lock.toml`）・拡張の一覧・art-studio のレシピ、`~/ai/comfyui/workflows/MiniMax-H3-Image/` の未追跡のワークフローの扱い
    - 案（未検証）: Flash-Next の n-cpu-moe を 1 つ上げて GPU 1 に約 1GB の余裕を作れば、Qwen を載せたまま B が通る見込み
+7. dekahamuntu の GPU ごとの ComfyUI（chibiham-ai の issue 96）: 本番へ入れ（[dekahamuntu-setup.md の 2-10](dekahamuntu-setup.md#2-10-gpu-ごとの-comfyui2-つ目comfyui-gpu1service)）、2 つの常駐と Qwen が同居したときの RAM・VRAM・秒数を計って「[dekahamuntu: GPU ごとの ComfyUI](#dekahamuntu-gpu-ごとの-comfyuiissue-96)」に書く

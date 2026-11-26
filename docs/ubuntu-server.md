@@ -544,6 +544,7 @@ NVIDIAドライバの再起動後、専用uv環境へComfyUIを導入する。
 - PyTorchからGPUの名前・世代（sm_86 / sm_120）とVRAM、既定のデバイス（`cuda:0`）を確認
 - ホストの設定に `COMFY_CUDA_DEVICES` があれば、unitに `CUDA_VISIBLE_DEVICES` を書いてそのGPUだけを使う（chibihamuntuでは書かない）。複数を書くと最初のGPUが既定のデバイスになり、ほかのGPUはノード（`Select CLIP Device` など）で指定したときだけ使われる（dekahamuntuは `0,1`。[dekahamuntu-setup.md の 2-9](dekahamuntu-setup.md#2-9-comfyui-の更新v0452と-minimax-h3-image)）
 - `comfyui.service`をsystemd user serviceとして登録・起動
+- ホストの設定に `COMFY_EXTRA_INSTANCES` があれば、2 つ目以降の常駐（`comfyui-<名前>.service`）も書いて enable・起動する（下の「2 つ目以降の常駐」。chibihamuntuでは書かない）
 - lingerを有効にし、ログイン前から自動起動
 
 ComfyUIは`127.0.0.1:8188`だけで待ち受ける。インストール後、Tailscale Serveを設定する。
@@ -600,6 +601,37 @@ unitだけを書き直す場合（`COMFY_CUDA_DEVICES`・`COMFY_EXTRA_ARGS` を�
 - CUDAの動作確認とunitの書き出しだけをする（apt・clone・venv・PyTorch・依存・lingerは飛ばす）。導入済みの `~/ComfyUI/.venv` がなければ止まる
 - 何もしないのは、今のunitと同じで、前回の適用の途中の印がなく、`comfyui.service` が動いているときだけ。どれかが欠ければ（unitが違えば差（`diff -u`）を表示し）、ComfyUIのキューが空なのを確かめてから、印を置き、（違えば）書き、`daemon-reload` と `restart` をして、起動を待ち、印を消す（下の「更新」と同じ確かめ。`--force` でキューを確かめない）
 - 途中（書き出し・`daemon-reload`・`restart`・起動の待ち）で失敗したら、失敗した段を表示して終了コード 1 で止まり、印 `~/.local/state/comfyui-update/unit-apply-pending`（`XDG_STATE_HOME` があればその下）が残る。原因を直して同じコマンドを流し直せば、ファイルが同じでも続きから適用する
+- 2 つ目以降の常駐があれば、常駐ごとに同じ決まりで見る（下の「2 つ目以降の常駐」）
+
+### 2 つ目以降の常駐（COMFY_EXTRA_INSTANCES）
+
+ComfyUI は 1 つの常駐で 1 度に 1 つの job しか回さない。GPU が 2 枚以上ある機械では、GPU ごとに常駐を 1 つずつ立てて、art-studio が空いているほうへ投げる（dekahamuntu。chibiham-ai の ADR 0016）。ホストの設定に「名前:ポート:見せるGPU」を空白区切りで書く:
+
+```bash
+# hosts/ubuntu/dekahamuntu.env
+: "${COMFY_EXTRA_INSTANCES:=gpu1:8189:1}"
+```
+
+- `install-comfyui-ubuntu.sh`（`--unit-only` も）が `comfyui-<名前>.service` を書き、enable して起こす。中身は `comfyui.service` と同じ置き場（`WorkingDirectory`・venv・`main.py`。models・custom_nodes・user・input・output も共有）で、違うのは次だけ:
+  - `CUDA_DEVICE_ORDER=PCI_BUS_ID`・`CUDA_VISIBLE_DEVICES=<見せるGPU>`（中では `cuda:0` がそのGPU）
+  - `--port <ポート>`（`--listen 127.0.0.1` は同じ）
+  - `--temp-directory <ComfyUI>/temp-<名前>`。ComfyUI（v0.45.2）は `<D>/temp` を temp にし、起動のたびに消す（`main.py` の `start_comfyui` → `app/assets/lifecycle.py` の `cleanup_temp_filesystem`）。temp は `~/ComfyUI/temp-gpu1/temp` になり、`comfyui.service` の `~/ComfyUI/temp` と消し合わない。`temp-<名前>/` は `~/ComfyUI` の git から見て未追跡のファイルになる（`update-comfyui-ubuntu.sh` は未追跡のファイルでは止まらない）
+  - `--enable-manager` を付けない（ノードの入れ替えは `comfyui.service` の画面でする）
+  - unit の頭に印のコメント（`# install-comfyui-ubuntu.sh が COMFY_EXTRA_INSTANCES から書く`）。`--remove` はこの印のある unit だけを消す
+  - `COMFY_EXTRA_ARGS` は 2 つ目以降にも足す（同じ絵にするため）
+- `--unit-only` は常駐ごとに「同じなら何もしない・違えば差を出す・キューが空か確かめる・書く」を見る。起こし直すのは、unit が違う・動いていない常駐だけ（前回の適用の途中の印があれば全部）。新しく足した常駐は `enable` もする。キューを確かめるのは起こし直す常駐だけ
+- 形が違う（`名前:ポート:GPU` でない、名前が英小文字・数字・- でない、ポートが 8188 や別の常駐と重なる）と、何も変えずに止まる
+- 設定から外した常駐の unit が残っていれば、`--unit-only` が警告を出す。止めて消すのは明示的に:
+
+  ```bash
+  ~/.config/nix-config/scripts/install-comfyui-ubuntu.sh --remove gpu1   # キューを確かめてから disable --now・unit を消す・daemon-reload
+  ```
+
+  設定に残したまま消すと警告を出す（次の `--unit-only` でまた足される）。temp の置き場（`~/ComfyUI/temp-<名前>`）は残すので、要らなければ手で消す
+- 2 つ目以降の画面は tailnet に出さない（art-studio が同じ機械の中から呼ぶ）。開きたくなったら `TAILSCALE_SERVE` に `8444=8189` のように足して `configure-tailscale-serve-ubuntu.sh` を流す（operator がなければ sudo に落ちる）
+- `install-qwen38-ubuntu.sh` は、`LLM_DUAL_CUDA_DEVICES` と GPU が重なる常駐を `qwen38-dual.service` の `Conflicts=` に入れる（束ねる Qwen を起こすと止まる）
+- 状態とログ: `systemctl --user status comfyui-gpu1 --no-pager`、`journalctl --user -u comfyui-gpu1 -f`（ComfyUI の側のログは `~/ComfyUI/user/comfyui_8189.log`）
+- 試験: `tests/test_comfyui_instances.py`（にせの systemctl・curl などで流す。`BASE_REPO=<変更の前のリポジトリ>` で chibihamuntu・設定のないホストの unit・出力が前と同じかも見る。書き方はファイルの頭）
 
 ### ComfyUIの更新と戻し
 
@@ -620,9 +652,10 @@ ComfyUIは自動では更新しない。上げるときは明示的に流す。
 - スクリプトが見るのはキューだけ。art-studioのループは項目の合間にキューが空になるので、流す前に、art-studioに実行待ち・実行中のループがないことを自分で確かめる（art-studioの画面のループの一覧か、`~/.local/share/art-studio/studio.db` の `loops` に `state` が `running`・`stopping` のものがないこと）
 - **起動の待ち**: 起動し直したあと、`/system_stats` が返るまで待ち（既定180秒、`COMFY_READY_TIMEOUT`）、`comfyui_version` を表示する。返らなければ戻すコマンドを表示して失敗する
 - `--no-restart`: gitとvenvだけを変え、systemctlを呼ばない（キューも確かめない）。サービスでない写し（`COMFY_DIR` で別の場所を指す）で試す用
+- **2 つ目以降の常駐**（`COMFY_EXTRA_INSTANCES`）はコードと venv を共有するので、全部の常駐のキューを確かめ（どれかが空でなければ何も変えずに止まる）、全部を 1 度に `restart` し、全部の起動を待つ。対象が本番（`COMFY_DIR` が `~/ComfyUI`、`COMFY_PORT` が 8188）のときだけで、写しで流すときは 2 つ目以降に触らない（警告を出す）。unit のない常駐（設定に足したが `--unit-only` をまだ流していない）は飛ばす。`--restore` も同じ
 
 ```bash
-# キューと art-studio のループを先に見る（どちらも 0 であること）
+# キューと art-studio のループを先に見る（どちらも 0 であること。2 つ目以降の常駐があれば、そのポートも）
 curl -fsS http://127.0.0.1:8188/queue | jq '[.queue_running, .queue_pending] | map(length)'
 sqlite3 ~/.local/share/art-studio/studio.db "select count(*) from loops where state in ('running','stopping');"
 ```

@@ -47,10 +47,10 @@ Nix + Home ManagerによるmacOS / Ubuntu環境構築プロジェクト。
     ├── install-case-fan-control-ubuntu.sh # ケースファンをGPUの温度で回す（fan2go。CASE_FAN_RAD_* で簡易水冷のラジエーターのファンも max(GPU, CPU) で。--probe は読むだけ。--identify <N> [--stop] で見分ける。systemd/fan2go.service）
     ├── case-fan-gpu-temp.sh # fan2goのセンサー: GPUの温度の最大（読めなければ全開側）
     ├── case-fan-restore-bios.sh # fan2goが止まったときにBIOSの制御へ戻す
-    ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動（--unit-only はsudoなしでunitだけ書き直す）
+    ├── install-comfyui-ubuntu.sh # ComfyUI・専用Python環境・自動起動（--unit-only はsudoなしでunitだけ書き直す。COMFY_EXTRA_INSTANCES で GPU ごとの 2 つ目以降の常駐も。--remove で消す）
     ├── install-diffusion-pipe-ubuntu.sh # Anima LoRA学習環境
     ├── install-applio-ubuntu.sh # Applio（RVC学習・リアルタイム音声変換）
-    ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新（COMFY_REF・--ref で版を固定。控えを取り --restore で戻す。キューが空でなければ止まる）
+    ├── update-comfyui-ubuntu.sh # ComfyUIの明示的更新（COMFY_REF・--ref で版を固定。控えを取り --restore で戻す。全部の常駐のキューが空でなければ止まる）
     ├── install-minimax-h3-image-ubuntu.sh # MiniMax H3 Imageの重み（revision・sha256固定。GGUF版はComfyUI-GGUFも）
     ├── civitai-download.sh # Civitaiモデル取得（linux.nixがコマンド化）
     ├── install-qwen38-mac-mini.sh # Mac mini用Qwen3.8モデル取得
@@ -110,6 +110,7 @@ nix eval --raw '.#homeConfigurations."chibiham@dekahamuntu".activationPackage.dr
 ```
 
 Ubuntu機のスクリプトを変えたら、chibihamuntu の挙動（`hosts/ubuntu/chibihamuntu.env` の既定）が変わっていないかを確かめる。
+ComfyUI・Qwen・art-studio のスクリプトなら `tests/test_comfyui_instances.py`（`BASE_REPO` に origin/develop の worktree を渡すと前と比べる）。
 
 push/PR時はGitHub Actions CI（`.github/workflows/ci.yml`）が全ユーザー分の評価を実行。
 `flake.lock` は毎週月曜に自動更新PRが作られる（`update-flake-lock.yml`）。
@@ -182,7 +183,7 @@ Ubuntu機で手で行うもの:
 - Linux AI推論: CUDA対応llama.cpp + ai-mode（モデル取得は明示スクリプト）
 - ai-modeの排他対象: qwen38 / comfyui / applio。3090の24GBを取り合うため、applioはunitの `Conflicts=` で同時起動を禁止している。
   qwen38（Router）はモデル未ロードならVRAMを使わないのでComfyUIと同時に動かし、VRAMの受け渡しはComfyUIノードと `ai-mode` が行う。
-  以上はchibihamuntu（3090 1枚）の話。dekahamuntu（5060 Ti 16GB ×2）は既定が `ai-mode split`（GPU 0 = ComfyUI、GPU 1 = qwen38 を常駐）で、2枚を束ねるときだけ `ai-mode llm-dual`（qwen38-dual。ComfyUI・qwen38と排他）に切り替える。MiniMax H3 Image のテキストエンコーダーは `Select CLIP Device`（gpu:1）で GPU 1 で計算するが VRAM には常駐しない（重みはRAM）。Qwen のモデルが GPU 1 に載っているとその計算が OutOfMemoryError になるので、`ai-mode image-dual` で Qwen のモデルを降ろす（Router の unload は頼むだけなので、status が `unloaded` になるまで待ってから戻り、確かめられなければ失敗で終わる。600秒の放置でも降りる）。`ai-mode split` は ComfyUI のモデルを降ろして RAM を Qwen に空ける
+  以上はchibihamuntu（3090 1枚）の話。dekahamuntu（5060 Ti 16GB ×2）は既定が `ai-mode split`（GPU 0 = ComfyUI、GPU 1 = qwen38 を常駐）で、2枚を束ねるときだけ `ai-mode llm-dual`（qwen38-dual。ComfyUI・qwen38と排他）に切り替える。GPU 1 には 2 つ目の ComfyUI（comfyui-gpu1、8189。art-studio が 2 つへ振り分ける。chibiham-ai の issue 96、2026-11-27 時点で実機には未適用）も置き、split・image-dual が起こし、llm-dual・stop が止める。MiniMax H3 Image のテキストエンコーダーは `Select CLIP Device`（gpu:1）で GPU 1 で計算するが VRAM には常駐しない（重みはRAM）。Qwen のモデルが GPU 1 に載っているとその計算が OutOfMemoryError になるので、`ai-mode image-dual` で Qwen のモデルを降ろす（Router の unload は頼むだけなので、status が `unloaded` になるまで待ってから戻り、確かめられなければ失敗で終わる。600秒の放置でも降りる）。`ai-mode split` は ComfyUI のモデルを降ろして RAM を Qwen に空ける
 
 ### macOS統合
 
