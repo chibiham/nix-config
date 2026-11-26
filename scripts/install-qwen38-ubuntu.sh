@@ -81,6 +81,28 @@ if ! nvidia-smi >/dev/null 2>&1; then
   exit 1
 fi
 
+# 2 つ目以降の ComfyUI の常駐（COMFY_EXTRA_INSTANCES。install-comfyui-ubuntu.sh が comfyui-<名前>.service を書く）。
+# 形が違えば、何も止めないうちに止まる
+comfy_extra_list="$(comfy_extra_instances)" || exit 1
+
+# comfy_extra_units [GPU の並び]: 2 つ目以降の ComfyUI の unit の名前を空白区切りで出す。
+# GPU の並び（例: 0,1）を渡すと、そのどれかを見せる常駐だけ
+comfy_extra_units() {
+  local only="${1:-}" name port devices dev units=""
+  while read -r name port devices; do
+    [[ -n "$name" ]] || continue
+    if [[ -n "$only" ]]; then
+      local hit=0
+      for dev in ${devices//,/ }; do
+        [[ ",$only," == *",$dev,"* ]] && hit=1
+      done
+      ((hit)) || continue
+    fi
+    units+=" comfyui-$name.service"
+  done <<<"$comfy_extra_list"
+  printf '%s' "${units# }"
+}
+
 download_model() {
   local repo="$1" revision="$2" file="$3" output="${4:-$3}" dir="${5:-$MODEL_DIR}"
   local path="$dir/$output"
@@ -100,6 +122,9 @@ download_model() {
 if [[ "$QWEN_STOP_COMFY_ON_INSTALL" == 1 ]]; then
   step "ComfyUIとQwenを停止"
   systemctl --user stop comfyui.service 2>/dev/null || true
+  for unit in $(comfy_extra_units); do
+    systemctl --user stop "$unit" 2>/dev/null || true
+  done
 else
   # ComfyUIは別のGPUで動いているので止めない
   step "Qwenを停止"
@@ -257,6 +282,12 @@ if [[ -n "$LLM_DUAL_CUDA_DEVICES" ]]; then
   # 2枚以上を束ねて1つのモデルを載せる。同じGPUを使うComfyUI・qwen38とは排他（ai-mode llm-dual）。
   # NVLinkがなくPCIe越しなので、層ごとの分割（--split-mode layer）を既定にする。
   # 自動では起動しない（enableしない）。同じポートで待ち受けるので、Tailscale Serveの公開もそのまま使える。
+  # 同じ GPU を見せる 2 つ目以降の ComfyUI の常駐（dekahamuntu の comfyui-gpu1.service）とも排他にする
+  dual_conflicts="qwen38.service comfyui.service"
+  dual_extra_units="$(comfy_extra_units "$LLM_DUAL_CUDA_DEVICES")"
+  if [[ -n "$dual_extra_units" ]]; then
+    dual_conflicts+=" $dual_extra_units"
+  fi
   dual_split_args="--split-mode $LLM_DUAL_SPLIT_MODE"
   if [[ -n "$LLM_DUAL_TENSOR_SPLIT" ]]; then
     dual_split_args="$dual_split_args --tensor-split $LLM_DUAL_TENSOR_SPLIT"
@@ -266,7 +297,7 @@ if [[ -n "$LLM_DUAL_CUDA_DEVICES" ]]; then
 Description=Qwen3.8 model router across GPUs $LLM_DUAL_CUDA_DEVICES (llama.cpp)
 After=network-online.target
 Wants=network-online.target
-Conflicts=qwen38.service comfyui.service
+Conflicts=$dual_conflicts
 
 [Service]
 Type=simple
