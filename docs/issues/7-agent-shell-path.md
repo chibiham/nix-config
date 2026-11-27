@@ -1,5 +1,5 @@
 ---
-status: todo
+status: doing
 created: 2026-11-27
 goal:
   - text: この Mac(Mac mini)で、対話でないシェル(`zsh -c`・`bash -lc`・`sh -c`)と launchd が起こす常駐(subako のサーバーと、そこから起きるエージェント)でも、docker(OrbStack の `~/.orbstack/bin`)・mise の shim(`~/.local/share/mise/shims`)・corepack(pnpm)が PATH にあり、`command -v docker mise pnpm node` が通る。置き方は nix-config(home-manager の sessionPath・`.zshenv` か、nix-darwin の launchd の環境)の 1 か所にまとめ、対話シェルの今の並び(Safe Chain のラッパーが先頭)は崩さない
