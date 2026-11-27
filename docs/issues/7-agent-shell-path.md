@@ -58,3 +58,28 @@ goal:
 - コード変更・コミットなし。作業ログ記録済み。
 
 REVIEW_OK
+
+## エージェントの結果(2026-11-27 19:24)
+
+この Mac の対話でないシェルと、subako のサーバー(launchd)から起きるエージェントで、docker・mise・pnpm・node が PATH に入りました。完了条件は 3 つとも印を付けています。条件 1 は執事の読み替え(サーバーの PATH で melomemo の pre-push が最後まで通ることまで)で済みにし、作業ログに書きました。
+
+## 入れたもの(agent/7 の `5eebfb7`・`cc0e1da`。作業ツリーは clean、この Mac で switch 済み)
+
+- **`home/darwin.nix`**: `home.sessionPath` の末尾に `~/.orbstack/bin`・`~/.nix-profile/bin`・`/nix/var/nix/profiles/default/bin` を足した。PATH の中身はここ 1 か所。
+- **`home/common.nix`**: macOS だけ `~/.bash_profile` を置く。`bash -lc` でも同じ PATH を読み、Safe Chain のラッパーを先頭に戻す。
+- **`docs/adr/0004-…`** と **`CLAUDE.md`**: なぜ・どこで足したか、採らなかった案、実機での確かめ。launchd の常駐は `/bin/zsh -c 'exec "$@"' zsh <プログラム>` で起こして `~/.zshenv` を通す。
+
+## 確かめたこと
+
+- **対話でないシェル**: launchd の既定の PATH から起こした `zsh -c`・`zsh -lc`・`bash -lc` で `command -v docker mise pnpm node` が 4 つとも返り、先頭は Safe Chain のラッパー。`sh -c` は設定を読まないので親しだいで、zsh 経由で起こした親の下では通る。
+- **subako のサーバー**: zsh 経由で起きていて(pid 1579)、PATH が揃っている。そこから起きたエージェントのシェルと、その子の `sh -c`・`bash -lc`・`zsh -c` でも見つかる。
+- **melomemo の pre-push**: サーバーと同じ起こし方の一時の launchd のジョブで `.githooks/pre-push` を流し(push なし)、5 分 9 秒で終了コード 0、e2e は 23 件とも通った。ジョブは外した。
+- **並び**: 対話のログインシェルは前と同じ。ログインでない対話シェルには `~/.orbstack/bin` が 1 つ増えただけ。
+- **ほかの機械**: Ubuntu 2 台の出力(drvPath)は前と同じ。macbook は評価だけで、build と switch はしていない。
+
+## 確かめていないこと・残ること
+
+- **サーバー自身の push が origin まで通ること**は確かめていない。19:11:41 の push は pre-push が e2e の 3 本目まで進んだところで、120.0 秒で打ち切られた。subako#98(`docs/issues/98-push-timeout-kills-pre-push.md`)に切り分けてある。入るまで、melomemo の push は手で流すことになる。
+- **エージェントの `npm`・`pnpm` は Safe Chain を通らない**ままです。subako の `runner.ts` が node のフォルダを PATH の先頭に足すためで、前からの挙動。subako#97 の「決めること」に書いた。
+- **常駐の PATH は起きたときに決まる。** `home.sessionPath` や Safe Chain が変わる switch のあとは、サーバーの起こし直しが要る。
+- **origin の develop に入るまで**に `~/.config/nix-config` から switch すると、今回の PATH が外れる。
