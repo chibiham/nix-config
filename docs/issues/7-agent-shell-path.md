@@ -1,15 +1,15 @@
 ---
 status: doing
 created: 2026-11-27
+updated: 2026-11-27
+assignee: agent
 goal:
   - text: この Mac(Mac mini)で、対話でないシェル(`zsh -c`・`bash -lc`・`sh -c`)と launchd が起こす常駐(subako のサーバーと、そこから起きるエージェント)でも、docker(OrbStack の `~/.orbstack/bin`)・mise の shim(`~/.local/share/mise/shims`)・corepack(pnpm)が PATH にあり、`command -v docker mise pnpm node` が通る。置き方は nix-config(home-manager の sessionPath・`.zshenv` か、nix-darwin の launchd の環境)の 1 か所にまとめ、対話シェルの今の並び(Safe Chain のラッパーが先頭)は崩さない
     done: false
   - text: subako のサーバーの常駐(`com.chibiham.subako-server`、定義は subako の ops/launchd/server.plist)が、上の PATH で起き、melomemo の pre-push(`pnpm local:setup && pnpm test:e2e`。mise・corepack・docker を使う)を subako のサーバーから流して通る。subako の側の直し(plist の環境など)が要るなら、subako に issue を起こして指す
     done: false
   - text: なぜ・どこで PATH を足したかを docs(と ADR が要るなら ADR)に書いてあり、home-manager switch まで済んで origin の develop に入っている。常駐の起こし直しは本人に確かめてからする
-    done: false
-updated: 2026-11-27
-assignee: agent
+    done: true
 ---
 # この Mac の対話でないシェルと launchd の常駐でも、OrbStack・mise・corepack を PATH に入れる
 
@@ -27,3 +27,4 @@ assignee: agent
 ## 作業ログ
 
 - 2026-11-27 17:12 [agent] nix-config の側を入れて Mac mini で home-manager switch まで済ませた(agent/7 の 5eebfb7・cc0e1da)。darwin の home.sessionPath の末尾に ~/.orbstack/bin・~/.nix-profile/bin・/nix/var/nix/profiles/default/bin、macOS だけ ~/.bash_profile(hm-session-vars を読み Safe Chain の shim を先頭へ)、ADR 0004。launchd の既定の PATH から起こした zsh -c・zsh -lc・bash -lc で command -v docker mise pnpm node が通り先頭は shim。sh -c は何も読まないので親しだい: gui/501 の一時の launchd のジョブ(/bin/zsh -c 'exec "$@"' zsh /bin/sh …)では子の sh -c まで通り、zsh を通さないと 1 つも無い(ジョブは外した)。対話のログインシェルの並びは前と同じ(diff なし)。Ubuntu 2 台の drvPath は前と同じ。subako の側の直しは subako#97 に書いて origin の develop に入れた。残り: 実際の subako のサーバーは PATH が既定のまま(plist の直しと起こし直しは本人に確かめてから)。melomemo の pre-push の本体は melomemo#46 が手元の DB を使用中なので流していない
+- 2026-11-27 17:12 [agent] 完了条件 2 を済みにした: docs/adr/0004-macの対話でないシェルとlaunchdの常駐にもpathを通す.md(なぜ・どこで・採らなかった案・実機の確かめ)と CLAUDE.md の「シェル設定」に書いた。Mac mini で `nix run .#home-manager -- switch --flake '.#chibiham@mac-mini'` が通り(世代 25、~/.bash_profile が home-manager-files を指す)、agent/7 に commit 済み(5eebfb7・cc0e1da、作業ツリーは clean)。origin の develop へは、worktree の決まりどおり TASK_DONE のあと subako が入れる(自分では push していない)。常駐の起こし直しはしていない(subako#97 に手順)
