@@ -26,7 +26,7 @@ Mac（Mac mini・macbook。Determinate Nix と Home Manager 単体で、nix-darw
   - `bash -lc`: `/etc/profile` → `~/.bash_profile`。Home Manager が macOS だけ `~/.bash_profile` を置く（`home/common.nix`）。中身は、手置きの `~/.profile` を読む → `hm-session-vars.sh` を読む → shim を先頭へ並べ直す（`/etc/profile` の path_helper が並べ直すため）。macOS の `/bin/bash` は 3.2 なので 3.2 で動く書き方だけを使う
   - `sh -c`・`bash -c`: 何も読まず、親の PATH を受け継ぐ。親で並びが正しければ正しい
   - launchd の常駐: plist の `ProgramArguments` を `/bin/zsh -c 'exec "$@"' zsh <プログラム> <引数…>` の形にして `~/.zshenv` を通す。`exec` で zsh はプログラムに置き換わるので、pid と `KeepAlive` の扱いは変わらない。子の `sh -c`・git の hook・エージェントはこの PATH を受け継ぐ
-- subako のサーバーの plist（subako の `ops/launchd/server.plist`）の直しは、subako の issue（launchd のサーバーを zsh 経由で起こす）で行う
+- subako のサーバーの plist（subako の `ops/launchd/server.plist`）の直しは、subako の issue 97（`docs/issues/97-server-launchd-session-path.md`。launchd のサーバーを zsh 経由で起こす）で行う。plist の入れ直しとサーバーの起こし直しは本人に確かめてからする
 - macOS では `programs.bash` を有効にしない（対話の bash の設定までは持たない）。`~/.bashrc` は置かない。シークレット（`~/.secrets`）は読ませない
 
 ## Alternatives considered
@@ -57,7 +57,8 @@ ADR 0003 と同じ理由（先に渡っていないと効かず、渡せば `#!/
 
 ## Consequences
 
-- ログインシェルでは `~/.orbstack/bin`・`~/.nix-profile/bin` が PATH に 2 回並ぶ（探す順は変わらない）
+- 対話でないログインシェルでは PATH に同じものが 2 回並ぶ（`zsh -lc` は `~/.orbstack/bin`、`bash -lc` は `~/.nix-profile/bin` と `/nix/var/nix/profiles/default/bin`。探す順は変わらない）。対話の zsh は `path` が重複を除くので、ログインシェルの並びは前と同じで、ログインでない対話シェルには `~/.orbstack/bin` が `~/.local/share/pnpm` の後ろに 1 つ増える
+- 確かめ（2026-11-27、Mac mini）: launchd の既定の PATH から起こした `zsh -c`・`zsh -lc`・`bash -lc` と、`gui` ドメインの一時の launchd のジョブ（上の zsh 経由の形。子の `sh -c` も）で、`command -v docker mise pnpm node` が通り、先頭は Safe Chain の shim だった
 - 常駐の PATH は起きたときに決まる。`home.sessionPath` や Safe Chain の shim が変わる switch のあとは、常駐を起こし直す（shim は store の世代ごとのパスで、古い世代は週次の GC で 30 日後に消える）
 - zsh を通さずに起こした常駐の下の `sh -c` には、今までどおり PATH が無い
 - `hm-session-vars.sh` は一度読まれると `__HM_SESS_VARS_SOURCED` を受け継いだ子では何もしない。zsh 経由の常駐から起こした `bash -lc` では、`/etc/profile` の path_helper がシステムのパスを前へ並べ直し、そのあと shim だけが先頭へ戻る
