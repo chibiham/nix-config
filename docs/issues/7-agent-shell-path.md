@@ -8,6 +8,8 @@ goal:
     done: false
   - text: なぜ・どこで PATH を足したかを docs(と ADR が要るなら ADR)に書いてあり、home-manager switch まで済んで origin の develop に入っている。常駐の起こし直しは本人に確かめてからする
     done: false
+updated: 2026-11-27
+assignee: agent
 ---
 # この Mac の対話でないシェルと launchd の常駐でも、OrbStack・mise・corepack を PATH に入れる
 
