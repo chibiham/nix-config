@@ -168,7 +168,20 @@
   '';
   # miseのRustはrustup経由で入り、実行ファイルは ~/.cargo/bin に置かれる（shimは作られない）。
   # `mise activate` を通らないシェル（ログインシェル、npmから起動するビルド）でも cargo を見つけられるようにする。
-  home.sessionPath = [ "$HOME/.cargo/bin" ];
+  home.sessionPath = lib.mkMerge [
+    [ "$HOME/.cargo/bin" ]
+    # 対話でないシェル（zsh -c、bash -lc）とlaunchdの常駐（zsh経由で起こすもの）にも
+    # docker・mise・nixを通す（docs/adr/0004）。mise のshimより後ろに置き、対話シェルの並びは変えない。
+    (lib.mkAfter [
+      # docker・docker-compose・orb。OrbStackが ~/.zprofile に足す追記はログインシェルにしか効かない
+      "$HOME/.orbstack/bin"
+      # mise本体などのNixのパッケージ。/etc/zshrc（nix-daemon.sh）は対話シェルにしか効かず、
+      # miseのshimは ~/.nix-profile/bin/mise へのリンクなので node は動くが `mise` が見つからない
+      "${config.home.profileDirectory}/bin"
+      # nix本体（Determinate Nix）
+      "/nix/var/nix/profiles/default/bin"
+    ])
+  ];
 
   # macOS専用パッケージ
   home.packages = with pkgs; [

@@ -510,6 +510,20 @@ in
     ];
   };
 
+  # macOSの `bash -lc`（エージェントやスクリプトが使う）にもzshと同じPATHを通す（docs/adr/0004）。
+  # 対話のbashまでは持たないので programs.bash は有効にせず、~/.bash_profile だけを置く。
+  # /etc/profile（path_helper）のあとに読まれるので、最後にshimを先頭へ並べ直す。
+  # macOSの /bin/bash は3.2。3.2で動く書き方だけを使う。シークレットは読まない。
+  home.file.".bash_profile" = lib.mkIf pkgs.stdenv.isDarwin {
+    text = ''
+      # 手置きの ~/.profile（Home Managerの外）を、これまでどおり bash -l で読む
+      [ -r "$HOME/.profile" ] && . "$HOME/.profile"
+      . "${config.home.sessionVariablesPackage}/etc/profile.d/hm-session-vars.sh"
+      ${safeChainPathFirstBash}
+      _safe_chain_path_first
+    '';
+  };
+
   # ===================
   # Starship（プロンプト）
   # ===================

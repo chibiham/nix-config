@@ -199,3 +199,5 @@ Ubuntu機で手で行うもの:
 - Starship（プロンプト）
 - direnv + nix-direnv + mise
 - fzf, tmux, NeoVim
+- 対話でないシェル・launchdの常駐のPATHも `home.sessionPath` の1か所で決める（macOSはdocker・mise・nixを `darwin.nix` で末尾に足す）。
+  macOSの `bash -lc` はNixが置く `~/.bash_profile` で、launchdの常駐は `/bin/zsh -c 'exec "$@"' zsh <プログラム>` で起こして `~/.zshenv` を通す。詳しくは `docs/adr/0004`
