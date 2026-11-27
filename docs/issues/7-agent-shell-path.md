@@ -23,3 +23,7 @@ assignee: agent
 - subako のサーバー(launchd、`com.chibiham.subako-server`)の PATH は launchd の既定 `/usr/bin:/bin:/usr/sbin:/sbin` に近く、そこから起きるエージェントのシェルにも docker・mise・corepack が無い
 - そのため melomemo の issue が済むたびに、subako が develop を origin へ push するところで pre-push(`pnpm local:setup && pnpm test:e2e`)が「mise または corepack が見つかりません」で止まり、執事が自分のシェルから `export PATH="$HOME/.orbstack/bin:$PATH"; eval "$(mise activate bash)"` を付けて push し直している(2026-11-25〜27 に十数回)
 - 同じ根の件: 2026-11-25 に「対話shellとagentでの差がちょいちょい出てしまう」(本人)。執事の案は `home.sessionPath` で `.zshenv` に足すこと(subako の butler/memory.md 2026-11-25)
+
+## 作業ログ
+
+- 2026-11-27 17:12 [agent] nix-config の側を入れて Mac mini で home-manager switch まで済ませた(agent/7 の 5eebfb7・cc0e1da)。darwin の home.sessionPath の末尾に ~/.orbstack/bin・~/.nix-profile/bin・/nix/var/nix/profiles/default/bin、macOS だけ ~/.bash_profile(hm-session-vars を読み Safe Chain の shim を先頭へ)、ADR 0004。launchd の既定の PATH から起こした zsh -c・zsh -lc・bash -lc で command -v docker mise pnpm node が通り先頭は shim。sh -c は何も読まないので親しだい: gui/501 の一時の launchd のジョブ(/bin/zsh -c 'exec "$@"' zsh /bin/sh …)では子の sh -c まで通り、zsh を通さないと 1 つも無い(ジョブは外した)。対話のログインシェルの並びは前と同じ(diff なし)。Ubuntu 2 台の drvPath は前と同じ。subako の側の直しは subako#97 に書いて origin の develop に入れた。残り: 実際の subako のサーバーは PATH が既定のまま(plist の直しと起こし直しは本人に確かめてから)。melomemo の pre-push の本体は melomemo#46 が手元の DB を使用中なので流していない
